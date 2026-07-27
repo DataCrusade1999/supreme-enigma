@@ -29,3 +29,7 @@ export async function presignDownload(key: string): Promise<string> {
   });
   return getSignedUrl(client, command, { expiresIn: 300 });
 }
+
+export function deriveOutputKey(inputKey: string): string {
+  return inputKey.replace(/^uploads\//, "outputs/");
+}
