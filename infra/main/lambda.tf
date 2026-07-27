@@ -44,4 +44,8 @@ resource "aws_lambda_function" "looper" {
   memory_size   = 1024
 
   depends_on = [aws_iam_role_policy_attachment.lambda_basic, aws_iam_role_policy.lambda_s3]
+
+  lifecycle {
+    ignore_changes = [image_uri]
+  }
 }
