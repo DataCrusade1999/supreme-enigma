@@ -31,3 +31,24 @@ def test_process_produces_shorter_looped_wav(tmp_path):
     assert out_info.channels == in_info.channels
     assert out_info.frames < in_info.frames
     assert out_info.frames > 0
+
+
+def _write_noise_fixture(path: str, sr: int = 22050, duration: float = 0.6):
+    # Unstructured noise, too short/beat-less for find_loop_point to detect
+    # 2+ beats, so process() must fall through to the (0, len(mono)) fallback.
+    rng = np.random.default_rng(42)
+    mono = 0.05 * rng.standard_normal(int(sr * duration))
+    stereo = np.stack([mono, mono], axis=1)
+    sf.write(path, stereo, sr, subtype="PCM_16")
+
+
+def test_process_handles_no_loop_point_found(tmp_path):
+    input_path = str(tmp_path / "input.wav")
+    output_path = str(tmp_path / "output.wav")
+    _write_noise_fixture(input_path)
+
+    process(input_path, output_path)
+
+    assert os.path.exists(output_path)
+    out_info = sf.info(output_path)
+    assert out_info.frames > 0

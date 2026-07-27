@@ -17,7 +17,6 @@ def process(input_path: str, output_path: str, target_lufs: float = -14.0) -> No
 
     start, end = trim_silence(mono, top_db=40.0)
     y = y[start:end]
-    mono = mono[start:end]
 
     y = normalize_loudness(y, sr, target_lufs=target_lufs)
     mono = np.mean(y, axis=1)
