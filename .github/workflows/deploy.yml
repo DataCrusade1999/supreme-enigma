@@ -2,7 +2,7 @@ name: CI/CD
 
 on:
   push:
-    branches: [main, worktree-bgm-looper-impl]
+    branches: [main]
   workflow_dispatch: {}
 
 env:
@@ -48,7 +48,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/worktree-bgm-looper-impl'
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
