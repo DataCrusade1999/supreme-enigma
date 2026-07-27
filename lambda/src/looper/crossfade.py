@@ -12,8 +12,8 @@ def crossfade_loop(
     fade_len = min(int(fade_sec * sr), len(loop) // 2)
 
     t = np.linspace(0, np.pi / 2, fade_len)
-    fade_out = np.cos(t) / np.sqrt(2)
-    fade_in = np.sin(t) / np.sqrt(2)
+    fade_out = np.cos(t)
+    fade_in = np.sin(t)
 
     if loop.ndim == 2:
         fade_out = fade_out[:, None]
