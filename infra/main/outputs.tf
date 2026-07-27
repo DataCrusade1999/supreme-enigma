@@ -24,3 +24,7 @@ output "ci_deploy_secret_access_key" {
 output "lambda_function_name" {
   value = aws_lambda_function.looper.function_name
 }
+
+output "vercel_project_id" {
+  value = vercel_project.looper.id
+}
