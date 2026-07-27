@@ -20,3 +20,7 @@ output "ci_deploy_secret_access_key" {
   value     = aws_iam_access_key.ci_deploy.secret
   sensitive = true
 }
+
+output "lambda_function_name" {
+  value = aws_lambda_function.looper.function_name
+}
