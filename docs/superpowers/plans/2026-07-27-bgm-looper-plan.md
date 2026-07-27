@@ -1372,14 +1372,17 @@ git add .github/workflows/deploy.yml
 git commit -m "feat(ci): add GitHub Actions test + deploy pipeline"
 git push origin HEAD
 ```
-Note: the `push: branches: [main]` trigger only fires once this lands on `main`; a `workflow_dispatch` run works from any ref where the workflow file exists, which is what Step 3 uses.
+Note: `workflow_dispatch` only becomes callable via `gh workflow run`/the Actions UI once the workflow file exists on the repo's **default** branch (`main`) — GitHub registers dispatchable workflows by scanning the default branch, not the branch that pushed them. Since this repo's `main` has no workflow file yet, `gh workflow run` will 404 here. `on: push` triggers don't have this restriction — a push event fires the workflow on whatever branch it lands on, immediately, with no registration step. Step 3 below uses that fact instead of `workflow_dispatch` for the one-time bootstrap run.
 
-- [ ] **Step 3: Manual bootstrap trigger**
+- [ ] **Step 3: Manual bootstrap trigger (via a temporary push-trigger widening, not `workflow_dispatch`)**
 
-After Task 12 Step 5's secrets are in place, trigger the workflow once to push the first image (before the Lambda function resource exists):
+After Task 12 Step 5's secrets are in place, temporarily widen the workflow's triggers so a push to the current feature branch fires a real run:
 
-Run: `gh workflow run deploy.yml --ref <your-branch-name>` (or trigger it from the GitHub Actions UI)
-Expected: `test` job passes; `deploy` job's build/push steps succeed; the "Update Lambda function code" step logs "does not exist yet" and exits 0 — this is expected, since Task 14 hasn't run yet.
+1. Edit `.github/workflows/deploy.yml`: change `on.push.branches` from `[main]` to `[main, <your-branch-name>]`, and change the `deploy` job's `if: github.ref == 'refs/heads/main'` to `if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/<your-branch-name>'`.
+2. Commit this as a throwaway commit (e.g. `chore: temporarily widen CI trigger for bootstrap run`) and push.
+3. Watch the run: `gh run list --workflow=deploy.yml --limit 1` then `gh run watch <run-id>` (or the Actions UI).
+   Expected: `test` job passes; `deploy` job's build/push steps succeed; the "Update Lambda function code" step logs "does not exist yet" and exits 0 — this is expected, since Task 14 hasn't run yet. Any other failure (test failure, Docker build failure, ECR auth failure) is a real problem — investigate, don't force it green.
+4. Revert the trigger widening: `git revert <the throwaway commit>` (or hand-edit back to `branches: [main]` / the main-only `if`) and push. This final, reverted state — `push: branches: [main]` only — is what Task 20 relies on for the real, steady-state CI/CD trigger.
 
 - [ ] **Step 4: Verify the image landed in ECR**
 
