@@ -4,9 +4,9 @@
 
 **Goal:** Build a single-user web app (Next.js on Vercel + AWS Lambda/S3) that takes an uploaded BGM audio file and returns an edited version that loops seamlessly, with the entire stack provisioned by Terraform so one `terraform destroy` tears everything down.
 
-**Architecture:** Browser uploads/downloads audio directly to/from S3 via presigned URLs; Vercel API routes only orchestrate (get URL, invoke Lambda, get result URL) and never touch audio bytes. The DSP pipeline (loudness normalize → silence trim → beat-aligned loop-point search → crossfade → ffmpeg transcode) runs as a containerized Python Lambda. Two Terraform layers: `infra/bootstrap` (state bucket, applied once, never destroyed) and `infra/main` (S3, ECR, Lambda, IAM, Vercel project — this is the kill switch).
+**Architecture:** Browser uploads/downloads audio directly to/from S3 via presigned URLs; Vercel API routes only orchestrate (get URL, invoke Lambda, get result URL) and never touch audio bytes. The DSP pipeline (loudness normalize → silence trim → beat-aligned loop-point search → crossfade → ffmpeg transcode) runs as a containerized Python Lambda. Two Terraform layers: `infra/bootstrap` (state bucket, applied once, never destroyed) and `infra/main` (S3, ECR, Lambda, IAM, Vercel project — this is the kill switch). GitHub Actions builds and pushes the Lambda image and updates the function's code on every push to `main` (gated on the Lambda + app test suites passing first); Terraform `apply`/`destroy` itself is never run in CI — it stays a manual, deliberate command.
 
-**Tech Stack:** Next.js (App Router, TypeScript) on Vercel; Python 3.12 + librosa/numpy/soundfile/pyloudnorm in a Lambda container image; Terraform ≥1.10 with `aws` + `vercel` + `random` providers, S3 backend with native locking.
+**Tech Stack:** Next.js (App Router, TypeScript) on Vercel; Python 3.12 + librosa/numpy/soundfile/pyloudnorm in a Lambda container image; Terraform ≥1.10 with `aws` + `vercel` + `random` providers, S3 backend with native locking; GitHub Actions for CI (tests) and CD (image build/push + Lambda code update).
 
 ## Global Constraints
 
@@ -24,6 +24,10 @@
 - IAM: the Vercel service-account IAM user is scoped to `s3:GetObject`/`s3:PutObject` on the audio bucket's objects only, and `lambda:InvokeFunction` on this one Lambda only. No root/account credentials anywhere in Terraform or Vercel env vars.
 - Auth: single shared password (env var), constant-time compare, HttpOnly signed cookie. No user table, no OAuth.
 - No job queue, no database, no async status polling — synchronous request/response throughout (files are <5 min / <20MB, Lambda runtime ~10–20s).
+- CI/CD: GitHub Actions (`.github/workflows/deploy.yml`) runs on every push to `main` and via manual `workflow_dispatch`. A `test` job runs the Lambda pytest suite and the Next.js vitest suite; a `deploy` job (`needs: test`) builds the Lambda container image, tags it with both the git SHA and `latest`, pushes both tags to ECR, then calls `aws lambda update-function-code` with the SHA tag (skips gracefully, does not fail the job, if the function doesn't exist yet — expected only on the first bootstrap run before its Terraform resource is created).
+- Terraform `apply`/`destroy` is never run in CI — it stays a manual command run from your machine. The kill switch and any infra change remain a deliberate human action; CI only ever builds/pushes images and updates Lambda function code.
+- A dedicated CI deploy IAM user (distinct from the Vercel runtime IAM user) holds ECR push permissions and `lambda:UpdateFunctionCode` on this one Lambda only. Its keys live only as GitHub Actions repository secrets (`AWS_CI_ACCESS_KEY_ID`, `AWS_CI_SECRET_ACCESS_KEY`), copied there manually from `terraform output` — never passed through Vercel env vars or any automated channel.
+- IAM policies that must exist before the Lambda function resource does (the Vercel SA's `lambda:InvokeFunction`, the CI deploy user's `lambda:UpdateFunctionCode`) reference the function by its deterministic ARN (`arn:aws:lambda:<region>:<account_id>:function:<name>`) rather than a live resource attribute, so IAM can be provisioned ahead of the function itself — this is what breaks the chicken-and-egg between "IAM needs the function's ARN" and "the function needs an image that only CI can build."
 
 ---
 
@@ -663,7 +667,7 @@ git commit -m "feat(lambda): add pipeline orchestrator"
 
 **Interfaces:**
 - Consumes: `process(input_path, output_path)` (Task 6).
-- Produces: `handler(event: dict, context) -> dict` — `event` shape `{"bucket": str, "input_key": str, "output_key": str}`, returns `{"output_key": str}`. This is the exact contract the Terraform-provisioned Lambda and the `/api/process` route (Task 15) both rely on.
+- Produces: `handler(event: dict, context) -> dict` — `event` shape `{"bucket": str, "input_key": str, "output_key": str}`, returns `{"output_key": str}`. This is the exact contract the Terraform-provisioned Lambda and the `/api/process` route (Task 18) both rely on.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -751,11 +755,10 @@ git commit -m "feat(lambda): add S3-wired Lambda handler"
 
 **Files:**
 - Create: `lambda/Dockerfile`
-- Modify: `lambda/requirements.txt` (no boto3 addition needed — base image ships it)
 
 **Interfaces:**
 - Consumes: `lambda/src/looper/` package (Tasks 2–7), `lambda/requirements.txt`.
-- Produces: a Docker image tagged `bgm-looper-lambda:local` with `looper.handler.handler` as the Lambda entrypoint — this is the image Task 11 builds and pushes to ECR.
+- Produces: a Dockerfile with `looper.handler.handler` as the Lambda entrypoint — Task 13's GitHub Actions workflow is what actually builds and pushes this image to ECR. A local Docker build is optional here (not required to proceed): Docker is slow on this machine, so CI is the authoritative build/verify step.
 
 - [ ] **Step 1: Write the Dockerfile**
 
@@ -777,18 +780,16 @@ COPY src/looper ${LAMBDA_TASK_ROOT}/looper
 CMD ["looper.handler.handler"]
 ```
 
-- [ ] **Step 2: Build the image locally**
+- [ ] **Step 2: Structural review (no Docker required)**
 
-Run: `cd lambda && docker build -t bgm-looper-lambda:local .`
+Read through the Dockerfile and confirm: the base image tag (`public.ecr.aws/lambda/python:3.12`) matches the Python version used elsewhere in `lambda/`; the `COPY src/looper ...` path matches the package layout from Task 1 (`lambda/src/looper/`); the `CMD` module path (`looper.handler.handler`) matches Task 7's `handler.py` location and function name exactly.
+
+- [ ] **Step 3: (Optional) local build sanity-check**
+
+Skip this step if Docker is slow/unavailable on this machine — Task 13's CI run is the authoritative build. If you do want to check locally:
+
+Run (optional): `cd lambda && docker build -t bgm-looper-lambda:local .`
 Expected: build succeeds with no errors.
-
-- [ ] **Step 3: Verify ffmpeg and the package import inside the image**
-
-Run: `docker run --rm --entrypoint ffmpeg bgm-looper-lambda:local -version`
-Expected: prints an ffmpeg version banner.
-
-Run: `docker run --rm --entrypoint python bgm-looper-lambda:local -c "import looper.pipeline; print('ok')"`
-Expected: prints `ok`.
 
 - [ ] **Step 4: Commit**
 
@@ -895,7 +896,7 @@ git commit -m "feat(infra): add Terraform bootstrap layer for state bucket"
 - Delete: `infra/main/.gitkeep`
 
 **Interfaces:**
-- Produces: `aws_s3_bucket.audio` (output `audio_bucket_name`) — Task 11's Lambda IAM policy and Task 12's `S3_BUCKET_NAME` env var both reference this resource.
+- Produces: `aws_s3_bucket.audio` (output `audio_bucket_name`) — Task 12's Lambda IAM policy and Task 15's `S3_BUCKET_NAME` env var both reference this resource.
 - Consumes: `state_bucket_name` output from Task 9.
 
 - [ ] **Step 1: Write backend and provider config**
@@ -1035,15 +1036,15 @@ git commit -m "feat(infra): add Terraform main layer with S3 audio bucket"
 
 ---
 
-### Task 11: Terraform main — ECR, Lambda, execution role
+### Task 11: Terraform main — ECR repo
 
 **Files:**
-- Create: `infra/main/ecr.tf`, `infra/main/lambda.tf`
+- Create: `infra/main/ecr.tf`
 - Modify: `infra/main/outputs.tf`
 
 **Interfaces:**
-- Consumes: `aws_s3_bucket.audio` (Task 10).
-- Produces: `aws_lambda_function.looper` (outputs `lambda_function_name`) — Task 12's `LAMBDA_FUNCTION_NAME` env var and Task 15's `/api/process` route both reference this by name.
+- Consumes: nothing new (only `var.project_name` from Task 10).
+- Produces: `aws_ecr_repository.looper` (output `ecr_repository_url`) — Task 12's CI-deploy IAM user policy references this repo's ARN, Task 13's CI workflow pushes images into it, and Task 14's Lambda function reads its URL for `image_uri`.
 
 - [ ] **Step 1: Write the ECR repo**
 
@@ -1055,10 +1056,54 @@ resource "aws_ecr_repository" "looper" {
 }
 ```
 
-- [ ] **Step 2: Write the Lambda function and its execution role**
+- [ ] **Step 2: Add the output**
+
+Add to `infra/main/outputs.tf`:
+```hcl
+output "ecr_repository_url" {
+  value = aws_ecr_repository.looper.repository_url
+}
+```
+
+- [ ] **Step 3: Validate, plan, and apply**
+
+Run: `cd infra/main && terraform validate`
+Expected: succeeds.
+
+Run: `terraform plan -var="vercel_api_token=placeholder" -var="app_password=placeholder" -var="github_repo=youruser/looper"`
+Expected: plan adds 1 resource (the ECR repo), 0 destroy. No `-target` needed — this resource has no dependencies yet.
+
+Run: `terraform apply` (same vars)
+Expected: ECR repo created.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add infra/main/ecr.tf infra/main/outputs.tf
+git commit -m "feat(infra): add ECR repo for the Lambda container image"
+```
+
+---
+
+### Task 12: Terraform main — Lambda execution role + IAM users (Vercel SA + CI deploy)
+
+**Files:**
+- Create: `infra/main/lambda.tf`, `infra/main/iam.tf`
+- Modify: `infra/main/outputs.tf`
+
+**Interfaces:**
+- Consumes: `aws_s3_bucket.audio` (Task 10), `aws_ecr_repository.looper` (Task 11).
+- Produces: `aws_iam_role.lambda_exec` and `local.lambda_function_name` / `local.lambda_function_arn` — Task 14 attaches the role to the Lambda function it creates, using the same name/ARN locals defined here. `aws_iam_user.vercel` + its access key — Task 15's Vercel env vars. `aws_iam_user.ci_deploy` + its access key — you manually copy these into GitHub Actions repository secrets before Task 13's workflow can run. Both IAM users' Lambda-related policy statements reference the function by its deterministic ARN (`local.lambda_function_arn`), not `aws_lambda_function.looper.arn`, because the function resource itself isn't created until Task 14 — this is what lets IAM be provisioned ahead of the image.
+
+- [ ] **Step 1: Write the Lambda execution role**
 
 `infra/main/lambda.tf`:
 ```hcl
+locals {
+  lambda_function_name = "${var.project_name}-processor"
+  lambda_function_arn  = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.lambda_function_name}"
+}
+
 resource "aws_iam_role" "lambda_exec" {
   name = "${var.project_name}-lambda-exec"
 
@@ -1090,87 +1135,9 @@ resource "aws_iam_role_policy" "lambda_s3" {
     }]
   })
 }
-
-resource "aws_lambda_function" "looper" {
-  function_name = "${var.project_name}-processor"
-  role          = aws_iam_role.lambda_exec.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.looper.repository_url}:latest"
-  timeout       = 60
-  memory_size   = 1024
-
-  depends_on = [aws_iam_role_policy_attachment.lambda_basic, aws_iam_role_policy.lambda_s3]
-}
 ```
 
-- [ ] **Step 3: Add outputs**
-
-Add to `infra/main/outputs.tf`:
-```hcl
-output "ecr_repository_url" {
-  value = aws_ecr_repository.looper.repository_url
-}
-
-output "lambda_function_name" {
-  value = aws_lambda_function.looper.function_name
-}
-```
-
-- [ ] **Step 4: Create the ECR repo first (image must exist before the Lambda function can reference it)**
-
-Run: `cd infra/main && terraform apply -target=aws_ecr_repository.looper -var="vercel_api_token=placeholder" -var="app_password=placeholder" -var="github_repo=youruser/looper"`
-Expected: only the ECR repo is created.
-
-- [ ] **Step 5: Build and push the Lambda image**
-
-Run:
-```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
-cd lambda
-docker build -t bgm-looper-lambda:latest .
-docker tag bgm-looper-lambda:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bgm-looper-lambda:latest
-docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bgm-looper-lambda:latest
-```
-Expected: push succeeds, image visible in the ECR console/`aws ecr list-images`.
-
-- [ ] **Step 6: Apply the rest**
-
-Run: `cd infra/main && terraform apply -var="vercel_api_token=placeholder" -var="app_password=placeholder" -var="github_repo=youruser/looper"`
-Expected: IAM role, policy, and Lambda function created.
-
-- [ ] **Step 7: Verify with a real invoke**
-
-Manually upload a small test WAV to `s3://<audio_bucket_name>/uploads/test.wav`, then:
-
-Run:
-```bash
-aws lambda invoke --function-name bgm-looper-processor \
-  --payload '{"bucket":"<audio_bucket_name>","input_key":"uploads/test.wav","output_key":"outputs/test.wav"}' \
-  --cli-binary-format raw-in-base64-out out.json
-cat out.json
-```
-Expected: `{"output_key": "outputs/test.wav"}`, and `outputs/test.wav` exists in the bucket.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add infra/main/ecr.tf infra/main/lambda.tf infra/main/outputs.tf
-git commit -m "feat(infra): add ECR repo and Lambda function for DSP processing"
-```
-
----
-
-### Task 12: Terraform main — IAM service-account user + Vercel project/env vars
-
-**Files:**
-- Create: `infra/main/iam.tf`, `infra/main/vercel.tf`
-- Modify: `infra/main/outputs.tf`
-
-**Interfaces:**
-- Consumes: `aws_s3_bucket.audio` (Task 10), `aws_lambda_function.looper` (Task 11).
-- Produces: a Vercel project with env vars `APP_PASSWORD`, `COOKIE_SECRET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `APP_AWS_REGION`, `S3_BUCKET_NAME`, `LAMBDA_FUNCTION_NAME` — every Next.js route in Tasks 13–15 reads these exact names via `process.env`.
-
-- [ ] **Step 1: Write the IAM service-account user**
+- [ ] **Step 2: Write the Vercel SA and CI deploy IAM users**
 
 `infra/main/iam.tf`:
 ```hcl
@@ -1197,14 +1164,307 @@ resource "aws_iam_user_policy" "vercel" {
       {
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
-        Resource = aws_lambda_function.looper.arn
+        Resource = local.lambda_function_arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_user" "ci_deploy" {
+  name = "${var.project_name}-ci-deploy"
+}
+
+resource "aws_iam_access_key" "ci_deploy" {
+  user = aws_iam_user.ci_deploy.name
+}
+
+resource "aws_iam_user_policy" "ci_deploy" {
+  name = "${var.project_name}-ci-deploy-policy"
+  user = aws_iam_user.ci_deploy.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecr:BatchGetImage",
+        ]
+        Resource = aws_ecr_repository.looper.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["lambda:UpdateFunctionCode"]
+        Resource = local.lambda_function_arn
       }
     ]
   })
 }
 ```
 
-- [ ] **Step 2: Write the Vercel project and env vars**
+Note: `ecr:GetAuthorizationToken` requires `Resource = "*"` — AWS doesn't support scoping this specific action to a repo ARN. It only grants the ability to obtain a login token; actual repo access is scoped by the second statement.
+
+- [ ] **Step 3: Add outputs**
+
+Add to `infra/main/outputs.tf`:
+```hcl
+output "vercel_access_key_id" {
+  value     = aws_iam_access_key.vercel.id
+  sensitive = true
+}
+
+output "ci_deploy_access_key_id" {
+  value     = aws_iam_access_key.ci_deploy.id
+  sensitive = true
+}
+
+output "ci_deploy_secret_access_key" {
+  value     = aws_iam_access_key.ci_deploy.secret
+  sensitive = true
+}
+```
+
+- [ ] **Step 4: Validate, plan, and apply**
+
+Run: `cd infra/main && terraform validate`
+Expected: succeeds.
+
+Run: `terraform plan -var="vercel_api_token=placeholder" -var="app_password=placeholder" -var="github_repo=youruser/looper"`
+Expected: plan adds the exec role + policy + attachment, both IAM users, both access keys, both user policies — 0 destroy. Still no `-target` needed: nothing here depends on the Lambda function resource, which doesn't exist yet.
+
+Run: `terraform apply` (same vars)
+Expected: resources created.
+
+- [ ] **Step 5: Copy the CI deploy credentials into GitHub Actions secrets**
+
+This is a manual, sensitive step — run these yourself and paste the values into GitHub (Settings → Secrets and variables → Actions → New repository secret), or use `gh secret set`:
+
+Run:
+```bash
+terraform output -raw ci_deploy_access_key_id
+terraform output -raw ci_deploy_secret_access_key
+```
+Set these as repository secrets named `AWS_CI_ACCESS_KEY_ID` and `AWS_CI_SECRET_ACCESS_KEY`. Task 13's workflow cannot authenticate to AWS without them.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add infra/main/lambda.tf infra/main/iam.tf infra/main/outputs.tf
+git commit -m "feat(infra): add Lambda execution role and Vercel/CI IAM users"
+```
+
+---
+
+### Task 13: GitHub Actions CI/CD pipeline
+
+**Files:**
+- Create: `.github/workflows/deploy.yml`
+
+**Interfaces:**
+- Consumes: `lambda/tests/`, `lambda/requirements.txt` (Tasks 2–7), `lambda/Dockerfile` (Task 8), `app/package.json` `test` script (Task 1), GitHub repo secrets `AWS_CI_ACCESS_KEY_ID` / `AWS_CI_SECRET_ACCESS_KEY` (Task 12, Step 5), the ECR repo and Lambda function names (`bgm-looper-lambda`, `bgm-looper-processor` — must match `var.project_name` default `bgm-looper` from Task 10's `variables.tf`, and `local.lambda_function_name` from Task 12).
+- Produces: on every push to `main` and on manual `workflow_dispatch`, runs the Lambda pytest suite and the Next.js vitest suite; if both pass, builds the Lambda image, tags it `<git-sha>` and `latest`, pushes both tags to ECR, and updates the Lambda function's code to the SHA-tagged image (logging a notice and exiting 0, not failing the job, if the function doesn't exist yet).
+
+- [ ] **Step 1: Write the workflow**
+
+`.github/workflows/deploy.yml`:
+```yaml
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: bgm-looper-lambda
+  LAMBDA_FUNCTION_NAME: bgm-looper-processor
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Lambda test dependencies
+        working-directory: lambda
+        run: pip install -r requirements.txt pytest moto
+
+      - name: Run Lambda tests
+        working-directory: lambda
+        run: pytest -v
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm install
+
+      - name: Run app tests
+        working-directory: app
+        run: npm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_CI_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_CI_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        working-directory: lambda
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build -t "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}" -t "$REGISTRY/$ECR_REPOSITORY:latest" .
+          docker push "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Update Lambda function code
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" >/dev/null 2>&1; then
+            aws lambda update-function-code \
+              --function-name "$LAMBDA_FUNCTION_NAME" \
+              --image-uri "$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+          else
+            echo "Lambda function $LAMBDA_FUNCTION_NAME does not exist yet — skipping update-function-code (expected on the first bootstrap run, before Task 14's terraform apply)."
+          fi
+```
+
+- [ ] **Step 2: Commit and push**
+
+```bash
+git add .github/workflows/deploy.yml
+git commit -m "feat(ci): add GitHub Actions test + deploy pipeline"
+git push origin HEAD
+```
+Note: the `push: branches: [main]` trigger only fires once this lands on `main`; a `workflow_dispatch` run works from any ref where the workflow file exists, which is what Step 3 uses.
+
+- [ ] **Step 3: Manual bootstrap trigger**
+
+After Task 12 Step 5's secrets are in place, trigger the workflow once to push the first image (before the Lambda function resource exists):
+
+Run: `gh workflow run deploy.yml --ref <your-branch-name>` (or trigger it from the GitHub Actions UI)
+Expected: `test` job passes; `deploy` job's build/push steps succeed; the "Update Lambda function code" step logs "does not exist yet" and exits 0 — this is expected, since Task 14 hasn't run yet.
+
+- [ ] **Step 4: Verify the image landed in ECR**
+
+Run: `aws ecr describe-images --repository-name bgm-looper-lambda`
+Expected: shows an image with the `latest` tag (and a git-SHA tag).
+
+---
+
+### Task 14: Terraform main — Lambda function resource
+
+**Files:**
+- Modify: `infra/main/lambda.tf`, `infra/main/outputs.tf`
+
+**Interfaces:**
+- Consumes: `aws_ecr_repository.looper` (Task 11, must already have a `:latest` image — confirmed in Task 13 Step 4), `aws_iam_role.lambda_exec` and `local.lambda_function_name` (Task 12).
+- Produces: `aws_lambda_function.looper` (output `lambda_function_name`) — Task 15's `LAMBDA_FUNCTION_NAME` Vercel env var and the `/api/process` route (Task 18) both reference this by name.
+
+- [ ] **Step 1: Add the Lambda function resource**
+
+Add to `infra/main/lambda.tf`:
+```hcl
+resource "aws_lambda_function" "looper" {
+  function_name = local.lambda_function_name
+  role          = aws_iam_role.lambda_exec.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.looper.repository_url}:latest"
+  timeout       = 60
+  memory_size   = 1024
+
+  depends_on = [aws_iam_role_policy_attachment.lambda_basic, aws_iam_role_policy.lambda_s3]
+}
+```
+
+- [ ] **Step 2: Add the output**
+
+Add to `infra/main/outputs.tf`:
+```hcl
+output "lambda_function_name" {
+  value = aws_lambda_function.looper.function_name
+}
+```
+
+- [ ] **Step 3: Validate, plan, and apply**
+
+Confirm Task 13 Step 4 already showed a `:latest` image in ECR — this apply fails otherwise.
+
+Run: `cd infra/main && terraform plan -var="vercel_api_token=placeholder" -var="app_password=placeholder" -var="github_repo=youruser/looper"`
+Expected: plan adds 1 resource (the Lambda function), 0 destroy. No `-target` needed — the image now exists.
+
+Run: `terraform apply` (same vars)
+Expected: Lambda function created.
+
+- [ ] **Step 4: Verify with a real invoke**
+
+Manually upload a small test WAV to `s3://<audio_bucket_name>/uploads/test.wav`, then:
+
+Run:
+```bash
+aws lambda invoke --function-name bgm-looper-processor \
+  --payload '{"bucket":"<audio_bucket_name>","input_key":"uploads/test.wav","output_key":"outputs/test.wav"}' \
+  --cli-binary-format raw-in-base64-out out.json
+cat out.json
+```
+Expected: `{"output_key": "outputs/test.wav"}`, and `outputs/test.wav` exists in the bucket.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add infra/main/lambda.tf infra/main/outputs.tf
+git commit -m "feat(infra): add Lambda function resource"
+```
+
+---
+
+### Task 15: Terraform main — Vercel project + env vars
+
+**Files:**
+- Create: `infra/main/vercel.tf`
+- Modify: `infra/main/outputs.tf`
+
+**Interfaces:**
+- Consumes: `aws_s3_bucket.audio` (Task 10), `aws_iam_access_key.vercel` (Task 12), `aws_lambda_function.looper` (Task 14).
+- Produces: a Vercel project with env vars `APP_PASSWORD`, `COOKIE_SECRET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `APP_AWS_REGION`, `S3_BUCKET_NAME`, `LAMBDA_FUNCTION_NAME` — every Next.js route in Tasks 16–18 reads these exact names via `process.env`.
+
+- [ ] **Step 1: Write the Vercel project and env vars**
 
 `infra/main/vercel.tf`:
 ```hcl
@@ -1282,49 +1542,44 @@ resource "vercel_project_environment_variable" "lambda_function_name" {
 }
 ```
 
-- [ ] **Step 3: Add sensitive outputs**
+- [ ] **Step 2: Add the sensitive output**
 
 Add to `infra/main/outputs.tf`:
 ```hcl
 output "vercel_project_id" {
   value = vercel_project.looper.id
 }
-
-output "vercel_access_key_id" {
-  value     = aws_iam_access_key.vercel.id
-  sensitive = true
-}
 ```
 
-- [ ] **Step 4: Validate, plan, and apply**
+- [ ] **Step 3: Validate, plan, and apply**
 
 Run: `cd infra/main && terraform validate`
 Expected: succeeds.
 
 Run: `terraform plan -var="vercel_api_token=<real token>" -var="app_password=<your chosen password>" -var="github_repo=<youruser>/looper"`
-Expected: plan adds IAM user/key/policy + Vercel project + 7 env vars, 0 destroy.
+Expected: plan adds the Vercel project + 7 env vars, 0 destroy.
 
 Run: `terraform apply` (same vars)
 Expected: resources created; confirm in the Vercel dashboard that the project exists with all 7 env vars set.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add infra/main/iam.tf infra/main/vercel.tf infra/main/outputs.tf
-git commit -m "feat(infra): add Vercel service-account IAM user and Vercel project/env vars"
+git add infra/main/vercel.tf infra/main/outputs.tf
+git commit -m "feat(infra): add Vercel project and env vars"
 ```
 
 ---
 
-### Task 13: Next.js auth (password + signed cookie)
+### Task 16: Next.js auth (password + signed cookie)
 
 **Files:**
 - Create: `app/lib/auth.ts`, `app/middleware.ts`, `app/app/api/login/route.ts`, `app/app/login/page.tsx`
 - Test: `app/lib/auth.test.ts`
 
 **Interfaces:**
-- Produces: `COOKIE_NAME: string`, `createSessionCookieValue(secret: string): string`, `verifySessionCookieValue(cookieValue: string | undefined, secret: string): boolean`, `checkPassword(submitted: string, actual: string): boolean` — Task 14 and 15's routes rely on the middleware already gating them; no other task calls these directly.
-- Env vars consumed: `APP_PASSWORD`, `COOKIE_SECRET` (both provisioned by Task 12).
+- Produces: `COOKIE_NAME: string`, `createSessionCookieValue(secret: string): string`, `verifySessionCookieValue(cookieValue: string | undefined, secret: string): boolean`, `checkPassword(submitted: string, actual: string): boolean` — Task 17 and 18's routes rely on the middleware already gating them; no other task calls these directly.
+- Env vars consumed: `APP_PASSWORD`, `COOKIE_SECRET` (both provisioned by Task 15).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1542,15 +1797,15 @@ git commit -m "feat(app): add single-user password auth with signed cookie"
 
 ---
 
-### Task 14: Upload-URL route
+### Task 17: Upload-URL route
 
 **Files:**
 - Create: `app/lib/aws.ts`, `app/app/api/upload-url/route.ts`
 - Test: `app/lib/aws.test.ts`
 
 **Interfaces:**
-- Produces: `keyForUpload(filename: string): string` (returns `uploads/<uuid><ext>`), `presignUpload(key: string, contentType: string): Promise<string>`, `presignDownload(key: string): Promise<string>`, `getS3Client(): S3Client`. Task 15 imports `presignDownload` and `getS3Client` (or reuses the S3 client pattern) from this same file.
-- Env vars consumed: `APP_AWS_REGION`, `S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (all provisioned by Task 12; the AWS SDK reads the last two automatically).
+- Produces: `keyForUpload(filename: string): string` (returns `uploads/<uuid><ext>`), `presignUpload(key: string, contentType: string): Promise<string>`, `presignDownload(key: string): Promise<string>`, `getS3Client(): S3Client`. Task 18 imports `presignDownload` and `getS3Client` (or reuses the S3 client pattern) from this same file.
+- Env vars consumed: `APP_AWS_REGION`, `S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (all provisioned by Task 15; the AWS SDK reads the last two automatically).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1643,7 +1898,7 @@ git commit -m "feat(app): add presigned S3 upload-url route"
 
 ---
 
-### Task 15: Process route
+### Task 18: Process route
 
 **Files:**
 - Create: `app/app/api/process/route.ts`
@@ -1651,7 +1906,7 @@ git commit -m "feat(app): add presigned S3 upload-url route"
 - Test: `app/lib/aws.test.ts` (extend), `app/app/api/process/route.test.ts`
 
 **Interfaces:**
-- Consumes: `presignDownload`, `getS3Client` pattern (Task 14); Lambda handler contract `{bucket, input_key, output_key} -> {output_key}` (Task 7); `LAMBDA_FUNCTION_NAME` env var (Task 12).
+- Consumes: `presignDownload`, `getS3Client` pattern (Task 17); Lambda handler contract `{bucket, input_key, output_key} -> {output_key}` (Task 7); `LAMBDA_FUNCTION_NAME` env var (Task 15).
 - Produces: `deriveOutputKey(inputKey: string): string` (returns `outputs/<rest>` for a `uploads/<rest>` key), `POST` handler returning `{ downloadUrl: string }`.
 
 - [ ] **Step 1: Write the failing test for `deriveOutputKey`**
@@ -1722,9 +1977,9 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-- [ ] **Step 6: Manual verification (requires Task 11/12 infra applied)**
+- [ ] **Step 6: Manual verification (requires Tasks 14/15 infra applied)**
 
-Run: `cd app && npm run dev`, log in, then `curl` the two routes in sequence with a real file, or exercise via the UI once Task 16 lands.
+Run: `cd app && npm run dev`, log in, then `curl` the two routes in sequence with a real file, or exercise via the UI once Task 19 lands.
 Expected: `/api/process` returns a `downloadUrl` that plays the processed audio.
 
 - [ ] **Step 7: Commit**
@@ -1736,14 +1991,14 @@ git commit -m "feat(app): add process route invoking the Lambda DSP pipeline"
 
 ---
 
-### Task 16: Upload / preview / download UI
+### Task 19: Upload / preview / download UI
 
 **Files:**
 - Create: `app/app/page.tsx`
 - Test: `app/app/page.test.tsx`
 
 **Interfaces:**
-- Consumes: `/api/upload-url` (Task 14) and `/api/process` (Task 15) via `fetch`.
+- Consumes: `/api/upload-url` (Task 17) and `/api/process` (Task 18) via `fetch`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1911,24 +2166,17 @@ git commit -m "feat(app): add upload/preview/download UI"
 
 ---
 
-### Task 17: Full end-to-end wiring and manual verification
+### Task 20: Full end-to-end wiring and manual verification
 
 **Files:**
 - None created — this task wires deployed infra to the deployed app and verifies the whole system.
 
 **Interfaces:**
-- Consumes: everything from Tasks 1–16.
+- Consumes: everything from Tasks 1–19.
 
-- [ ] **Step 1: Confirm the Lambda image is current**
+- [ ] **Step 1: Merge to `main` and confirm CI is green**
 
-If any change was made to `lambda/src` since Task 11 Step 5, rebuild and push:
-```bash
-cd lambda
-docker build -t bgm-looper-lambda:latest .
-docker tag bgm-looper-lambda:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bgm-looper-lambda:latest
-docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bgm-looper-lambda:latest
-aws lambda update-function-code --function-name bgm-looper-processor --image-uri <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/bgm-looper-lambda:latest
-```
+Push/merge this branch to `main`. Confirm in the GitHub Actions tab: the `test` job passes (Lambda pytest + app vitest), and the `deploy` job builds, tags (`<sha>` + `latest`), and pushes the image, then successfully runs `aws lambda update-function-code` (the function exists now, from Task 14 — this should no longer log the "does not exist yet" notice from Task 13 Step 3).
 
 - [ ] **Step 2: Apply the full Terraform stack with real secrets**
 
@@ -1939,12 +2187,11 @@ terraform apply \
   -var="app_password=<your chosen password>" \
   -var="github_repo=<youruser>/looper"
 ```
-Expected: 0 errors; `vercel_project_id` output populated.
+Expected: 0 errors (everything was already created incrementally in Tasks 11, 12, 14, 15 with placeholder vars — this run just swaps in the real `vercel_api_token`/`app_password`, which changes the `APP_PASSWORD` env var and re-authenticates the Vercel provider); `vercel_project_id` output populated.
 
-- [ ] **Step 3: Push the repo to GitHub to trigger the Vercel build**
+- [ ] **Step 3: Confirm the Vercel deployment**
 
-Run: `git push origin main` (assumes the GitHub remote at `github_repo` already exists and is connected)
-Expected: Vercel dashboard shows a new deployment building and succeeding.
+Vercel's own git integration builds on every push to `main` independently of GitHub Actions. Confirm in the Vercel dashboard that the latest deployment succeeded.
 
 - [ ] **Step 4: Manual end-to-end test with a real audio file**
 
@@ -1954,17 +2201,19 @@ Expected: preview loops cleanly; download link produces a file in the same forma
 - [ ] **Step 5: Verify the kill switch**
 
 Run: `cd infra/main && terraform destroy` (with the same `-var` flags as Step 2)
-Expected: Vercel project, Lambda, ECR repo, S3 audio bucket, and IAM resources are all removed. Confirm in both the AWS console and Vercel dashboard. The `infra/bootstrap` state bucket is untouched (never destroyed by this command).
+Expected: Vercel project, Lambda, ECR repo, S3 audio bucket, and IAM resources (including both the Vercel SA and CI-deploy IAM users) are all removed. Confirm in both the AWS console and Vercel dashboard. The `infra/bootstrap` state bucket is untouched (never destroyed by this command).
+
+Note: destroying removes the CI-deploy IAM user, which invalidates the `AWS_CI_ACCESS_KEY_ID`/`AWS_CI_SECRET_ACCESS_KEY` GitHub secrets. If you re-`apply` later, repeat Task 12 Step 5 (copy the new CI-deploy credentials into GitHub secrets) before CI can deploy again — otherwise CI's `test` job still runs and passes, but the `deploy` job's AWS steps will fail authentication.
 
 - [ ] **Step 6: Re-apply to leave the app running (if desired)**
 
-Run: `terraform apply` (same vars as Step 2) if you want the app live after verifying the kill switch works.
+Run: `terraform apply` (same vars as Step 2) if you want the app live after verifying the kill switch works. If you do, repeat Task 12 Step 5 to refresh the GitHub secrets per the note above.
 
 - [ ] **Step 7: Commit any leftover changes**
 
 ```bash
 git status
-# if lambda/src changed during this task and wasn't committed yet:
-git add lambda/src
-git commit -m "fix(lambda): final adjustments found during end-to-end testing"
+# if anything changed during this task and wasn't committed yet:
+git add -A
+git commit -m "fix: final adjustments found during end-to-end testing"
 ```
