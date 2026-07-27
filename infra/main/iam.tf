@@ -61,7 +61,7 @@ resource "aws_iam_user_policy" "ci_deploy" {
       },
       {
         Effect   = "Allow"
-        Action   = ["lambda:UpdateFunctionCode"]
+        Action   = ["lambda:UpdateFunctionCode", "lambda:GetFunction"]
         Resource = local.lambda_function_arn
       }
     ]
