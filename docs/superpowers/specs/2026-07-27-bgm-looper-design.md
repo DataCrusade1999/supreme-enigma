@@ -102,13 +102,32 @@ AWS cost:
 - ECR repo + Lambda function (container image) + its execution IAM role
 - IAM user + policy for Vercel's server-side AWS SDK calls (scoped to just
   this bucket's objects + `lambda:InvokeFunction` on just this function)
+- A second, separate IAM user for CI (ECR push + `lambda:UpdateFunctionCode`
+  on just this function) — its keys live only as GitHub Actions repository
+  secrets, copied there manually from `terraform output`, never as a Vercel
+  env var
 - Vercel project (via the Vercel Terraform provider): repo link, build
   settings, and all env vars (password secret, AWS access key/secret for
-  the IAM user above, S3 bucket name, Lambda function name)
+  the Vercel IAM user above, S3 bucket name, Lambda function name)
 
 `terraform destroy` in `infra/main/` removes the entire application —
 AWS side and Vercel side — in one command. `terraform apply` stands the
 whole thing back up. This is the kill switch.
+
+**CI/CD:** the user's local machine is too slow for Docker builds, so the
+Lambda container image is built and pushed by GitHub Actions instead of
+locally. A `test` job (Lambda pytest + Next.js vitest) gates a `deploy` job
+that builds the image, tags it with the git SHA and `latest`, pushes both
+to ECR, and calls `aws lambda update-function-code` with the SHA tag.
+Terraform `apply`/`destroy` is deliberately **not** run in CI — infra
+changes and the kill switch stay a manual, human-initiated action; CI's
+blast radius is limited to the container image and the function's running
+code. The IAM policies the Vercel and CI users need reference the Lambda
+function by its deterministic ARN rather than a live Terraform resource
+attribute, which lets both users (and the execution role) be provisioned
+before the function itself exists — resolving the chicken-and-egg where
+the function needs an image only CI can build, and IAM needs the
+function's ARN.
 
 **Secrets-in-state caveat:** Vercel env vars (AWS keys, password) are
 written into Terraform state as resource attributes — unavoidable with
