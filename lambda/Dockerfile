@@ -11,4 +11,6 @@ RUN pip install -r requirements.txt
 
 COPY src/looper ${LAMBDA_TASK_ROOT}/looper
 
+ENV NUMBA_CACHE_DIR=/tmp/numba_cache
+
 CMD ["looper.handler.handler"]
