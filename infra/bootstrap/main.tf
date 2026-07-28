@@ -13,8 +13,15 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
+variable "aws_profile" {
+  description = "Named AWS CLI profile Terraform authenticates with (local runs only)."
+  type        = string
+  default     = "personal"
+}
+
 provider "aws" {
-  region = var.aws_region
+  region  = var.aws_region
+  profile = var.aws_profile
 }
 
 data "aws_caller_identity" "current" {}

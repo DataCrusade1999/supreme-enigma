@@ -5,6 +5,7 @@ terraform {
     bucket       = "bgm-looper-tf-state-223376380711"
     key          = "main/terraform.tfstate"
     region       = "us-east-1"
+    profile      = "personal"
     use_lockfile = true
   }
 

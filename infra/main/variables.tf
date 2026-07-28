@@ -3,6 +3,12 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
+variable "aws_profile" {
+  description = "Named AWS CLI profile Terraform authenticates with (local runs only — CI uses env-var credentials and never sets this)."
+  type        = string
+  default     = "personal"
+}
+
 variable "project_name" {
   type    = string
   default = "bgm-looper"
