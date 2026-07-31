@@ -14,7 +14,7 @@ export default function Home() {
     setDownloadUrl(null);
 
     try {
-      const urlRes = await fetch("/api/upload-url", {
+      const urlRes = await fetch("/api/looper/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename: file.name, contentType: file.type }),
@@ -28,7 +28,7 @@ export default function Home() {
       });
 
       setStatus("processing");
-      const processRes = await fetch("/api/process", {
+      const processRes = await fetch("/api/looper/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key }),

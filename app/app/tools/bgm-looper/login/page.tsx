@@ -19,7 +19,7 @@ export default function LoginPage() {
       setError("Invalid password");
       return;
     }
-    router.push("/");
+    router.push("/tools/bgm-looper");
   }
 
   return (
