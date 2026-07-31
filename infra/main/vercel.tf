@@ -19,6 +19,11 @@ locals {
   env_targets = ["production", "preview"]
 }
 
+# S3_BUCKET_NAME / LAMBDA_FUNCTION_NAME need a different value per environment, so they're
+# set separately below instead of through env_targets: production -> main's resources,
+# preview (default, i.e. any branch incl. dev) -> dev's resources, stage -> stage's resources
+# via the git_branch override, which takes precedence over the preview default on that branch.
+
 resource "vercel_project_environment_variable" "app_password" {
   project_id = vercel_project.looper.id
   key        = "APP_PASSWORD"
@@ -58,16 +63,46 @@ resource "vercel_project_environment_variable" "aws_region" {
   target     = local.env_targets
 }
 
-resource "vercel_project_environment_variable" "s3_bucket" {
+resource "vercel_project_environment_variable" "s3_bucket_production" {
   project_id = vercel_project.looper.id
   key        = "S3_BUCKET_NAME"
   value      = aws_s3_bucket.audio.bucket
-  target     = local.env_targets
+  target     = ["production"]
 }
 
-resource "vercel_project_environment_variable" "lambda_function_name" {
+resource "vercel_project_environment_variable" "s3_bucket_preview" {
+  project_id = vercel_project.looper.id
+  key        = "S3_BUCKET_NAME"
+  value      = aws_s3_bucket.audio_env["dev"].bucket
+  target     = ["preview"]
+}
+
+resource "vercel_project_environment_variable" "s3_bucket_stage" {
+  project_id = vercel_project.looper.id
+  key        = "S3_BUCKET_NAME"
+  value      = aws_s3_bucket.audio_env["stage"].bucket
+  target     = ["preview"]
+  git_branch = "stage"
+}
+
+resource "vercel_project_environment_variable" "lambda_function_name_production" {
   project_id = vercel_project.looper.id
   key        = "LAMBDA_FUNCTION_NAME"
   value      = aws_lambda_function.looper.function_name
-  target     = local.env_targets
+  target     = ["production"]
+}
+
+resource "vercel_project_environment_variable" "lambda_function_name_preview" {
+  project_id = vercel_project.looper.id
+  key        = "LAMBDA_FUNCTION_NAME"
+  value      = aws_lambda_function.looper_env["dev"].function_name
+  target     = ["preview"]
+}
+
+resource "vercel_project_environment_variable" "lambda_function_name_stage" {
+  project_id = vercel_project.looper.id
+  key        = "LAMBDA_FUNCTION_NAME"
+  value      = aws_lambda_function.looper_env["stage"].function_name
+  target     = ["preview"]
+  git_branch = "stage"
 }
