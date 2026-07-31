@@ -20,6 +20,14 @@ Three independent sibling projects, no monorepo tooling (no workspaces/Turborepo
 - Lambda tests: `cd lambda && pytest -v` (requires `pip install -r requirements.txt pytest moto`; `pytest.ini` sets `pythonpath = src`).
 - Terraform: run from `infra/main/` with `-var-file=terraform.tfvars` (gitignored, contains `vercel_api_token`, `app_password`, `github_repo`).
 
+## Branching & releases
+
+- Three permanent branches: `dev` → `stage` → `main`. `dev` is the GitHub default branch — new local branches and PRs target `dev` by default. Promote by opening a PR `dev → stage`, then `stage → main` once QA'd.
+- `main` is the only branch that deploys to AWS (Lambda/ECR) and cuts a release — see below. `dev`/`stage` still get automatic Vercel preview deployments (stable per-branch alias URLs) since the whole repo is connected, but they share the single AWS backend that `main`'s last CI run deployed — there's no per-branch Lambda.
+- `vercel_project.looper` pins `git_repository.production_branch = "main"` explicitly in `vercel.tf`, decoupled from GitHub's default branch — required precisely because the default branch is `dev`, not `main`.
+- Branch protection (PR-only merges, no force-push) on `stage`/`main` is **not enforced** — GitHub blocks branch protection/rulesets on private repos without Pro. Convention-only until upgraded or made public.
+- `.github/workflows/deploy.yml`'s `release` job auto-tags and creates a GitHub Release (`gh release create --generate-notes`) on every successful push-triggered run on `main`. Version bump is derived from Conventional Commit prefixes since the last tag (`feat:` → minor, `!`/`BREAKING CHANGE:` → major, else patch) — not a hand-maintained changelog file, so promoting `dev`→`stage`→`main` never creates changelog merge conflicts.
+
 ## Gotchas
 
 - **App env var is `APP_AWS_REGION`, not `AWS_REGION`** — deliberately named to avoid colliding with reserved AWS SDK/Vercel env vars.

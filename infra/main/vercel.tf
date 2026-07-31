@@ -9,8 +9,9 @@ resource "vercel_project" "looper" {
   root_directory = "app"
 
   git_repository = {
-    type = "github"
-    repo = var.github_repo
+    type              = "github"
+    repo              = var.github_repo
+    production_branch = "main"
   }
 }
 
