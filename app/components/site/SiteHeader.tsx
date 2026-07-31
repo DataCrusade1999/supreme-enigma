@@ -11,24 +11,38 @@ const NAV_LINKS = [
 
 export function SiteHeader() {
   return (
-    <header className="flex items-center justify-between border-b border-fg/10 px-6 py-4">
-      <Link href="/" className="font-bold">
-        Ashutosh Pandey
-      </Link>
-      <nav className="flex items-center gap-4 text-sm">
-        {NAV_LINKS.map((link) => (
-          <Link key={link.href} href={link.href} className="hover:text-accent">
-            {link.label}
-          </Link>
-        ))}
+    <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <Link
-          href="/tools/bgm-looper"
-          className="rounded bg-accent px-3 py-1 text-bg hover:opacity-90"
+          href="/"
+          className="group flex items-center gap-2.5 font-mono text-sm font-semibold tracking-tight text-fg"
         >
-          BGM Looper
+          <span
+            aria-hidden="true"
+            className="h-3.5 w-1 shrink-0 bg-accent transition-transform duration-200 group-hover:scale-y-150"
+          />
+          Ashutosh Pandey
         </Link>
-        <ThemeToggle />
-      </nav>
+
+        <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[0.6875rem] uppercase tracking-[0.16em]">
+          {NAV_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="border-b border-transparent pb-0.5 text-muted transition-colors hover:border-accent hover:text-fg"
+            >
+              {link.label}
+            </Link>
+          ))}
+          <Link
+            href="/tools/bgm-looper"
+            className="bg-accent px-2.5 py-1.5 font-semibold text-bg transition-opacity hover:opacity-85"
+          >
+            BGM Looper
+          </Link>
+          <ThemeToggle />
+        </nav>
+      </div>
     </header>
   );
 }
