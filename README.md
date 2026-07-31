@@ -30,12 +30,23 @@ Browser → Vercel (Next.js, thin API) → AWS (Lambda + S3, personal account)
 - Entire stack (S3, Lambda, ECR, IAM, Vercel project) is provisioned by
   Terraform. `terraform destroy` is the kill switch: one command tears down
   everything that can incur AWS cost or that constitutes "the app."
-- GitHub Actions builds/tests on every push and, on `main`, builds the
-  Lambda container image, pushes it to ECR, and updates the deployed
-  Lambda's code. Vercel's own git integration deploys the app on every
-  push to `main` independently of GitHub Actions.
+- GitHub Actions runs tests on every push and PR, and on push to `main`,
+  `stage`, or `dev` builds that branch's Lambda container image, pushes it
+  to ECR under a branch-prefixed tag, and updates that branch's own Lambda
+  function. Vercel's own git integration deploys the app for each branch
+  independently of GitHub Actions — see Environments below.
 
 Full rationale and trade-offs: `docs/superpowers/specs/2026-07-27-bgm-looper-design.md`.
+
+## Environments
+
+Three permanent branches, each with its own Vercel deployment and its own AWS backend (Lambda + S3) — see "Branching & releases" in `CLAUDE.md` for how promotion and backend isolation work.
+
+| Branch  | URL | Purpose |
+|---------|-----|---------|
+| `main`  | https://bgm-looper.vercel.app | Production — the live app |
+| `stage` | https://bgm-looper-git-stage-ashutosh-pandeys-projects-77cb3a00.vercel.app | Pre-prod QA |
+| `dev`   | https://bgm-looper-git-dev-ashutosh-pandeys-projects-77cb3a00.vercel.app | Default branch, integration |
 
 ## Repo layout
 
@@ -49,7 +60,8 @@ infra/
               `terraform destroy` here removes the entire application.
 docs/superpowers/specs/   Design spec
 docs/superpowers/plans/   Implementation plan (20 tasks, TDD, checkbox-tracked)
-.github/workflows/        CI/CD: test (Lambda pytest + app vitest) + build/push Lambda image to ECR
+.github/workflows/        CI/CD: test (Lambda pytest + app vitest), build/push Lambda image to
+                          ECR per branch, and (main only) tag + publish a GitHub Release
 ```
 
 ## Prerequisites
