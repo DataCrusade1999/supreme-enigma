@@ -7,6 +7,18 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Public portfolio site: home, about, projects, resume, and contact pages,
+  no login required.
+- Dark/light theme toggle in the site header, dark by default, with the
+  choice persisted in `localStorage`.
+
+### Changed
+
+- The BGM Looper tool moved from `/` to `/tools/bgm-looper`, still behind
+  the same password gate.
+
 ## [1.0.1] - 2026-07-31
 
 ### Changed

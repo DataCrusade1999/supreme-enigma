@@ -53,6 +53,7 @@ export default function Home() {
           accept="audio/*"
           disabled={status === "uploading" || status === "processing"}
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          className="file:mr-3 file:border-0 file:bg-accent file:px-3 file:py-1.5 file:font-mono file:text-bg"
         />
       </label>
 
@@ -62,7 +63,7 @@ export default function Home() {
       {status === "done" && downloadUrl && (
         <div>
           <audio controls loop src={downloadUrl} />
-          <a href={downloadUrl} download>
+          <a href={downloadUrl} download className="text-accent underline">
             Download
           </a>
         </div>
