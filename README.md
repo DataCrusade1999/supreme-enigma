@@ -152,3 +152,7 @@ data and negligible cost.
 Lambda (1024MB, ~10–20s/run) + S3 (24h object expiry) at single-user, low
 volume: effectively $0/month, covered by AWS free tier. No always-on
 compute, no database, no queue.
+
+## Changelog & License
+
+See [CHANGELOG.md](CHANGELOG.md) for release history and [LICENSE](LICENSE) (MIT).
