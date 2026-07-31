@@ -19,7 +19,7 @@ export default function LoginPage() {
       setError("Invalid password");
       return;
     }
-    router.push("/");
+    router.push("/tools/bgm-looper");
   }
 
   return (
@@ -30,8 +30,11 @@ export default function LoginPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
+          className="border border-line px-2.5 py-1.5 text-fg"
         />
-        <button type="submit">Log in</button>
+        <button type="submit" className="bg-accent px-2.5 py-1.5 font-semibold text-bg">
+          Log in
+        </button>
         {error && <p role="alert">{error}</p>}
       </form>
     </main>

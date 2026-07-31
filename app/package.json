@@ -17,15 +17,18 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.0.0",
+    "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
-    "@eslint/eslintrc": "^3.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.0.0",
     "jsdom": "^25.0.0",
+    "postcss": "^8.5.25",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   }

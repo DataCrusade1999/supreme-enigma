@@ -1,6 +1,8 @@
 # BGM Looper
 
-Single-user web app: upload a background-music audio file, get back an
+A personal portfolio site (home, about, projects, resume, contact — no
+login required) with one password-gated tool built in: the BGM Looper, at
+`/tools/bgm-looper`. Upload a background-music audio file there, get back an
 edited version that loops seamlessly — loudness-normalized, silence-trimmed,
 beat-aligned loop point, crossfaded seam. Output keeps the input's original
 format.
@@ -26,7 +28,9 @@ Browser → Vercel (Next.js, thin API) → AWS (Lambda + S3, personal account)
 - The DSP pipeline (loudness normalize → silence trim → beat-aligned
   loop-point search → crossfade → ffmpeg transcode) runs as a containerized
   Python Lambda.
-- Single shared password + signed cookie for auth — no user accounts.
+- Single shared password + signed cookie for auth, scoped to the
+  `/tools/bgm-looper` tool only — no user accounts, and the public site
+  pages need no login.
 - Entire stack (S3, Lambda, ECR, IAM, Vercel project) is provisioned by
   Terraform. `terraform destroy` is the kill switch: one command tears down
   everything that can incur AWS cost or that constitutes "the app."
@@ -51,7 +55,8 @@ Three permanent branches, each with its own Vercel deployment and its own AWS ba
 ## Repo layout
 
 ```
-app/      Next.js app (TypeScript) — UI, auth, API routes
+app/      Next.js app (TypeScript) — public portfolio pages, the
+          password-gated BGM Looper tool (`tools/bgm-looper`), auth, API routes
 lambda/   Python DSP pipeline + Lambda handler + Dockerfile
 infra/
   bootstrap/  Terraform, applied once manually — creates the TF state bucket only.
