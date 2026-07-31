@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #ffffff;
+  --color-fg: #111111;
+  --color-accent: #0891b2;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+:root.dark {
+  --color-bg: #0a0a0a;
+  --color-fg: #e5e5e5;
+  --color-accent: #22d3ee;
+}
+
+html {
+  background-color: var(--color-bg);
+  color-scheme: light dark;
+}
+
+html.dark {
+  color-scheme: dark;
+}
