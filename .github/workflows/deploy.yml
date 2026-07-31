@@ -106,6 +106,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -131,7 +132,70 @@ jobs:
             echo "tag=v$MAJOR.$MINOR.$PATCH" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Update CHANGELOG.md
+        id: changelog
+        run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "CHANGELOG.md not found, skipping."
+            exit 0
+          fi
+          VERSION="${{ steps.version.outputs.tag }}"
+          VERSION="${VERSION#v}"
+          DATE=$(date -u +%Y-%m-%d)
+          python3 - "$VERSION" "$DATE" <<'PYEOF'
+          import sys
+          version, date = sys.argv[1], sys.argv[2]
+          with open("CHANGELOG.md") as f:
+              content = f.read()
+          old = "## [Unreleased]"
+          if old not in content:
+              print("no [Unreleased] heading found")
+              sys.exit(0)
+          new = f"## [Unreleased]\n\n## [{version}] - {date}"
+          content = content.replace(old, new, 1)
+          with open("CHANGELOG.md", "w") as f:
+              f.write(content)
+          print("renamed [Unreleased] -> [%s] - %s" % (version, date))
+          PYEOF
+          if git diff --quiet CHANGELOG.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit CHANGELOG.md to main
+        id: changelog_commit
+        if: steps.changelog.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore(changelog): release ${{ steps.version.outputs.tag }}"
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Create tag and release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "${{ steps.version.outputs.tag }}" --target main --generate-notes
+
+      - name: Open changelog-sync PR to dev
+        if: steps.changelog.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin dev
+          BRANCH="chore/changelog-sync-${{ steps.version.outputs.tag }}"
+          git checkout -b "$BRANCH" origin/dev
+          if git cherry-pick "${{ steps.changelog_commit.outputs.sha }}"; then
+            git push origin "$BRANCH"
+            gh pr create --base dev --head "$BRANCH" \
+              --title "chore(changelog): sync ${{ steps.version.outputs.tag }} heading to dev" \
+              --body "Automated — keeps CHANGELOG.md identical across dev/stage/main after the ${{ steps.version.outputs.tag }} release. Cherry-picks only the changelog rename commit from main, nothing else. Safe to merge. Note: PRs opened by the default GITHUB_TOKEN don't trigger the test workflow, so this won't show CI checks — that's expected for a changelog-only change."
+          else
+            git cherry-pick --abort
+            echo "::warning::CHANGELOG.md cherry-pick to dev conflicted — sync it by hand."
+          fi
