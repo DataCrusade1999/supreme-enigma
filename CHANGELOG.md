@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-31
+
 ### Changed
 
 - CI actions bumped to node24-runtime versions (`actions/checkout` v7,
