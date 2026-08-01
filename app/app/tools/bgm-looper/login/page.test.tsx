@@ -43,4 +43,11 @@ describe("LoginPage", () => {
     await submit();
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools/bgm-looper"));
   });
+
+  it("falls back to /tools/bgm-looper when next is a protocol-relative URL (open-redirect guard)", async () => {
+    mockSearch = "next=%2F%2Fevil.example";
+    render(<LoginPage />);
+    await submit();
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools/bgm-looper"));
+  });
 });
