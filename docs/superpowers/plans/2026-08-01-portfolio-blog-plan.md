@@ -890,7 +890,7 @@ Stop the dev server when done.
 This step cannot be automated — report it as the final output of this plan, not as a commit. Tell the human:
 
 > Code is merged. Before `/keystatic` works in production:
-> 1. Pull this branch locally, run `npm run dev` from `app/`.
+> 1. Pull this branch locally, run `APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev` from `app/`.
 > 2. Visit `http://localhost:3000/keystatic`, log in with GitHub.
 > 3. Click "Create GitHub App", name it, authorize it on `DataCrusade1999/supreme-enigma`.
 > 4. Keystatic writes `KEYSTATIC_GITHUB_CLIENT_ID`, `KEYSTATIC_GITHUB_CLIENT_SECRET`, `KEYSTATIC_SECRET`, and `NEXT_PUBLIC_KEYSTATIC_GITHUB_APP_SLUG` into a local `.env` (now correctly gitignored, per Task 1).

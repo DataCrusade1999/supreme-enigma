@@ -28,7 +28,7 @@ Keystatic's GitHub mode requires an interactive GitHub login to create and
 authorize a GitHub App — this cannot be scripted by an implementer or CI.
 After the code in this spec ships:
 
-1. Pull the branch locally, run `npm run dev`.
+1. Pull the branch locally, run `APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev` from `app/`.
 2. Visit `http://localhost:3000/keystatic`, log in with GitHub.
 3. Click "Create GitHub App", name it, authorize it on the
    `DataCrusade1999/supreme-enigma` repo.
