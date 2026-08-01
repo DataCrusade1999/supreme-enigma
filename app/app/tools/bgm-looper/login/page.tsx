@@ -1,11 +1,12 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,24 +20,33 @@ export default function LoginPage() {
       setError("Invalid password");
       return;
     }
-    router.push("/tools/bgm-looper");
+    const next = searchParams.get("next");
+    router.push(next && next.startsWith("/") ? next : "/tools/bgm-looper");
   }
 
   return (
+    <form onSubmit={handleSubmit}>
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Password"
+        className="border border-line px-2.5 py-1.5 text-fg"
+      />
+      <button type="submit" className="bg-accent px-2.5 py-1.5 font-semibold text-bg">
+        Log in
+      </button>
+      {error && <p role="alert">{error}</p>}
+    </form>
+  );
+}
+
+export default function LoginPage() {
+  return (
     <main>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          className="border border-line px-2.5 py-1.5 text-fg"
-        />
-        <button type="submit" className="bg-accent px-2.5 py-1.5 font-semibold text-bg">
-          Log in
-        </button>
-        {error && <p role="alert">{error}</p>}
-      </form>
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
     </main>
   );
 }
