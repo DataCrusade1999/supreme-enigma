@@ -50,4 +50,11 @@ describe("LoginPage", () => {
     await submit();
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools/bgm-looper"));
   });
+
+  it("falls back to /tools/bgm-looper when next hides a control character that would resolve off-origin (open-redirect guard)", async () => {
+    mockSearch = "next=%2F%09%2Fevil.example";
+    render(<LoginPage />);
+    await submit();
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools/bgm-looper"));
+  });
 });

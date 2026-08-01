@@ -2,8 +2,16 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-const isSafeRelativePath = (v: string) =>
-  v.startsWith("/") && !v.startsWith("//") && !v.startsWith("/\\");
+function safeNext(v: string | null): string {
+  if (!v) return "/tools/bgm-looper";
+  try {
+    const url = new URL(v, window.location.origin);
+    if (url.origin !== window.location.origin) return "/tools/bgm-looper";
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return "/tools/bgm-looper";
+  }
+}
 
 function LoginForm() {
   const [password, setPassword] = useState("");
@@ -23,8 +31,7 @@ function LoginForm() {
       setError("Invalid password");
       return;
     }
-    const next = searchParams.get("next");
-    router.push(next && isSafeRelativePath(next) ? next : "/tools/bgm-looper");
+    router.push(safeNext(searchParams.get("next")));
   }
 
   return (
