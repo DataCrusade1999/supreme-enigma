@@ -13,6 +13,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
   no login required.
 - Dark/light theme toggle in the site header, dark by default, with the
   choice persisted in `localStorage`.
+- Blog, powered by Keystatic (git-backed CMS). Admin UI at `/keystatic`
+  (behind the existing password). Public posts at `/blog`.
 
 ### Changed
 
