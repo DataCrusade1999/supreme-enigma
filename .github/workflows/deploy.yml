@@ -46,10 +46,39 @@ jobs:
         working-directory: app
         run: npm test
 
-  deploy:
-    needs: test
+  changes:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
+    outputs:
+      lambda: ${{ steps.check.outputs.lambda }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check for lambda changes
+        id: check
+        run: |
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            echo "lambda=true" >> "$GITHUB_OUTPUT"
+            echo "No previous commit to diff against (new branch or rewritten history) — building to be safe."
+            exit 0
+          fi
+          if git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- lambda/ .github/workflows/deploy.yml; then
+            echo "lambda=false" >> "$GITHUB_OUTPUT"
+            echo "No changes under lambda/ or deploy.yml — skipping the Lambda image build."
+          else
+            echo "lambda=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: [test, changes]
+    runs-on: ubuntu-latest
+    # A custom `if:` replaces the default `if: success()` entirely, so
+    # test's success is checked explicitly here rather than assumed.
+    # `changes` only runs (and is only needed) on push — on workflow_dispatch
+    # it's skipped, and deploy proceeds anyway, ignoring its output.
+    if: always() && needs.test.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.lambda == 'true'))
     steps:
       - uses: actions/checkout@v7
 
@@ -101,9 +130,16 @@ jobs:
           fi
 
   release:
-    needs: deploy
+    needs: [test, deploy]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # deploy is legitimately skipped (not failed) on a main push that touches
+    # no lambda/ files — release must still run in that case, so this can't
+    # rely on the default `if: success()` gating, which treats a skipped
+    # `needs` job the same as a failed one. test.result is checked
+    # explicitly too: deploy.result == 'skipped' is ambiguous on its own
+    # between "no lambda changes" (fine, release should run) and "test
+    # failed so deploy's own condition never ran" (must not release).
+    if: always() && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled'
     permissions:
       contents: write
       pull-requests: write
