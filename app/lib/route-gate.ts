@@ -1,4 +1,4 @@
-const GATED_PREFIXES = ["/tools/bgm-looper", "/api/looper"];
+const GATED_PREFIXES = ["/tools/bgm-looper", "/api/looper", "/keystatic", "/api/keystatic"];
 const ALWAYS_ALLOWED_PATHS = ["/tools/bgm-looper/login", "/api/login"];
 
 export function isGatedPath(pathname: string): boolean {
