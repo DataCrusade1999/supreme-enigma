@@ -2,6 +2,9 @@
 
 Date: 2026-08-04
 
+Full interactive research report (deep-research pass this phase and the
+rest of the overhaul are based on): https://claude.ai/code/artifact/7361c63b-193d-4491-876f-03b7a1021daa
+
 ## 1. Purpose
 
 First phase of a larger portfolio UI overhaul (terminal-style navigation,
