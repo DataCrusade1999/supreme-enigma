@@ -107,6 +107,11 @@ glance.
   so this doesn't collide with a dev server someone might already have
   running locally.
 - `use: { baseURL: "http://localhost:3100" }`
+- `reporter: [["list"], ["json", { outputFile: "playwright-results.json" }]]`
+  — `list` for readable console output during the run, `json` for the
+  machine-readable file the CI job-summary step (§8) parses. Configured here
+  rather than via CLI flags so both local and CI runs produce the same
+  artifact without remembering extra flags.
 
 **Functional tests** (`app/e2e/pages.spec.ts`, `app/e2e/navigation.spec.ts`,
 `app/e2e/theme.spec.ts`):
@@ -143,21 +148,96 @@ exclude: [
 
 ## 8. CI
 
-Add to `.github/workflows/deploy.yml`'s existing `test` job, after the
-existing `npm test` step:
+### 8.1 Rich job summaries (pass/fail counts + why failures failed)
+
+GitHub Actions renders whatever markdown a step appends to the
+`$GITHUB_STEP_SUMMARY` file as a "Summary" section on the workflow run page —
+this is the native mechanism to use, no marketplace action needed. Both test
+runners can emit machine-readable JSON (Vitest's `json` reporter follows
+Jest's schema: `numTotalTests`/`numPassedTests`/`numFailedTests` at the top
+level, `testResults[].assertionResults[]` with `status`/`failureMessages` per
+test; Playwright's `json` reporter reports `stats.expected`/`unexpected`/
+`flaky`/`skipped`, with per-test detail nested under `suites[]` — recursively,
+since suites can contain suites — down to `specs[].tests[].results[].error`).
+
+One hand-rolled script, `.github/scripts/test-summary.mjs`, parses either
+shape (`node .github/scripts/test-summary.mjs --kind vitest <path>` or
+`--kind playwright <path>`) and appends a markdown section to
+`$GITHUB_STEP_SUMMARY`: a one-line pass/fail/total count, and for each
+failure, a `<details>` block (collapsed by default, so a summary with many
+failures stays scannable) named after the failing test, containing its error
+message/stack. Matches this repo's established preference for hand-rolled
+CI scripting over marketplace actions (see the `changes` job's plain
+`git diff --quiet` check, or the release job's inline Python for the
+`CHANGELOG.md` rewrite).
+
+Both the Vitest and Playwright run steps need the same shape of fix so a
+test failure doesn't short-circuit past the summary step: GitHub Actions'
+default shell runs with `bash -eo pipefail`, so a failing `npx vitest run`
+would normally abort the step's script immediately, before a `$?`-capturing
+line ever runs. Each run step instead does:
+
+```bash
+set -o pipefail
+EXIT_CODE=0
+npx vitest run --reporter=default --reporter=json --outputFile.json=vitest-results.json || EXIT_CODE=$?
+echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+```
+
+(`cmd || EXIT_CODE=$?` is the one construct `set -e` doesn't treat as fatal —
+being part of an `||` list is one of its documented exceptions — so this
+reliably captures the real exit code without needing `continue-on-error` on
+the step.) A summary step, marked `if: always()` so it still runs after a
+test failure, then parses the JSON and appends the markdown. A final step
+checks the captured `exit_code` output and does `exit 1` if nonzero, so the
+job's overall pass/fail status — and everything downstream that depends on
+it (`needs.test.result` in the `deploy`/`deploy_demucs`/`release` jobs) —
+stays correct.
+
+### 8.2 Workflow changes
+
+Change the existing `test` job's `npm test` step and add the new Playwright
+steps, all in `.github/workflows/deploy.yml`:
 
 ```yaml
+      - name: Run app tests
+        id: vitest
+        working-directory: app
+        run: |
+          set -o pipefail
+          EXIT_CODE=0
+          npx vitest run --reporter=default --reporter=json --outputFile.json=vitest-results.json || EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Vitest job summary
+        if: always()
+        run: node .github/scripts/test-summary.mjs --kind vitest app/vitest-results.json
+
       - name: Install Playwright browsers
         working-directory: app
         run: npx playwright install --with-deps chromium
 
       - name: Run e2e + a11y tests
+        id: playwright
         working-directory: app
         env:
           APP_PASSWORD: test123
           COOKIE_SECRET: devsecret
-        run: npx playwright test
+        run: |
+          set -o pipefail
+          EXIT_CODE=0
+          npx playwright test || EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Playwright job summary
+        if: always()
+        run: node .github/scripts/test-summary.mjs --kind playwright app/playwright-results.json
+
+      - name: Fail the job if any test suite failed
+        if: steps.vitest.outputs.exit_code != '0' || steps.playwright.outputs.exit_code != '0'
+        run: exit 1
 ```
+
 Chromium-only (not the full browser matrix) — this is a personal portfolio
 site, not a cross-browser-compatibility-critical product; Chromium coverage
 catches the overwhelming majority of real regressions at a fraction of the
