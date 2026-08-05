@@ -43,34 +43,34 @@ resource "aws_ecr_lifecycle_policy" "looper" {
       },
       {
         rulePriority = 2
-        description  = "Keep only the 5 most recent main images"
+        description  = "Keep only the 1 most recent main image"
         selection = {
           tagStatus     = "tagged"
           tagPrefixList = ["main"]
           countType     = "imageCountMoreThan"
-          countNumber   = 5
+          countNumber   = 1
         }
         action = { type = "expire" }
       },
       {
         rulePriority = 3
-        description  = "Keep only the 5 most recent dev images"
+        description  = "Keep only the 1 most recent dev image"
         selection = {
           tagStatus     = "tagged"
           tagPrefixList = ["dev"]
           countType     = "imageCountMoreThan"
-          countNumber   = 5
+          countNumber   = 1
         }
         action = { type = "expire" }
       },
       {
         rulePriority = 4
-        description  = "Keep only the 5 most recent stage images"
+        description  = "Keep only the 1 most recent stage image"
         selection = {
           tagStatus     = "tagged"
           tagPrefixList = ["stage"]
           countType     = "imageCountMoreThan"
-          countNumber   = 5
+          countNumber   = 1
         }
         action = { type = "expire" }
       }
