@@ -142,10 +142,14 @@ repo's existing "independent sibling projects" convention.
 Terraform changes, following the existing shared-vs-per-branch split:
 
 - **`shared.tf`**: one new `aws_ecr_repository` for the Demucs image, with
-  its own lifecycle policy — **keep the last 1–2 images per branch tag
+  its own lifecycle policy — **keep only the last 1 image per branch tag
   prefix, not 5**. These images are estimated at 3–5GB each (vs. BGM
   Looper's ~200MB), so the existing keep-5 policy would risk real ECR
-  storage cost (see §9). No new IAM role or IAM user — reuses
+  storage cost (see §9). Keep-1 means no rollback via ECR on a bad deploy
+  (a fresh CI rebuild from git history would be needed instead) — an
+  acceptable trade for a personal, low-frequency-deploy tool, in exchange
+  for roughly half the storage cost of keep-2. No new IAM role or IAM
+  user — reuses
   `aws_iam_role.lambda_exec` (already scoped to the shared bucket) and the
   existing Vercel/CI IAM users' policies, extended to also cover this new
   function's ARN and this new ECR repo's push permissions (same shape as
@@ -175,8 +179,8 @@ everything else in that layer.
 - **ECR storage** is the real cost lever (not compute): at $0.10/GB-month
   with only 500MB free for the first 12 months, an unmanaged multi-GB
   image kept 5-deep across 3 branches could run several hundred INR/month.
-  Mitigated by the tighter 1–2-image retention policy in §8 — at, say,
-  2 images × 3 branches × ~3.5GB average, that's ~21GB ≈ $2.10/month.
+  Mitigated by the tighter keep-1-per-branch retention policy in §8 — at,
+  say, 1 image × 3 branches × ~3.5GB average, that's ~10.5GB ≈ $1.05/month.
 - Combined estimate: comfortably under the ~200 INR/month (~$2.40)
   budget target at single-user, low-volume usage.
 - Considered and rejected: moving compute off Lambda to a multi-cloud

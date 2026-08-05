@@ -19,7 +19,7 @@
 - Model weights baked into the image at build time: `ENV TORCH_HOME=/opt/torch_cache` set before a build-time `RUN python -c "from demucs.pretrained import get_model; get_model('htdemucs')"`, so no download happens on first real invocation.
 - `torch`/`torchaudio` installed CPU-only via `--extra-index-url https://download.pytorch.org/whl/cpu` in `requirements.txt` (avoids pulling CUDA wheels, which would bloat the image far past what's needed on Lambda's CPU-only runtime).
 - New Lambda function names: `bgm-looper-demucs-processor` (main), `-dev`, `-stage` (twins) — mirrors `bgm-looper-processor`'s existing per-branch naming.
-- New ECR repo: `bgm-looper-demucs-lambda`, lifecycle policy keeps only the **2** most recent images per branch tag prefix (not BGM Looper's 5) — this image is estimated at 3–5GB vs. BGM Looper's ~200MB, so a smaller retention count keeps ECR storage cost low (see the design spec §9 for the cost math).
+- New ECR repo: `bgm-looper-demucs-lambda`, lifecycle policy keeps only the **1** most recent image per branch tag prefix (not BGM Looper's 5) — this image is estimated at 3–5GB vs. BGM Looper's ~200MB, so a smaller retention count keeps ECR storage cost low (see the design spec §9 for the cost math). Trade-off: no rollback via ECR on a bad deploy (a fresh CI rebuild from git history is the recovery path) — acceptable for a personal, low-frequency-deploy tool.
 - No new S3 bucket, no new Lambda execution IAM role, no new Vercel project, no new CI-deploy/Vercel-SA IAM users — this tool extends BGM Looper's existing shared ones.
 - Auth: reuses the existing single shared-password cookie/gate exactly as-is. `/tools/bgm-extractor` and `/api/bgm-extractor` are added to `GATED_PREFIXES` in `app/lib/route-gate.ts`. No new login page (unauthenticated visits redirect to the existing `/tools/bgm-looper/login?next=...`, which already round-trips back to any `next` path on success).
 - Python package name: `extractor` (mirrors BGM Looper's `looper` package — the tool's short name, not `bgm-extractor` verbatim, since hyphens aren't valid in Python identifiers).
@@ -950,34 +950,34 @@ resource "aws_ecr_lifecycle_policy" "demucs" {
       },
       {
         rulePriority = 2
-        description  = "Keep only the 2 most recent main images"
+        description  = "Keep only the 1 most recent main image"
         selection = {
           tagStatus     = "tagged"
           tagPrefixList = ["main"]
           countType     = "imageCountMoreThan"
-          countNumber   = 2
+          countNumber   = 1
         }
         action = { type = "expire" }
       },
       {
         rulePriority = 3
-        description  = "Keep only the 2 most recent dev images"
+        description  = "Keep only the 1 most recent dev image"
         selection = {
           tagStatus     = "tagged"
           tagPrefixList = ["dev"]
           countType     = "imageCountMoreThan"
-          countNumber   = 2
+          countNumber   = 1
         }
         action = { type = "expire" }
       },
       {
         rulePriority = 4
-        description  = "Keep only the 2 most recent stage images"
+        description  = "Keep only the 1 most recent stage image"
         selection = {
           tagStatus     = "tagged"
           tagPrefixList = ["stage"]
           countType     = "imageCountMoreThan"
-          countNumber   = 2
+          countNumber   = 1
         }
         action = { type = "expire" }
       }
@@ -985,7 +985,7 @@ resource "aws_ecr_lifecycle_policy" "demucs" {
   })
 }
 ```
-Retention is 2 (not BGM Looper's 5) because this image is estimated at 3–5GB vs. ~200MB — see the design spec §9 for the ECR storage cost math this is based on.
+Retention is 1 per branch (not BGM Looper's 5) because this image is estimated at 3–5GB vs. ~200MB — see the design spec §9 for the ECR storage cost math this is based on. Trade-off: no rollback via ECR on a bad deploy — a fresh CI rebuild from git history is the recovery path, acceptable for a personal, low-frequency-deploy tool.
 
 - [ ] **Step 3: Extend the CI-deploy IAM user's ECR policy statement**
 
