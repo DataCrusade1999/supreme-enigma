@@ -45,27 +45,45 @@ text and the `next · vercel · aws lambda · python dsp` tech-stack line are
 present. Straightforward; matches the existing render-and-assert pattern used
 by every other component test in this repo.
 
-**`blog/page.test.tsx` and `blog/[slug]/page.test.tsx`** — both source files
-are `async function` server components (`BlogPage()`, `PostPage({ params })`),
-which is new: every currently-tested page (`about/page.tsx`, etc.) is a plain
-synchronous function, and the existing `render(<AboutPage />)` pattern can't
-resolve a Promise-returning component directly. These two tests instead
-`await` the component function to resolve its JSX first, then `render()` the
-result:
+**`blog/page.test.tsx`** — `BlogPage()` is an `async function` server
+component, which is new: every currently-tested page (`about/page.tsx`,
+etc.) is a plain synchronous function, and the existing
+`render(<AboutPage />)` pattern can't resolve a Promise-returning component
+directly. This test instead `await`s the component function to resolve its
+JSX first, then `render()`s the result:
 
 ```tsx
 const jsx = await BlogPage();
 render(jsx);
 ```
+
+This works because `BlogPage`'s tree is plain data + the synchronous
+`BlogList` component — nothing async nested inside. It exercises the real
+`getReader()` against the real `content/blog/hello-world.mdx` fixture, no
+mocking, matching `lib/keystatic-reader.test.ts`'s established approach for
+this same reader.
+
+**`blog/[slug]/page.test.tsx`** — the same `await Component()` pattern does
+**not** extend to rendering `PostPage`'s full output: it wraps
+`next-mdx-remote/rsc`'s `<MDXRemote>`, itself an async Server Component, and
+`@testing-library/react`'s `render()` runs in plain jsdom with no
+RSC-capable renderer to resolve it — confirmed empirically: rendering an
+awaited `PostPage(...)` tree produces an empty `<div />` and a console error
+("`<MDXRemote>` is an async Client Component. Only Server Components can be
+async at the moment"), not the post content. So this test covers only the
+one thing about `page.tsx` that's both real logic and safely testable
+outside a full RSC render — the `notFound()` path for an unknown slug:
+
 ```tsx
-const jsx = await PostPage({ params: Promise.resolve({ slug: "hello-world" }) });
-render(jsx);
+await expect(
+  PostPage({ params: Promise.resolve({ slug: "does-not-exist" }) }),
+).rejects.toThrow();
 ```
 
-Both exercise the real `getReader()` against the real
-`content/blog/hello-world.mdx` fixture — no mocking of Keystatic or the
-filesystem, matching the no-mocking approach `lib/keystatic-reader.test.ts`
-already established for this same reader.
+Verifying the real post actually renders (title, date, MDX body) is moved to
+the Playwright e2e suite (§6) instead, which runs against a real Next.js
+server capable of resolving RSC — the `blog/hello-world` page is already one
+of the 7 pages e2e asserts content on.
 
 ## 5. `app/TESTING.md`
 
