@@ -6,6 +6,9 @@ export function ThemeToggle() {
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
+    // One-time correction to match the class the pre-hydration inline script already
+    // set on <html>; can't read `document` during render since this also runs on the server.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsDark(document.documentElement.classList.contains("dark"));
   }, []);
 
