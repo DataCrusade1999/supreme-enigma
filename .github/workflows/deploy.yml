@@ -108,8 +108,13 @@ jobs:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           TAG_PREFIX: ${{ steps.env.outputs.tag_prefix }}
         run: |
-          docker build -t "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}" .
-          docker push "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}"
+          TAG="${TAG_PREFIX}-${{ github.sha }}"
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
+            echo "Image $TAG already pushed (job retry on the same commit) — skipping build/push. The repo is IMMUTABLE, so re-pushing the same tag would fail."
+          else
+            docker build -t "$REGISTRY/$ECR_REPOSITORY:$TAG" .
+            docker push "$REGISTRY/$ECR_REPOSITORY:$TAG"
+          fi
 
       - name: Update Lambda function code
         env:

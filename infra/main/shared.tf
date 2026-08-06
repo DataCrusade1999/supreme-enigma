@@ -30,16 +30,6 @@ resource "aws_ecr_repository" "looper" {
   }
 }
 
-# Bootstrap-time image reference for aws_lambda_function.looper/looper_env's initial
-# creation only — each function's `lifecycle.ignore_changes = [image_uri]` means this
-# value is never consulted again after creation (CI's `update-function-code` takes over).
-# Looked up dynamically (most-recently-pushed image) instead of a fixed tag like `:latest`,
-# since the repo is IMMUTABLE and doesn't carry a reusable floating tag.
-data "aws_ecr_image" "bootstrap" {
-  repository_name = aws_ecr_repository.looper.name
-  most_recent     = true
-}
-
 resource "aws_ecr_lifecycle_policy" "looper" {
   repository = aws_ecr_repository.looper.name
 
