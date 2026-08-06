@@ -88,7 +88,7 @@ resource "aws_lambda_function" "looper" {
   function_name = local.lambda_function_name
   role          = aws_iam_role.lambda_exec.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.looper.repository_url}:latest"
+  image_uri     = "${aws_ecr_repository.looper.repository_url}@${data.aws_ecr_image.bootstrap.image_digest}"
   timeout       = 60
   memory_size   = 1024
 
@@ -104,7 +104,7 @@ resource "aws_lambda_function" "looper_env" {
   function_name = "${local.lambda_function_name}-${each.key}"
   role          = aws_iam_role.lambda_exec.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.looper.repository_url}:latest"
+  image_uri     = "${aws_ecr_repository.looper.repository_url}@${data.aws_ecr_image.bootstrap.image_digest}"
   timeout       = 60
   memory_size   = 1024
 

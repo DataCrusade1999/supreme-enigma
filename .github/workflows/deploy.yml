@@ -110,10 +110,6 @@ jobs:
         run: |
           docker build -t "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}" .
           docker push "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}"
-          if [ "$TAG_PREFIX" = "main" ]; then
-            docker tag "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}" "$REGISTRY/$ECR_REPOSITORY:latest"
-            docker push "$REGISTRY/$ECR_REPOSITORY:latest"
-          fi
 
       - name: Update Lambda function code
         env:

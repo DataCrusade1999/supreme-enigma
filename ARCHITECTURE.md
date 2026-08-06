@@ -46,9 +46,9 @@ access blocked, CORS (PUT/GET, `*` origin), 1-day object lifecycle.
 
 **Shared across all 3 branches** (not duplicated per-branch):
 - One ECR repo `bgm-looper-lambda` — per-branch tag prefixes
-  (`main-<sha>`, `dev-<sha>`, `stage-<sha>`, only `main` also gets
-  `:latest`), lifecycle **keep-1 per prefix** (tightened 2026-08-05, was
-  keep-5)
+  (`main-<sha>`, `dev-<sha>`, `stage-<sha>`), tag mutability `IMMUTABLE`
+  (no `:latest`, dropped 2026-08-06), lifecycle **keep-1 per prefix**
+  (tightened 2026-08-05, was keep-5)
 - One `lambda_exec` IAM role, scoped to all 3 buckets, shared by all 3
   functions
 - One Vercel service-account IAM user (S3 put/get + Lambda invoke, scoped
