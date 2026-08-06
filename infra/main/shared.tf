@@ -180,6 +180,7 @@ resource "aws_iam_user_policy" "ci_deploy" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage",
           "ecr:BatchGetImage",
+          "ecr:DescribeImages",
         ]
         Resource = aws_ecr_repository.looper.arn
       },
