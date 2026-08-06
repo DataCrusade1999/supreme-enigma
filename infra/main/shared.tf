@@ -21,8 +21,13 @@ locals {
 #     and .github/workflows/deploy.yml for how each branch tags/deploys its own image) ---
 
 resource "aws_ecr_repository" "looper" {
-  name         = "${var.project_name}-lambda"
-  force_delete = true
+  name                 = "${var.project_name}-lambda"
+  force_delete         = true
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
 }
 
 resource "aws_ecr_lifecycle_policy" "looper" {
@@ -175,6 +180,7 @@ resource "aws_iam_user_policy" "ci_deploy" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage",
           "ecr:BatchGetImage",
+          "ecr:DescribeImages",
         ]
         Resource = aws_ecr_repository.looper.arn
       },

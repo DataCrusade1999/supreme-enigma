@@ -108,11 +108,20 @@ jobs:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           TAG_PREFIX: ${{ steps.env.outputs.tag_prefix }}
         run: |
-          docker build -t "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}" .
-          docker push "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}"
-          if [ "$TAG_PREFIX" = "main" ]; then
-            docker tag "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}" "$REGISTRY/$ECR_REPOSITORY:latest"
-            docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+          set +e
+          TAG="${TAG_PREFIX}-${{ github.sha }}"
+          OUT=$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$TAG" 2>&1)
+          RC=$?
+          set -e
+          if [ $RC -eq 0 ]; then
+            echo "Image $TAG already pushed (job retry on the same commit) — skipping build/push. The repo is IMMUTABLE, so re-pushing the same tag would fail."
+          elif echo "$OUT" | grep -q "ImageNotFoundException"; then
+            docker build -t "$REGISTRY/$ECR_REPOSITORY:$TAG" .
+            docker push "$REGISTRY/$ECR_REPOSITORY:$TAG"
+          else
+            echo "describe-images failed for an unexpected reason (not \"image not found\"), refusing to guess whether it's safe to push:"
+            echo "$OUT"
+            exit 1
           fi
 
       - name: Update Lambda function code

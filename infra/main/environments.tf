@@ -88,7 +88,7 @@ resource "aws_lambda_function" "looper" {
   function_name = local.lambda_function_name
   role          = aws_iam_role.lambda_exec.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.looper.repository_url}:latest"
+  image_uri     = "${aws_ecr_repository.looper.repository_url}:${var.bootstrap_image_tag_main}"
   timeout       = 60
   memory_size   = 1024
 
@@ -99,12 +99,19 @@ resource "aws_lambda_function" "looper" {
   }
 }
 
+locals {
+  bootstrap_image_tag_env = {
+    dev   = var.bootstrap_image_tag_dev
+    stage = var.bootstrap_image_tag_stage
+  }
+}
+
 resource "aws_lambda_function" "looper_env" {
   for_each      = toset(["dev", "stage"])
   function_name = "${local.lambda_function_name}-${each.key}"
   role          = aws_iam_role.lambda_exec.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.looper.repository_url}:latest"
+  image_uri     = "${aws_ecr_repository.looper.repository_url}:${local.bootstrap_image_tag_env[each.key]}"
   timeout       = 60
   memory_size   = 1024
 
