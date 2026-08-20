@@ -1,5 +1,6 @@
 import { SiteHeader } from "../../components/site/SiteHeader";
 import { SiteFooter } from "../../components/site/SiteFooter";
+import { CommandBar } from "../../components/site/CommandBar";
 
 export default function SiteLayout({
   children,
@@ -13,6 +14,7 @@ export default function SiteLayout({
         {children}
       </main>
       <SiteFooter />
+      <CommandBar />
     </div>
   );
 }
