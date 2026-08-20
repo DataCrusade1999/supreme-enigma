@@ -76,6 +76,32 @@ describe("CommandBar", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("ignores a repeat Ctrl+K while already open, preserving the typed query and focus-restore target", () => {
+    render(
+      <>
+        <button>trigger</button>
+        <CommandBar />
+      </>,
+    );
+    const trigger = screen.getByRole("button", { name: "trigger" });
+    trigger.focus();
+
+    act(() => openCommandBar());
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    const input = screen.getByLabelText("Command");
+    fireEvent.change(input, { target: { value: "resume" } });
+    expect(input).toHaveValue("resume");
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+
+    expect(input).toHaveValue("resume");
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("wraps Tab focus from the last element back to the input", () => {
     render(<CommandBar />);
     act(() => openCommandBar());

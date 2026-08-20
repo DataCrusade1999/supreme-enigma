@@ -14,17 +14,17 @@ export default function ProjectsPage() {
 
       <div className="mt-10">
         <TerminalWindow title="projects — zsh">
-          <p className="text-[var(--color-accent)]">$ ls</p>
+          <p className="text-[var(--color-terminal-accent)]">$ ls</p>
           <ul className="mt-3 flex flex-col gap-5">
             {projects.map((project) => (
               <li key={project.slug}>
                 <div className="flex items-baseline gap-2">
-                  <span aria-hidden="true" className="text-[var(--color-accent)]">
+                  <span aria-hidden="true" className="text-[var(--color-terminal-accent)]">
                     $
                   </span>
                   <Link
                     href={project.href}
-                    className="text-base font-semibold text-[var(--color-terminal-fg)] transition-colors hover:text-[var(--color-accent)]"
+                    className="text-base font-semibold text-[var(--color-terminal-fg)] transition-colors hover:text-[var(--color-terminal-accent)]"
                   >
                     {project.name}
                   </Link>

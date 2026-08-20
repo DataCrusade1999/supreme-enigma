@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { setTheme, THEME_CHANGE_EVENT } from "../../lib/site/theme";
 
 export function ThemeToggle() {
   const [isDark, setIsDark] = useState(true);
@@ -12,11 +13,19 @@ export function ThemeToggle() {
     setIsDark(document.documentElement.classList.contains("dark"));
   }, []);
 
+  useEffect(() => {
+    // Keep this button's state in sync when the theme is changed from
+    // outside (e.g. the command bar's `theme dark`/`theme light` commands),
+    // not just from this button's own click.
+    function handleThemeChange() {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    }
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+    return () => window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+  }, []);
+
   function toggle() {
-    const next = !isDark;
-    setIsDark(next);
-    document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("theme", next ? "dark" : "light");
+    setTheme(isDark ? "light" : "dark");
   }
 
   return (

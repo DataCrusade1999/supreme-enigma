@@ -1,3 +1,5 @@
+import { setTheme } from "./theme";
+
 export type CommandContext = {
   push: (href: string) => void;
 };
@@ -8,11 +10,6 @@ export type Command = {
   hint: string;
   run: (ctx: CommandContext) => void;
 };
-
-function setTheme(theme: "dark" | "light") {
-  document.documentElement.classList.toggle("dark", theme === "dark");
-  localStorage.setItem("theme", theme);
-}
 
 export const COMMANDS: Command[] = [
   { id: "cd-home", label: "cd home", hint: "Go to the homepage", run: (ctx) => ctx.push("/") },

@@ -39,6 +39,7 @@
 :root {
   --color-terminal-bg: #0e1420;
   --color-terminal-fg: #d7deec;
+  --color-terminal-accent: #f0a202;
 }
 
 html {

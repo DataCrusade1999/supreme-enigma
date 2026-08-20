@@ -19,13 +19,24 @@ export function CommandBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  const isOpenRef = useRef(false);
   const router = useRouter();
 
   const filtered = COMMANDS.filter((command) =>
     command.label.toLowerCase().includes(query.toLowerCase()),
   );
 
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
   const open = useCallback(() => {
+    // Guard against a repeat Ctrl+K while the dialog is already open, which
+    // would otherwise reset `query` and reassign `triggerRef` to the dialog's
+    // own input, corrupting focus-restore on close. Read via a ref rather
+    // than adding `isOpen` to this callback's deps, so identity stays stable
+    // for the keydown-listener effect below.
+    if (isOpenRef.current) return;
     triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setQuery("");
     setSelectedIndex(0);
@@ -127,7 +138,7 @@ export function CommandBar() {
       >
         <TerminalWindow title="command-bar — zsh">
           <div className="flex items-center gap-2">
-            <span aria-hidden="true" className="text-[var(--color-accent)]">
+            <span aria-hidden="true" className="text-[var(--color-terminal-accent)]">
               $
             </span>
             <input
@@ -153,7 +164,7 @@ export function CommandBar() {
                   onClick={() => runCommand(command)}
                   onMouseEnter={() => setSelectedIndex(index)}
                   className={`flex w-full items-baseline justify-between gap-3 px-1 py-1 text-left ${
-                    index === selectedIndex ? "text-[var(--color-accent)]" : ""
+                    index === selectedIndex ? "text-[var(--color-terminal-accent)]" : ""
                   }`}
                 >
                   <span>{command.label}</span>
