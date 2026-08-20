@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
-import { openCommandBar } from "./CommandBar";
+import { CommandBarTrigger } from "./CommandBarTrigger";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -42,14 +42,7 @@ export function SiteHeader() {
           >
             BGM Looper
           </Link>
-          <button
-            type="button"
-            onClick={openCommandBar}
-            aria-label="Open command bar"
-            className="inline-flex items-center border border-line px-2 py-1.5 font-mono text-[0.6875rem] text-muted transition-colors hover:border-accent hover:text-fg"
-          >
-            ⌘K
-          </button>
+          <CommandBarTrigger />
           <ThemeToggle />
         </nav>
       </div>
