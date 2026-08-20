@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
+import { CommandBarTrigger } from "./CommandBarTrigger";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -41,6 +42,7 @@ export function SiteHeader() {
           >
             BGM Looper
           </Link>
+          <CommandBarTrigger />
           <ThemeToggle />
         </nav>
       </div>
