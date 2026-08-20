@@ -122,6 +122,42 @@ describe("CommandBar", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("ignores Ctrl+K while a form field is focused, so it doesn't hijack the field or the browser's own shortcut", () => {
+    render(
+      <>
+        <input aria-label="contact-name" />
+        <CommandBar />
+      </>,
+    );
+    const field = screen.getByLabelText("contact-name");
+    field.focus();
+
+    fireEvent.keyDown(field, { key: "k", ctrlKey: true });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not throw and skips focus restore when the trigger was removed from the DOM before close runs", () => {
+    render(<CommandBar />);
+
+    // Simulates a command like `open bgm-looper` navigating away and
+    // unmounting the trigger (SiteHeader isn't rendered on /tools/*) before
+    // close() runs.
+    const detachedTrigger = document.createElement("button");
+    document.body.appendChild(detachedTrigger);
+
+    act(() => openCommandBar(detachedTrigger));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    detachedTrigger.remove();
+    expect(detachedTrigger.isConnected).toBe(false);
+
+    expect(() => {
+      fireEvent.keyDown(screen.getByLabelText("Command"), { key: "Escape" });
+    }).not.toThrow();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("locks body scroll while open and restores it on close", () => {
     render(<CommandBar />);
     const previousOverflow = document.body.style.overflow;

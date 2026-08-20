@@ -53,7 +53,13 @@ export function CommandBar() {
 
   const close = useCallback(() => {
     setIsOpen(false);
-    triggerRef.current?.focus();
+    // A command like `open bgm-looper` navigates away before this runs,
+    // which can unmount the trigger (SiteHeader isn't rendered on /tools/*).
+    // Calling focus() on a detached element is a silent no-op, so guard it
+    // rather than leave focus to fall through to <body> unexpectedly.
+    if (triggerRef.current?.isConnected) {
+      triggerRef.current.focus();
+    }
   }, []);
 
   const runCommand = useCallback(
@@ -68,10 +74,16 @@ export function CommandBar() {
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
       const isModKey = event.metaKey || event.ctrlKey;
-      if (isModKey && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        open();
+      if (!isModKey || event.key.toLowerCase() !== "k") return;
+      // Don't hijack Ctrl/Cmd+K while the user is typing in a real form
+      // field — e.g. the /contact form — and don't swallow Firefox's own
+      // Ctrl+K search-bar shortcut for that case either.
+      const target = event.target;
+      if (target instanceof HTMLElement && target.matches('input, textarea, [contenteditable="true"]')) {
+        return;
       }
+      event.preventDefault();
+      open();
     }
     function handleOpenEvent(event: Event) {
       const trigger = event instanceof CustomEvent ? (event.detail as HTMLElement | undefined) : undefined;
