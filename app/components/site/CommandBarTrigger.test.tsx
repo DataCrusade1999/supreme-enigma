@@ -21,10 +21,12 @@ afterEach(() => {
 });
 
 describe("CommandBarTrigger", () => {
-  it("calls openCommandBar when clicked", () => {
+  it("calls openCommandBar with its own element when clicked", () => {
     render(<CommandBarTrigger />);
-    fireEvent.click(screen.getByRole("button", { name: "Open command bar" }));
+    const button = screen.getByRole("button", { name: "Open command bar" });
+    fireEvent.click(button);
     expect(openCommandBar).toHaveBeenCalledOnce();
+    expect(openCommandBar).toHaveBeenCalledWith(button);
   });
 
   it("shows the ⌘K glyph on macOS", () => {

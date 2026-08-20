@@ -102,6 +102,37 @@ describe("CommandBar", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("restores focus to an explicitly-passed trigger even when it wasn't document.activeElement (Safari mouse-click quirk)", () => {
+    render(
+      <>
+        <button>trigger</button>
+        <CommandBar />
+      </>,
+    );
+    const trigger = screen.getByRole("button", { name: "trigger" });
+    // Deliberately do NOT focus the trigger — Safari doesn't move focus to a
+    // <button> on mouse click, so document.activeElement stays elsewhere.
+    document.body.focus();
+
+    act(() => openCommandBar(trigger));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByLabelText("Command"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("locks body scroll while open and restores it on close", () => {
+    render(<CommandBar />);
+    const previousOverflow = document.body.style.overflow;
+
+    act(() => openCommandBar());
+    expect(document.body.style.overflow).toBe("hidden");
+
+    fireEvent.keyDown(screen.getByLabelText("Command"), { key: "Escape" });
+    expect(document.body.style.overflow).toBe(previousOverflow);
+  });
+
   it("wraps Tab focus from the last element back to the input", () => {
     render(<CommandBar />);
     act(() => openCommandBar());

@@ -8,8 +8,15 @@ import { COMMANDS, type Command, type CommandContext } from "../../lib/site/comm
 
 const OPEN_EVENT = "commandbar:open";
 
-export function openCommandBar() {
-  window.dispatchEvent(new Event(OPEN_EVENT));
+// Accepts an explicit trigger element because Safari (unlike Chrome/Firefox)
+// doesn't move focus to a <button> on mouse click — relying solely on
+// document.activeElement in open() below would silently fail to restore
+// focus after a Safari mouse click. Callers that already know their own
+// element (e.g. CommandBarTrigger's onClick) should pass it explicitly;
+// the global Ctrl+K listener omits it and falls back to activeElement,
+// which is reliable for real keyboard focus.
+export function openCommandBar(trigger?: HTMLElement) {
+  window.dispatchEvent(new CustomEvent<HTMLElement | undefined>(OPEN_EVENT, { detail: trigger }));
 }
 
 export function CommandBar() {
@@ -30,14 +37,15 @@ export function CommandBar() {
     isOpenRef.current = isOpen;
   }, [isOpen]);
 
-  const open = useCallback(() => {
+  const open = useCallback((explicitTrigger?: HTMLElement) => {
     // Guard against a repeat Ctrl+K while the dialog is already open, which
     // would otherwise reset `query` and reassign `triggerRef` to the dialog's
     // own input, corrupting focus-restore on close. Read via a ref rather
     // than adding `isOpen` to this callback's deps, so identity stays stable
     // for the keydown-listener effect below.
     if (isOpenRef.current) return;
-    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    triggerRef.current =
+      explicitTrigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setQuery("");
     setSelectedIndex(0);
     setIsOpen(true);
@@ -65,11 +73,15 @@ export function CommandBar() {
         open();
       }
     }
+    function handleOpenEvent(event: Event) {
+      const trigger = event instanceof CustomEvent ? (event.detail as HTMLElement | undefined) : undefined;
+      open(trigger);
+    }
     window.addEventListener("keydown", handleGlobalKeyDown);
-    window.addEventListener(OPEN_EVENT, open);
+    window.addEventListener(OPEN_EVENT, handleOpenEvent);
     return () => {
       window.removeEventListener("keydown", handleGlobalKeyDown);
-      window.removeEventListener(OPEN_EVENT, open);
+      window.removeEventListener(OPEN_EVENT, handleOpenEvent);
     };
   }, [open]);
 
@@ -77,6 +89,17 @@ export function CommandBar() {
     if (isOpen) {
       inputRef.current?.focus();
     }
+  }, [isOpen]);
+
+  // Lock body scroll while the modal is open so wheel/touch/PageDown input
+  // doesn't scroll the page behind it.
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
   }, [isOpen]);
 
   function handleDialogKeyDown(event: React.KeyboardEvent) {
