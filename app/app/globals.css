@@ -31,6 +31,17 @@
   --color-peak: #e2574c;
 }
 
+/*
+ * Terminal chrome is intentionally fixed-dark regardless of site theme —
+ * that's what makes it read as a terminal rather than just a bordered box.
+ * Not declared inside @theme/:root.dark, so the theme toggle doesn't touch it.
+ */
+:root {
+  --color-terminal-bg: #0e1420;
+  --color-terminal-fg: #d7deec;
+  --color-terminal-accent: #f0a202;
+}
+
 html {
   background-color: var(--color-bg);
   color-scheme: light dark;
@@ -86,5 +97,24 @@ p {
   .playhead {
     animation: none;
     left: 0%;
+  }
+}
+
+@keyframes commandbar-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.commandbar-fade-in {
+  animation: commandbar-fade-in 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .commandbar-fade-in {
+    animation: none;
   }
 }
