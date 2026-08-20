@@ -27,6 +27,7 @@ export function CommandBar() {
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const isOpenRef = useRef(false);
+  const overlayMouseDownOnSelfRef = useRef(false);
   const router = useRouter();
 
   const filtered = COMMANDS.filter((command) =>
@@ -77,9 +78,14 @@ export function CommandBar() {
       if (!isModKey || event.key.toLowerCase() !== "k") return;
       // Don't hijack Ctrl/Cmd+K while the user is typing in a real form
       // field — e.g. the /contact form — and don't swallow Firefox's own
-      // Ctrl+K search-bar shortcut for that case either.
+      // Ctrl+K search-bar shortcut for that case either. closest(), not
+      // matches(), so a descendant of a contentEditable region (event.target
+      // would be the inner node, not the editable root) is still caught.
       const target = event.target;
-      if (target instanceof HTMLElement && target.matches('input, textarea, [contenteditable="true"]')) {
+      if (
+        target instanceof HTMLElement &&
+        target.closest('input, textarea, select, [contenteditable="true"]')
+      ) {
         return;
       }
       event.preventDefault();
@@ -113,6 +119,7 @@ export function CommandBar() {
       document.body.style.overflow = previousOverflow;
     };
   }, [isOpen]);
+
 
   function handleDialogKeyDown(event: React.KeyboardEvent) {
     if (event.key === "Escape") {
@@ -160,7 +167,18 @@ export function CommandBar() {
   return (
     <div
       className="commandbar-fade-in fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-24"
-      onClick={close}
+      onMouseDown={(event) => {
+        // A drag-select that starts inside the dialog (e.g. selecting the
+        // input's text) and releases over the backdrop fires `click` on
+        // this shared ancestor — track whether the press itself started on
+        // the overlay so that case doesn't close the dialog mid-selection.
+        overlayMouseDownOnSelfRef.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && overlayMouseDownOnSelfRef.current) {
+          close();
+        }
+      }}
     >
       <div
         ref={dialogRef}
@@ -197,7 +215,13 @@ export function CommandBar() {
                 <button
                   type="button"
                   onClick={() => runCommand(command)}
-                  onMouseEnter={() => setSelectedIndex(index)}
+                  // Deliberately onMouseMove, not onMouseEnter: a filtered
+                  // row can slide under a stationary cursor when the list
+                  // reflows (e.g. the user deletes a character), and that
+                  // fires mouseenter with zero actual pointer movement,
+                  // silently overriding the selection the keyboard just
+                  // set. mousemove only fires on genuine cursor movement.
+                  onMouseMove={() => setSelectedIndex(index)}
                   className={`flex w-full items-baseline justify-between gap-3 px-1 py-1 text-left ${
                     index === selectedIndex ? "text-[var(--color-terminal-accent)]" : ""
                   }`}

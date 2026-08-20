@@ -137,6 +137,85 @@ describe("CommandBar", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("ignores Ctrl+K when focus is on a descendant of a contentEditable region", () => {
+    render(
+      <>
+        <div contentEditable="true" suppressContentEditableWarning>
+          <span>editable child</span>
+        </div>
+        <CommandBar />
+      </>,
+    );
+    const child = screen.getByText("editable child");
+    fireEvent.keyDown(child, { key: "k", ctrlKey: true });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes on a genuine click on the overlay (press and release both on the backdrop)", () => {
+    render(<CommandBar />);
+    act(() => openCommandBar());
+
+    const overlay = screen.getByRole("dialog").parentElement as HTMLElement;
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not close when a drag-select starts inside the dialog and releases over the overlay", () => {
+    render(<CommandBar />);
+    act(() => openCommandBar());
+
+    const input = screen.getByLabelText("Command");
+    fireEvent.change(input, { target: { value: "resume" } });
+
+    const overlay = screen.getByRole("dialog").parentElement as HTMLElement;
+    // The browser dispatches `click` on the nearest common ancestor of
+    // mousedown/mouseup — simulate that by pressing down inside the dialog
+    // and releasing (clicking) on the overlay directly.
+    fireEvent.mouseDown(input);
+    fireEvent.click(overlay);
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(input).toHaveValue("resume");
+  });
+
+  it("mouseenter alone does not change the selection — only real pointer movement does", () => {
+    render(<CommandBar />);
+    act(() => openCommandBar());
+
+    const input = screen.getByLabelText("Command");
+    fireEvent.change(input, { target: { value: "cd" } });
+
+    const cdProjects = screen
+      .getAllByRole("button")
+      .find((button) => button.textContent?.includes("cd projects"))!;
+    // No real pointer movement precedes this — simulates a row sliding
+    // under a stationary cursor when the list reflows.
+    fireEvent.mouseEnter(cdProjects);
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(pushMock).toHaveBeenCalledWith("/");
+    expect(pushMock).not.toHaveBeenCalledWith("/projects");
+  });
+
+  it("lets a genuine mouse move set the selection", () => {
+    render(<CommandBar />);
+    act(() => openCommandBar());
+
+    const input = screen.getByLabelText("Command");
+    fireEvent.change(input, { target: { value: "cd" } });
+
+    const cdProjects = screen
+      .getAllByRole("button")
+      .find((button) => button.textContent?.includes("cd projects"))!;
+    fireEvent.mouseMove(cdProjects);
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(pushMock).toHaveBeenCalledWith("/projects");
+  });
+
   it("does not throw and skips focus restore when the trigger was removed from the DOM before close runs", () => {
     render(<CommandBar />);
 
