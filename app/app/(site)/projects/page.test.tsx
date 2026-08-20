@@ -10,4 +10,9 @@ describe("ProjectsPage", () => {
       "/tools/bgm-looper",
     );
   });
+
+  it("renders inside the terminal window chrome", () => {
+    render(<ProjectsPage />);
+    expect(screen.getByText("projects — zsh")).toBeInTheDocument();
+  });
 });
