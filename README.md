@@ -128,7 +128,9 @@ docs/superpowers/plans/   TDD implementation plans, checkbox-tracked
 # Next.js app
 cd app
 npm install
-npm test                                              # vitest
+npm test                                              # vitest (unit/component)
+npx playwright install chromium                       # once, per checkout
+npm run test:e2e                                      # playwright (e2e + a11y)
 npm run lint
 APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev
 
@@ -142,6 +144,9 @@ python -m venv .venv
 
 Re-run that `pip install` whenever a dependency bump to `lambda/requirements.txt`
 lands — the venv doesn't refresh itself.
+
+`npm run test:e2e` builds the app and serves it on port 3100 itself — see
+`app/TESTING.md` for what belongs in each runner.
 
 Needs Node 20+, Python 3.12, and ffmpeg on PATH for the Lambda pipeline.
 The public site runs without any AWS credentials; only the BGM Looper tool
