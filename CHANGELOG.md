@@ -17,6 +17,17 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- Playwright end-to-end and accessibility test suite (`app/e2e/`) covering all
+  seven public pages: page loads, header navigation, theme-toggle persistence,
+  and an axe-core scan per page. Runs against a real Next.js server on port
+  3100 via `npm run test:e2e`.
+- Unit-test coverage for the two known gaps: `SiteFooter` and the blog list /
+  post-detail pages.
+- `app/TESTING.md` — testing conventions, including how to unit-test async
+  server components and when to reach for e2e instead.
+- `.github/scripts/test-summary.mjs` — parses both runners' JSON reports into
+  a GitHub Actions job summary with pass/fail counts and collapsed failure
+  details. The `test` job now runs Vitest and Playwright and reports both.
 - `.github/dependabot.yml` — weekly update checks for npm (`app/`), pip
   (`lambda/`), GitHub Actions, and Terraform (`infra/*`). PRs use a `chore`
   Conventional Commit prefix so the `release` job can still derive the
