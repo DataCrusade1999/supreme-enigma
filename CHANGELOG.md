@@ -7,6 +7,18 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- `README.md` reframed around the portfolio site rather than the BGM Looper
+  tool: public pages first, the password-gated tools listed as a table, and
+  architecture split into the site vs. the per-tool AWS backend.
+
+### Fixed
+
+- Line endings normalized to LF across the repo, pinned by a new
+  `.gitattributes` — editors on Windows were writing CRLF back over blobs
+  git stored as LF, so any touched file surfaced as a whole-file diff.
+
 ## [1.1.0] - 2026-08-01
 
 ### Added
