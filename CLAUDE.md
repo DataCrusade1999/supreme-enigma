@@ -19,7 +19,7 @@ Three independent sibling projects, no monorepo tooling (no workspaces/Turborepo
 - App lint: `cd app && npm run lint` (ESLint via `eslint-config-next`, config in `eslint.config.mjs`).
 - App dev: `cd app && APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev`.
 - App build: `cd app && KEYSTATIC_GITHUB_CLIENT_ID=dummy KEYSTATIC_GITHUB_CLIENT_SECRET=dummy KEYSTATIC_SECRET=dummy npm run build` — see the Keystatic env var gotcha below; dummy values are fine for a local build, the real ones are only needed to actually authenticate against GitHub.
-- Lambda tests: `cd lambda && pytest -v` (requires `pip install -r requirements.txt pytest moto`; `pytest.ini` sets `pythonpath = src`).
+- Lambda tests: `cd lambda && .venv/Scripts/python -m pytest -q` on Windows (`.venv/bin/python -m pytest -q` on macOS/Linux). `pytest.ini` sets `pythonpath = src`. See the venv gotcha below — deps live in `lambda/.venv`, deliberately not the global interpreter.
 - Terraform: run from `infra/main/` with `-var-file=terraform.tfvars` (gitignored, contains `vercel_api_token`, `app_password`, `github_repo`).
 
 ## Branching & releases
@@ -55,6 +55,12 @@ An AWS DevOps Agent Space (`bgm-looper`, id `bbfee9b3-446d-46b4-89e5-5a25fa1fc1e
 - **Terraform AWS profile is pinned in the provider config** (`profile = "personal"`), not read from `AWS_PROFILE`. CI never sets this — it uses env-var credentials only.
 - **Always use `--profile personal` for any manual `aws` CLI command in this project.** It's a different AWS account (`223376380711`) than whatever the shell's default/`admin` profile points to (`688799538039`, unrelated account with no CE/Pricing/S3-list access) — this repo's actual infra (S3 buckets, ECR repo, Lambda) lives under `personal`.
 - **Always pass `--region us-east-1` too, explicitly, on any manual `aws` CLI command.** The `personal` profile's own configured default region is `ap-south-1` (Mumbai — presumably this user's general default elsewhere), but this project's real resources live in `us-east-1`. Terraform is never affected by this (its AWS provider hardcodes `region = var.aws_region`, defaulting to `us-east-1`, ignoring the profile's own default) — only raw `aws` CLI calls are at risk. Omitting `--region` silently queries `ap-south-1` instead and returns a misleading `ResourceNotFoundException`/`RepositoryNotFoundException` that looks like the resource is missing, when it's actually just the wrong region.
+- **`lambda/`'s Python deps live in a local venv at `lambda/.venv`, not the global interpreter.** Create and populate it with:
+  ```bash
+  py -3.11 -m venv lambda/.venv                  # Windows; `python3.11 -m venv` elsewhere
+  lambda/.venv/Scripts/python -m pip install -r lambda/requirements.txt pytest moto
+  ```
+  `.venv/` is already gitignored at the repo root, so it's covered at any depth. Re-run the `pip install` after any Dependabot bump to `lambda/requirements.txt` lands — the venv doesn't update itself, and a stale venv passes tests against versions the deployed image no longer uses. **Local venv Python is 3.11, but the Lambda runtime and CI are 3.12** (3.12 isn't installed on this machine; 3.11 is the closer of the two that are, the other being 3.13). Close enough for running the test suite, but it is not an exact runtime match — CI on 3.12 is the authority, not a local green run.
 - **`lambda/tests/conftest.py` sets dummy AWS creds at module import time**, not in a fixture — `handler.py` builds its boto3 client at module scope, so a fixture would set the env var too late.
 - **`NUMBA_CACHE_DIR=/tmp/numba_cache`** is set in the Lambda Dockerfile — librosa's numba JIT cache otherwise tries to write to Lambda's read-only filesystem.
 - **`vitest.config.ts` sets `passWithNoTests: true`** deliberately, and setup imports `@testing-library/jest-dom/vitest` (not the plain `jest-dom` entrypoint) — both are load-bearing, don't "clean up".

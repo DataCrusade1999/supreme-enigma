@@ -132,11 +132,16 @@ npm test                                              # vitest
 npm run lint
 APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev
 
-# Lambda DSP pipeline
+# Lambda DSP pipeline (into a local venv, to leave the global interpreter alone)
 cd lambda
-pip install -r requirements.txt pytest moto
-pytest -v
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt pytest moto   # Windows
+# .venv/bin/python -m pip install -r requirements.txt pytest moto     # macOS/Linux
+.venv/Scripts/python -m pytest -q
 ```
+
+Re-run that `pip install` whenever a dependency bump to `lambda/requirements.txt`
+lands — the venv doesn't refresh itself.
 
 Needs Node 20+, Python 3.12, and ffmpeg on PATH for the Lambda pipeline.
 The public site runs without any AWS credentials; only the BGM Looper tool
