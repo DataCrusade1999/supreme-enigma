@@ -24,6 +24,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- Portfolio accent swapped from the warm amber/VU-meter tone to a cool
+  teal (`#187a73` light, `#5ec8c0` dark), with the secondary greys
+  re-tinted to match. Includes the terminal chrome's own accent, which
+  phase 2 had hardcoded to the old amber. All new pairs verified at WCAG
+  AA (≥4.5:1) by a new `contrastRatio` utility and regression test.
+
 - `README.md` reframed around the portfolio site rather than the BGM Looper
   tool: public pages first, the password-gated tools listed as a table, and
   architecture split into the site vs. the per-tool AWS backend.
