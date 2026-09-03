@@ -27,7 +27,7 @@
 **Interfaces:**
 - Produces: `contrastRatio(hexA: string, hexB: string): number` — exported function. `hexA`/`hexB` are 6-digit hex strings with a leading `#` (e.g. `"#1f8a82"`). Returns the WCAG contrast ratio (a number ≥ 1, e.g. `21` for pure black vs pure white), symmetric in its two arguments.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```typescript
 // app/lib/color-contrast.test.ts
@@ -51,12 +51,12 @@ describe("contrastRatio", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd app && npx vitest run lib/color-contrast.test.ts`
 Expected: FAIL — `color-contrast.ts` does not exist yet (`Cannot find module './color-contrast'`).
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```typescript
 // app/lib/color-contrast.ts
@@ -98,12 +98,12 @@ export function contrastRatio(hexA: string, hexB: string): number {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd app && npx vitest run lib/color-contrast.test.ts`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd app && git add lib/color-contrast.ts lib/color-contrast.test.ts
@@ -126,7 +126,7 @@ EOF
 - Consumes: `contrastRatio` from `./color-contrast` (Task 1).
 - Produces: nothing new — this is a pure regression test. It hardcodes the target hex values as local constants (mirroring `app/app/globals.css`, which Task 3 updates to match) — CSS custom properties can't be imported into a Vitest/jsdom test directly, so this file is the source of truth the CSS must match, not the other way around. If `globals.css`'s token values ever change, this test's constants must be updated too — that coupling is intentional, not a gap.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 // app/lib/portfolio-tokens.test.ts
@@ -183,7 +183,7 @@ fails, adjust lightness toward the failing direction" case the design
 spec's §4 anticipated. Dark-mode `#5ec8c0` already clears AA
 comfortably (~9:1) and is unchanged from the spec.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd app && npx vitest run lib/portfolio-tokens.test.ts`
 Expected: PASS actually — the constants above already use the
@@ -192,12 +192,12 @@ corrected value, so this test should pass immediately once Task 1's
 "red" state to observe here: the test asserts a property of fixed
 constants, not of not-yet-written implementation code. Skip to Step 3.)
 
-- [ ] **Step 3: Run the test to confirm it's green**
+- [x] **Step 3: Run the test to confirm it's green**
 
 Run: `cd app && npx vitest run lib/portfolio-tokens.test.ts`
 Expected: PASS (4 tests)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd app && git add lib/portfolio-tokens.test.ts
@@ -220,7 +220,7 @@ EOF
 - Consumes: nothing (pure CSS values) — but the hex values used here MUST match `LIGHT`/`DARK` in Task 2's `portfolio-tokens.test.ts` exactly, since that test is the contrast regression guard for these values.
 - Produces: `--color-accent`, `--color-muted`, `--color-line` (both `@theme` and `:root.dark` blocks) — consumed by every existing component via Tailwind's generated utilities (`text-accent`, `bg-accent`, `border-line`, `text-muted`, etc.) and by the `::selection`/`:focus-visible` rules already in this file.
 
-- [ ] **Step 1: Replace the token values and header comment**
+- [x] **Step 1: Replace the token values and header comment**
 
 Change the top of `app/app/globals.css` from:
 
@@ -296,12 +296,12 @@ to:
 `p`, `::selection`, `:focus-visible`, the `@keyframes playhead` rule, and
 the `prefers-reduced-motion` override — is unchanged.)
 
-- [ ] **Step 2: Run the full test suite**
+- [x] **Step 2: Run the full test suite**
 
 Run: `cd app && npm test`
 Expected: PASS — all existing tests plus Tasks 1 and 2's new tests.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd app && git add app/globals.css
@@ -327,11 +327,11 @@ still looks right. Per this project's CLAUDE.md convention, frontend
 changes are verified in a running instance, not assumed correct from
 tests alone.
 
-- [ ] **Step 1: Start the dev server**
+- [x] **Step 1: Start the dev server**
 
 Run: `cd app && APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev`
 
-- [ ] **Step 2: Visually check every page in both themes**
+- [x] **Step 2: Visually check every page in both themes**
 
 Open, in both light and dark (use the header's theme-toggle button to
 switch): `/`, `/about`, `/projects`, `/resume`, `/blog`, `/contact`,
@@ -345,7 +345,7 @@ switch): `/`, `/about`, `/projects`, `/resume`, `/blog`, `/contact`,
   ring (`:focus-visible`, tab through the header nav to see it) both use
   the new teal, not amber.
 
-- [ ] **Step 3: Stop the dev server**
+- [x] **Step 3: Stop the dev server**
 
 Ctrl+C in the terminal running `npm run dev`.
 

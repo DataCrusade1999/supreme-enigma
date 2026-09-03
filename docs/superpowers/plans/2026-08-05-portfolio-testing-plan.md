@@ -69,7 +69,7 @@ Node.js (`.mjs`, no new runtime deps) for the CI summary script.
 - Produces: nothing consumed by later tasks — closes the first of the two
   known coverage gaps.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `app/components/site/SiteFooter.test.tsx`:
 ```tsx
@@ -90,13 +90,13 @@ describe("SiteFooter", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it passes**
+- [x] **Step 2: Run test to verify it passes**
 
 Run: `cd app && npx vitest run components/site/SiteFooter.test.tsx`
 Expected: PASS (1 test) — this component already exists, so there's no
 red step here, just confirmation the new test is correct.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add app/components/site/SiteFooter.test.tsx
@@ -118,7 +118,7 @@ git commit -m "test(app): add SiteFooter coverage"
 - Produces: nothing consumed by later tasks — closes the second known
   coverage gap.
 
-- [ ] **Step 1: Write the blog list page test**
+- [x] **Step 1: Write the blog list page test**
 
 `app/app/(site)/blog/page.test.tsx`:
 ```tsx
@@ -144,7 +144,7 @@ This works because `BlogPage`'s tree is plain data plus the synchronous
 `BlogList` component — nothing async nested inside, unlike the post-detail
 page in Step 2.
 
-- [ ] **Step 2: Write the post-detail page test**
+- [x] **Step 2: Write the post-detail page test**
 
 `app/app/(site)/blog/[slug]/page.test.tsx`:
 ```tsx
@@ -168,12 +168,12 @@ the post content — there's no RSC-capable renderer in a Vitest/jsdom
 environment). Real post-content verification lives in the Playwright suite
 instead (Task 4).
 
-- [ ] **Step 3: Run tests to verify they pass**
+- [x] **Step 3: Run tests to verify they pass**
 
 Run: `cd app && npx vitest run "app/(site)/blog"`
 Expected: PASS (2 tests total across both files)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add "app/app/(site)/blog/page.test.tsx" "app/app/(site)/blog/[slug]/page.test.tsx"
@@ -191,7 +191,7 @@ git commit -m "test(app): add blog page coverage (list + notFound path)"
 - Consumes: nothing — a reference doc, not code.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Write the doc**
+- [x] **Step 1: Write the doc**
 
 `app/TESTING.md`:
 ```markdown
@@ -260,7 +260,7 @@ vi.stubGlobal(
   run `npm run build` once yourself first if you want faster repeat runs.
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add app/TESTING.md
@@ -283,7 +283,7 @@ git commit -m "docs(app): add testing conventions reference"
   generated at test-run time) — Task 7's summary script parses this file's
   real shape.
 
-- [ ] **Step 1: Install Playwright**
+- [x] **Step 1: Install Playwright**
 
 Run: `cd app && npm install --save-dev @playwright/test`
 Expected: `@playwright/test` added to `devDependencies` in `package.json`.
@@ -292,7 +292,7 @@ Run: `npx playwright install --with-deps chromium`
 Expected: Chromium browser binary downloaded (this can take a few minutes
 on first run).
 
-- [ ] **Step 2: Write the Playwright config**
+- [x] **Step 2: Write the Playwright config**
 
 `app/playwright.config.ts`:
 ```typescript
@@ -326,7 +326,7 @@ Port 3100 (not 3000) avoids colliding with a dev server someone might
 already have running locally. `timeout: 180_000` (3 min) gives `next build`
 enough room — it's slower than just starting an already-built server.
 
-- [ ] **Step 3: Fix the Vitest/Playwright file-matching collision**
+- [x] **Step 3: Fix the Vitest/Playwright file-matching collision**
 
 In `app/vitest.config.ts`, change:
 ```typescript
@@ -358,7 +358,7 @@ Vitest replaces its default `exclude` list entirely when one is provided
 alongside the new `e2e/**` entry — omitting them would silently stop
 excluding `node_modules` etc.
 
-- [ ] **Step 4: Write the page-load tests**
+- [x] **Step 4: Write the page-load tests**
 
 `app/e2e/pages.spec.ts`:
 ```typescript
@@ -384,7 +384,7 @@ for (const { path, heading } of PAGES) {
 }
 ```
 
-- [ ] **Step 5: Add a convenience npm script**
+- [x] **Step 5: Add a convenience npm script**
 
 In `app/package.json`, change:
 ```json
@@ -408,7 +408,7 @@ to:
   },
 ```
 
-- [ ] **Step 6: Add generated Playwright output to `.gitignore`**
+- [x] **Step 6: Add generated Playwright output to `.gitignore`**
 
 Add to `app/.gitignore` (create the file with these lines if it doesn't
 already have a Playwright section):
@@ -419,19 +419,19 @@ playwright-results.json
 vitest-results.json
 ```
 
-- [ ] **Step 7: Run the suite to verify it passes**
+- [x] **Step 7: Run the suite to verify it passes**
 
 Run: `cd app && npx playwright test e2e/pages.spec.ts`
 Expected: PASS (7 tests). First run builds the app, so this can take a
 couple of minutes.
 
-- [ ] **Step 8: Verify Vitest didn't pick up the new e2e file**
+- [x] **Step 8: Verify Vitest didn't pick up the new e2e file**
 
 Run: `cd app && npx vitest run`
 Expected: same test file count as before this task (no `e2e/pages.spec.ts`
 listed among the run files) — confirms Step 3's `exclude` fix works.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add app/playwright.config.ts app/e2e/pages.spec.ts app/vitest.config.ts app/package.json app/package-lock.json app/.gitignore
@@ -450,7 +450,7 @@ git commit -m "feat(app): add Playwright e2e scaffold with page-load tests"
 - Consumes: the Playwright config and running-server setup from Task 4.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Write the navigation test**
+- [x] **Step 1: Write the navigation test**
 
 `app/e2e/navigation.spec.ts`:
 ```typescript
@@ -479,7 +479,7 @@ test("header nav links navigate between pages", async ({ page }) => {
 });
 ```
 
-- [ ] **Step 2: Write the theme toggle test**
+- [x] **Step 2: Write the theme toggle test**
 
 `app/e2e/theme.spec.ts`:
 ```typescript
@@ -506,12 +506,12 @@ The toggle button's accessible name is "Light mode" while the site is in
 dark mode (its default) — it names the mode clicking it switches *to*, per
 `ThemeToggle.tsx`'s `{isDark ? "Light mode" : "Dark mode"}`.
 
-- [ ] **Step 3: Run tests to verify they pass**
+- [x] **Step 3: Run tests to verify they pass**
 
 Run: `cd app && npx playwright test e2e/navigation.spec.ts e2e/theme.spec.ts`
 Expected: PASS (2 tests)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/e2e/navigation.spec.ts app/e2e/theme.spec.ts
@@ -530,11 +530,11 @@ git commit -m "test(app): add e2e navigation and theme-persistence tests"
 - Consumes: the Playwright config from Task 4.
 - Produces: nothing consumed by later tasks.
 
-- [ ] **Step 1: Install `@axe-core/playwright`**
+- [x] **Step 1: Install `@axe-core/playwright`**
 
 Run: `cd app && npm install --save-dev @axe-core/playwright`
 
-- [ ] **Step 2: Write the accessibility tests**
+- [x] **Step 2: Write the accessibility tests**
 
 `app/e2e/a11y.spec.ts`:
 ```typescript
@@ -562,14 +562,14 @@ for (const path of PATHS) {
 }
 ```
 
-- [ ] **Step 3: Run tests to verify they pass**
+- [x] **Step 3: Run tests to verify they pass**
 
 Run: `cd app && npx playwright test e2e/a11y.spec.ts`
 Expected: PASS (7 tests). If a real violation surfaces, fix the underlying
 markup/contrast issue rather than loosening the assertion — this is a
 public-facing site.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/e2e/a11y.spec.ts app/package.json app/package-lock.json
@@ -594,7 +594,7 @@ git commit -m "test(app): add e2e accessibility scans for all public pages"
   to stdout if that env var is unset. Task 8's CI workflow calls this
   exactly.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 `.github/scripts/test-summary.mjs`:
 ```javascript
@@ -689,7 +689,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
 }
 ```
 
-- [ ] **Step 2: Verify against a real Vitest report (pass and fail paths)**
+- [x] **Step 2: Verify against a real Vitest report (pass and fail paths)**
 
 Run: `cd app && npx vitest run --reporter=default --reporter=json --outputFile.json=vitest-results.json && cd .. && node .github/scripts/test-summary.mjs --kind vitest app/vitest-results.json`
 Expected: prints a `## Unit tests (Vitest)` section with a pass count
@@ -706,7 +706,7 @@ the broken test and showing its real assertion error.
 Revert the temporary breakage in `SiteFooter.test.tsx` back to the real
 assertion before continuing.
 
-- [ ] **Step 3: Verify against a real Playwright report, and correct the parser if the real schema differs**
+- [x] **Step 3: Verify against a real Playwright report, and correct the parser if the real schema differs**
 
 Run: `cd app && npx playwright test && cd .. && node .github/scripts/test-summary.mjs --kind playwright app/playwright-results.json`
 Expected: prints an `## E2E + accessibility tests (Playwright)` section
@@ -729,7 +729,7 @@ the broken test and showing Playwright's real assertion error.
 
 Revert the temporary breakage in `pages.spec.ts` before continuing.
 
-- [ ] **Step 4: Clean up generated files and commit**
+- [x] **Step 4: Clean up generated files and commit**
 
 ```bash
 rm -f app/vitest-results.json app/playwright-results.json
@@ -751,7 +751,7 @@ git commit -m "feat(ci): add hand-rolled test-summary script for job summaries"
   Playwright, and the workflow run page's Summary section shows pass/fail
   counts and failure details for both.
 
-- [ ] **Step 1: Replace the "Run app tests" step and add the new steps**
+- [x] **Step 1: Replace the "Run app tests" step and add the new steps**
 
 In `.github/workflows/deploy.yml`'s `test` job, change:
 ```yaml
@@ -804,7 +804,7 @@ an `||` list is one of `set -e`'s documented exceptions — so this reliably
 captures the real exit code without needing `continue-on-error` on the
 step, and without the script aborting before it can write `$GITHUB_OUTPUT`.
 
-- [ ] **Step 2: Commit and push**
+- [x] **Step 2: Commit and push**
 
 ```bash
 git add .github/workflows/deploy.yml
@@ -812,7 +812,7 @@ git commit -m "feat(ci): run Playwright e2e/a11y tests with rich job summaries"
 git push origin HEAD
 ```
 
-- [ ] **Step 3: Watch the real CI run and confirm the summary renders correctly**
+- [x] **Step 3: Watch the real CI run and confirm the summary renders correctly**
 
 Run: `gh run list --workflow=deploy.yml --limit 1` then `gh run watch <run-id>`
 Expected: `test` job passes, including the new Playwright steps.
@@ -824,6 +824,10 @@ sections with real pass counts (43+ Vitest tests, 16 Playwright tests: 7
 page-load + 2 navigation/theme + 7 a11y), no `### Failures` sections.
 
 - [ ] **Step 4: Verify the failure-reporting path on a real CI run**
+
+> NOT DONE — skipped by choice. The failure path was verified locally in
+> Task 7 Step 3 instead; this step's deliberate break-and-revert would have
+> left two throwaway commits in the PR history.
 
 Temporarily break something trivial (e.g. change one heading assertion in
 `app/e2e/pages.spec.ts` to the wrong text), commit as a throwaway commit,
