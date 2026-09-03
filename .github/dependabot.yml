@@ -1,0 +1,43 @@
+version: 2
+
+# Targets the default branch (dev), so updates enter the normal
+# dev -> stage -> main promotion flow rather than landing on main directly.
+# `commit-message.prefix` is not cosmetic: deploy.yml's release job derives
+# the version bump from Conventional Commit prefixes, so Dependabot's default
+# "Bump X from A to B" subject would not parse.
+updates:
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: pip
+    directory: /lambda
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: terraform
+    directories:
+      - /infra/bootstrap
+      - /infra/main
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope

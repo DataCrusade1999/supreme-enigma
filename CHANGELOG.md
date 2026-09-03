@@ -7,6 +7,21 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Security
+
+- Bumped the transitive `nanoid` (3.3.16 → 3.3.18, GHSA-2v37-7h3g-55p8) and
+  `js-yaml` (4.3.0 → 4.3.2, GHSA-5p4m-2wfm-xmqj) in `app/package-lock.json`,
+  clearing both open Dependabot alerts. Lockfile-only; neither was reachable
+  with untrusted input (nanoid comes in via build-time postcss, js-yaml via
+  eslint and Keystatic's parsing of repo-authored frontmatter).
+
+### Added
+
+- `.github/dependabot.yml` — weekly update checks for npm (`app/`), pip
+  (`lambda/`), GitHub Actions, and Terraform (`infra/*`). PRs use a `chore`
+  Conventional Commit prefix so the `release` job can still derive the
+  version bump from them.
+
 ### Changed
 
 - `README.md` reframed around the portfolio site rather than the BGM Looper
