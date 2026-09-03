@@ -94,22 +94,33 @@ if (!existsSync(filePath)) {
   ];
 } else {
   // A run killed mid-write (job timeout, disk full, reporter crash) leaves a
-  // file that exists but doesn't parse. Degrade to the same kind of warning
-  // rather than throwing — this step runs with `if: always()`, and crashing
-  // here would also cost us the other runner's counts.
+  // file that exists but doesn't parse, or parses to something that isn't a
+  // report. Degrade to a warning rather than throwing — this step runs with
+  // `if: always()`, and crashing here would also cost us the other runner's
+  // counts.
   let data = null;
+  let reason = "";
   try {
     data = JSON.parse(readFileSync(filePath, "utf8"));
+    // Check the shape each summarizer actually reads, not just "is an object":
+    // an array or an unrelated object parses fine and then renders a summary
+    // full of `undefined` counts, which is worse than saying nothing.
+    const shaped =
+      kind === "vitest"
+        ? typeof data?.numTotalTests === "number"
+        : Array.isArray(data?.suites);
+    if (!shaped) {
+      reason = `parsed to \`${JSON.stringify(data)?.slice(0, 60)}\`, which is not a ${kind} report`;
+      data = null;
+    }
   } catch (err) {
-    summaryLines = [
-      heading,
-      "",
-      `⚠️ Results file at \`${filePath}\` is not valid JSON — the test run likely crashed mid-write: ${err.message}`,
-    ];
+    reason = `is not valid JSON: ${err.message}`;
   }
-  if (data) {
-    summaryLines = kind === "vitest" ? summarizeVitest(data) : summarizePlaywright(data);
-  }
+  summaryLines = data
+    ? kind === "vitest"
+      ? summarizeVitest(data)
+      : summarizePlaywright(data)
+    : [heading, "", `⚠️ Results file at \`${filePath}\` ${reason} — the test run likely crashed mid-write.`];
 }
 
 const output = summaryLines.join("\n") + "\n";
