@@ -39,7 +39,10 @@
 :root {
   --color-terminal-bg: #0e1420;
   --color-terminal-fg: #d7deec;
-  --color-terminal-accent: #f0a202;
+  /* The dark-mode teal, not var(--color-accent): this chrome is fixed-dark in
+   * both themes, and light mode's #187a73 only reaches ~3.6:1 on the terminal
+   * background. Asserted in lib/portfolio-tokens.test.ts. */
+  --color-terminal-accent: #5ec8c0;
 }
 
 html {
