@@ -27,7 +27,7 @@
 **Interfaces:**
 - Produces: `--color-terminal-bg`, `--color-terminal-fg` (plain `:root` custom properties, fixed across both themes) and a `.commandbar-fade-in` utility class — consumed by Task 2 (`TerminalWindow`) and Task 4 (`CommandBar`).
 
-- [ ] **Step 1: Add the tokens and keyframe**
+- [x] **Step 1: Add the tokens and keyframe**
 
 Add this block to `app/app/globals.css`, after the existing `:root.dark { … }` block and before the `html { … }` rule:
 
@@ -66,12 +66,12 @@ Add this block after the existing `@media (prefers-reduced-motion: reduce) { .pl
 }
 ```
 
-- [ ] **Step 2: Run the full test suite**
+- [x] **Step 2: Run the full test suite**
 
 Run: `cd app && npm test`
 Expected: PASS (no test references these tokens yet — this is a sanity check that the CSS is syntactically valid and nothing else broke).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd app && git add app/globals.css
@@ -95,7 +95,7 @@ EOF
 - Consumes: `--color-terminal-bg`, `--color-terminal-fg` (Task 1).
 - Produces: `TerminalWindow({ title, children }: { title: string; children: React.ReactNode })` — default export is NOT used (named export, matching this codebase's convention of named component exports, e.g. `SiteHeader`, `ThemeToggle`). Consumed by Task 4 (`CommandBar`) and Task 6 (`/projects` page).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // app/components/site/TerminalWindow.test.tsx
@@ -117,12 +117,12 @@ describe("TerminalWindow", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd app && npx vitest run components/site/TerminalWindow.test.tsx`
 Expected: FAIL — `Cannot find module './TerminalWindow'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```tsx
 // app/components/site/TerminalWindow.tsx
@@ -150,12 +150,12 @@ export function TerminalWindow({ title, children }: TerminalWindowProps) {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd app && npx vitest run components/site/TerminalWindow.test.tsx`
 Expected: PASS (1 test)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd app && git add components/site/TerminalWindow.tsx components/site/TerminalWindow.test.tsx
@@ -178,7 +178,7 @@ EOF
 **Interfaces:**
 - Produces: `type CommandContext = { push: (href: string) => void }`, `type Command = { id: string; label: string; hint: string; run: (ctx: CommandContext) => void }`, `COMMANDS: Command[]` — consumed by Task 4 (`CommandBar`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```typescript
 // app/lib/site/commands.test.ts
@@ -238,12 +238,12 @@ describe("COMMANDS", () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd app && npx vitest run lib/site/commands.test.ts`
 Expected: FAIL — `Cannot find module './commands'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```typescript
 // app/lib/site/commands.ts
@@ -301,12 +301,12 @@ export const COMMANDS: Command[] = [
 ];
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `cd app && npx vitest run lib/site/commands.test.ts`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd app && git add lib/site/commands.ts lib/site/commands.test.ts
@@ -330,7 +330,7 @@ EOF
 - Consumes: `TerminalWindow` (Task 2), `COMMANDS`/`Command`/`CommandContext` (Task 3), `useRouter` from `next/navigation`.
 - Produces: `CommandBar()` (named export, default-rendered as `<CommandBar />`, no props) and `openCommandBar(): void` (named export — the public "open me" API used by Task 5's `SiteHeader` trigger). Consumed by Task 5 (`SiteHeader`, `(site)/layout.tsx`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```tsx
 // app/components/site/CommandBar.test.tsx
@@ -428,12 +428,12 @@ describe("CommandBar", () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd app && npx vitest run components/site/CommandBar.test.tsx`
 Expected: FAIL — `Cannot find module './CommandBar'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```tsx
 // app/components/site/CommandBar.tsx
@@ -609,12 +609,12 @@ export function CommandBar() {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `cd app && npx vitest run components/site/CommandBar.test.tsx`
 Expected: PASS (7 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd app && git add components/site/CommandBar.tsx components/site/CommandBar.test.tsx
@@ -638,7 +638,7 @@ EOF
 **Interfaces:**
 - Consumes: `openCommandBar` and `CommandBar` (Task 4).
 
-- [ ] **Step 1: Update the `SiteHeader` test first**
+- [x] **Step 1: Update the `SiteHeader` test first**
 
 Replace the full contents of `app/components/site/SiteHeader.test.tsx` with:
 
@@ -675,12 +675,12 @@ describe("SiteHeader", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd app && npx vitest run components/site/SiteHeader.test.tsx`
 Expected: FAIL — no button with accessible name "Open command bar" exists yet.
 
-- [ ] **Step 3: Add the trigger button to `SiteHeader`**
+- [x] **Step 3: Add the trigger button to `SiteHeader`**
 
 In `app/components/site/SiteHeader.tsx`, add the import and the button (kept always visible — the keyboard shortcut alone isn't reachable on mobile, so this doubles as the touch entry point):
 
@@ -703,12 +703,12 @@ Add this button inside the `<nav>`, immediately before `<ThemeToggle />`:
           </button>
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd app && npx vitest run components/site/SiteHeader.test.tsx`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Mount `CommandBar` once in the site layout**
+- [x] **Step 5: Mount `CommandBar` once in the site layout**
 
 In `app/app/(site)/layout.tsx`, change:
 
@@ -758,12 +758,12 @@ export default function SiteLayout({
 }
 ```
 
-- [ ] **Step 6: Run the full test suite**
+- [x] **Step 6: Run the full test suite**
 
 Run: `cd app && npm test`
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd app && git add components/site/SiteHeader.tsx components/site/SiteHeader.test.tsx "app/(site)/layout.tsx"
@@ -788,7 +788,7 @@ EOF
 
 Same data and same links as today (`project.href`, unchanged) — only the chrome and framing change, per spec §4.
 
-- [ ] **Step 1: Add a test for the new terminal framing**
+- [x] **Step 1: Add a test for the new terminal framing**
 
 Append this `it` block inside the existing `describe("ProjectsPage", …)` in `app/app/(site)/projects/page.test.tsx` (the existing `it` block asserting the BGM Looper link stays as-is — it should keep passing unmodified since the link's accessible name and href don't change):
 
@@ -799,12 +799,12 @@ Append this `it` block inside the existing `describe("ProjectsPage", …)` in `a
   });
 ```
 
-- [ ] **Step 2: Run the test to verify the new assertion fails**
+- [x] **Step 2: Run the test to verify the new assertion fails**
 
 Run: `cd app && npx vitest run "app/(site)/projects/page.test.tsx"`
 Expected: FAIL on the new test — "projects — zsh" doesn't exist yet. The original test still passes.
 
-- [ ] **Step 3: Rewrite the page**
+- [x] **Step 3: Rewrite the page**
 
 Replace the full contents of `app/app/(site)/projects/page.tsx` with:
 
@@ -853,17 +853,17 @@ export default function ProjectsPage() {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify both assertions pass**
+- [x] **Step 4: Run the test to verify both assertions pass**
 
 Run: `cd app && npx vitest run "app/(site)/projects/page.test.tsx"`
 Expected: PASS (2 tests) — the original link-href assertion and the new terminal-chrome assertion.
 
-- [ ] **Step 5: Run the full test suite**
+- [x] **Step 5: Run the full test suite**
 
 Run: `cd app && npm test`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd app && git add "app/(site)/projects/page.tsx" "app/(site)/projects/page.test.tsx"
@@ -883,27 +883,27 @@ EOF
 
 **Interfaces:** none.
 
-- [ ] **Step 1: Start the dev server**
+- [x] **Step 1: Start the dev server**
 
 Run: `cd app && APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev`
 
-- [ ] **Step 2: Keyboard-only run-through**
+- [x] **Step 2: Keyboard-only run-through**
 
 Without touching the mouse: `Tab` to the `⌘K` button in the header, press `Enter` to open the command bar, confirm the input is focused immediately. Type `"proj"`, confirm the list filters to `cd projects`. Press `Enter`, confirm the browser navigates to `/projects` and the dialog closes. Repeat, this time pressing `Escape` instead of `Enter`, and confirm focus returns to the `⌘K` button (a visible focus ring should reappear on it).
 
-- [ ] **Step 3: Global shortcut and mouse/touch trigger**
+- [x] **Step 3: Global shortcut and mouse/touch trigger**
 
 From any page, press `Ctrl+K` (or `Cmd+K` on macOS) — confirm the command bar opens regardless of which element had focus. Close it, then click the `⌘K` button with the mouse — confirm it opens the same way.
 
-- [ ] **Step 4: Both themes**
+- [x] **Step 4: Both themes**
 
 Toggle light/dark via the theme button. Confirm the `/projects` terminal window and the command-bar dialog both stay visually dark (fixed terminal chrome) in *both* site themes — this is intentional per spec §3, not a bug.
 
-- [ ] **Step 5: Reduced motion**
+- [x] **Step 5: Reduced motion**
 
 Enable "reduce motion" in the OS accessibility settings (or emulate it via Chrome DevTools' Rendering tab → "Emulate CSS media feature prefers-reduced-motion: reduce"). Open the command bar and confirm it appears instantly with no fade transition.
 
-- [ ] **Step 6: Stop the dev server**
+- [x] **Step 6: Stop the dev server**
 
 Ctrl+C in the terminal running `npm run dev`.
 

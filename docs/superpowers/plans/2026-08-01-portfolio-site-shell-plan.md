@@ -31,13 +31,13 @@
 **Interfaces:**
 - Produces: Tailwind utility classes (`bg-bg`, `text-fg`, `bg-accent`, `text-accent`, `font-mono`, and standard Tailwind utilities) available to every component created in later tasks. Produces the `.dark` class contract: when present on `<html>`, dark theme tokens apply; when absent, light theme tokens apply. Root layout defaults `<html>` to `className="dark"`.
 
-- [ ] **Step 1: Install Tailwind CSS v4**
+- [x] **Step 1: Install Tailwind CSS v4**
 
 ```bash
 cd app && npm install -D tailwindcss @tailwindcss/postcss postcss
 ```
 
-- [ ] **Step 2: Create the PostCSS config**
+- [x] **Step 2: Create the PostCSS config**
 
 Create `app/postcss.config.mjs`:
 
@@ -51,7 +51,7 @@ const config = {
 export default config;
 ```
 
-- [ ] **Step 3: Create the global stylesheet with theme tokens**
+- [x] **Step 3: Create the global stylesheet with theme tokens**
 
 Create `app/app/globals.css`:
 
@@ -81,7 +81,7 @@ html.dark {
 }
 ```
 
-- [ ] **Step 4: Wire the stylesheet and default theme into the root layout**
+- [x] **Step 4: Wire the stylesheet and default theme into the root layout**
 
 Replace the contents of `app/app/layout.tsx`:
 
@@ -120,12 +120,12 @@ export default function RootLayout({
 }
 ```
 
-- [ ] **Step 5: Verify the app still builds and lints**
+- [x] **Step 5: Verify the app still builds and lints**
 
 Run: `cd app && npm run lint && npm run build`
 Expected: both succeed with no errors (Tailwind's PostCSS plugin picks up `globals.css` automatically via the Next.js build).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/postcss.config.mjs app/app/globals.css app/app/layout.tsx app/package.json app/package-lock.json
@@ -145,7 +145,7 @@ git commit -m "feat: add Tailwind CSS v4 with dark-default theme tokens"
 - Consumes: nothing new (uses existing `COOKIE_NAME`, `verifySessionCookieValue` from `app/lib/auth.ts`, unchanged).
 - Produces: `isGatedPath(pathname: string): boolean` — Task 4's nav and Task 3's moved login page rely on `/tools/bgm-looper` and `/tools/bgm-looper/login` being the exact strings this function checks against.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `app/lib/route-gate.test.ts`:
 
@@ -173,12 +173,12 @@ describe("isGatedPath", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && npx vitest run lib/route-gate.test.ts`
 Expected: FAIL — `Cannot find module './route-gate'`
 
-- [ ] **Step 3: Implement `isGatedPath`**
+- [x] **Step 3: Implement `isGatedPath`**
 
 Create `app/lib/route-gate.ts`:
 
@@ -196,12 +196,12 @@ export function isGatedPath(pathname: string): boolean {
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `cd app && npx vitest run lib/route-gate.test.ts`
 Expected: PASS — all 12 cases green.
 
-- [ ] **Step 5: Rewrite the middleware to use it**
+- [x] **Step 5: Rewrite the middleware to use it**
 
 Replace the contents of `app/middleware.ts`:
 
@@ -237,12 +237,12 @@ export const config = {
 
 The matcher stays broad on purpose — middleware still runs on every request, but `isGatedPath` makes it a no-op for public paths. This is simpler and safer than trying to encode two allow/deny prefixes directly in Next's matcher regex syntax.
 
-- [ ] **Step 6: Run the full test suite to confirm nothing else broke**
+- [x] **Step 6: Run the full test suite to confirm nothing else broke**
 
 Run: `cd app && npm test`
 Expected: PASS (existing `auth.test.ts`, `aws.test.ts`, `page.test.tsx` all still pass — none of them exercise the middleware directly).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/lib/route-gate.ts app/lib/route-gate.test.ts app/middleware.ts
@@ -265,7 +265,7 @@ git commit -m "feat: gate only /tools/bgm-looper and /api/looper, not the whole 
 - Consumes: Task 2's `isGatedPath` already expects `/tools/bgm-looper`, `/api/looper/process`, `/api/looper/upload-url`, `/tools/bgm-looper/login` to exist as real routes — this task makes them real.
 - Produces: `/tools/bgm-looper` as the stable URL later tasks (Task 4's nav CTA, Task 7's project card) link to.
 
-- [ ] **Step 1: Move the files, preserving git history**
+- [x] **Step 1: Move the files, preserving git history**
 
 ```bash
 cd app
@@ -277,7 +277,7 @@ git mv app/api/process/route.ts app/api/looper/process/route.ts
 git mv app/api/upload-url/route.ts app/api/looper/upload-url/route.ts
 ```
 
-- [ ] **Step 2: Update the moved tool page's fetch URLs**
+- [x] **Step 2: Update the moved tool page's fetch URLs**
 
 In `app/app/tools/bgm-looper/page.tsx`, change:
 
@@ -299,7 +299,7 @@ to:
 const processRes = await fetch("/api/looper/process", {
 ```
 
-- [ ] **Step 3: Update the moved login page's redirect target**
+- [x] **Step 3: Update the moved login page's redirect target**
 
 In `app/app/tools/bgm-looper/login/page.tsx`, change:
 
@@ -311,17 +311,17 @@ to:
 router.push("/tools/bgm-looper");
 ```
 
-- [ ] **Step 4: Run the full test suite to verify the move didn't break anything**
+- [x] **Step 4: Run the full test suite to verify the move didn't break anything**
 
 Run: `cd app && npm test`
 Expected: PASS — `tools/bgm-looper/page.test.tsx` still passes unchanged (it mocks `fetch` generically without asserting on the URL argument, so the endpoint rename doesn't affect it).
 
-- [ ] **Step 5: Run lint and build**
+- [x] **Step 5: Run lint and build**
 
 Run: `cd app && npm run lint && npm run build`
 Expected: both succeed — confirms Next.js resolves the new route tree correctly.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -344,7 +344,7 @@ git commit -m "refactor: move BGM Looper tool to /tools/bgm-looper, APIs to /api
 - Consumes: Task 3's `/tools/bgm-looper` as the CTA link target.
 - Produces: `SiteLayout` wrapping component, reused by every page created in Tasks 5–9 (they live inside the `(site)` route group and automatically get this layout — no per-page import needed).
 
-- [ ] **Step 1: Write the failing ThemeToggle test**
+- [x] **Step 1: Write the failing ThemeToggle test**
 
 Create `app/components/site/ThemeToggle.test.tsx`:
 
@@ -378,12 +378,12 @@ describe("ThemeToggle", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && npx vitest run components/site/ThemeToggle.test.tsx`
 Expected: FAIL — `Cannot find module './ThemeToggle'`
 
-- [ ] **Step 3: Implement ThemeToggle**
+- [x] **Step 3: Implement ThemeToggle**
 
 Create `app/components/site/ThemeToggle.tsx`:
 
@@ -419,12 +419,12 @@ export function ThemeToggle() {
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `cd app && npx vitest run components/site/ThemeToggle.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Write the failing SiteHeader test**
+- [x] **Step 5: Write the failing SiteHeader test**
 
 Create `app/components/site/SiteHeader.test.tsx`:
 
@@ -449,12 +449,12 @@ describe("SiteHeader", () => {
 });
 ```
 
-- [ ] **Step 6: Run it to verify it fails**
+- [x] **Step 6: Run it to verify it fails**
 
 Run: `cd app && npx vitest run components/site/SiteHeader.test.tsx`
 Expected: FAIL — `Cannot find module './SiteHeader'`
 
-- [ ] **Step 7: Implement SiteHeader**
+- [x] **Step 7: Implement SiteHeader**
 
 Create `app/components/site/SiteHeader.tsx`:
 
@@ -495,12 +495,12 @@ export function SiteHeader() {
 }
 ```
 
-- [ ] **Step 8: Run it to verify it passes**
+- [x] **Step 8: Run it to verify it passes**
 
 Run: `cd app && npx vitest run components/site/SiteHeader.test.tsx`
 Expected: PASS
 
-- [ ] **Step 9: Implement SiteFooter (no test — static markup, nothing to assert beyond what SiteHeader-style tests already cover the pattern for)**
+- [x] **Step 9: Implement SiteFooter (no test — static markup, nothing to assert beyond what SiteHeader-style tests already cover the pattern for)**
 
 Create `app/components/site/SiteFooter.tsx`:
 
@@ -514,7 +514,7 @@ export function SiteFooter() {
 }
 ```
 
-- [ ] **Step 10: Assemble the (site) route group layout**
+- [x] **Step 10: Assemble the (site) route group layout**
 
 Create `app/app/(site)/layout.tsx`:
 
@@ -537,12 +537,12 @@ export default function SiteLayout({
 }
 ```
 
-- [ ] **Step 11: Run the full suite**
+- [x] **Step 11: Run the full suite**
 
 Run: `cd app && npm test`
 Expected: PASS (new tests green, nothing else affected — `(site)/layout.tsx` has no page routing into it yet until Task 5).
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add app/components/site app/app/\(site\)/layout.tsx
@@ -560,7 +560,7 @@ git commit -m "feat: add site header, footer, and dark/light theme toggle"
 **Interfaces:**
 - Consumes: Task 4's `SiteLayout` (applied automatically via the route group — this file does not import it).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `app/app/(site)/page.test.tsx`:
 
@@ -577,12 +577,12 @@ describe("HomePage", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && npx vitest run "app/(site)/page.test.tsx"`
 Expected: FAIL — `Cannot find module './page'`
 
-- [ ] **Step 3: Implement the home page**
+- [x] **Step 3: Implement the home page**
 
 Create `app/app/(site)/page.tsx`:
 
@@ -600,12 +600,12 @@ export default function HomePage() {
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `cd app && npx vitest run "app/(site)/page.test.tsx"`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add "app/app/(site)/page.tsx" "app/app/(site)/page.test.tsx"
@@ -620,7 +620,7 @@ git commit -m "feat: add portfolio home page"
 - Create: `app/app/(site)/about/page.tsx`
 - Create: `app/app/(site)/about/page.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `app/app/(site)/about/page.test.tsx`:
 
@@ -637,12 +637,12 @@ describe("AboutPage", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && npx vitest run "app/(site)/about/page.test.tsx"`
 Expected: FAIL — `Cannot find module './page'`
 
-- [ ] **Step 3: Implement the about page**
+- [x] **Step 3: Implement the about page**
 
 Create `app/app/(site)/about/page.tsx`:
 
@@ -660,12 +660,12 @@ export default function AboutPage() {
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `cd app && npx vitest run "app/(site)/about/page.test.tsx"`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add "app/app/(site)/about"
@@ -684,7 +684,7 @@ git commit -m "feat: add portfolio about page"
 **Interfaces:**
 - Produces: `Project` type and `projects` array — the shape any project added in a future phase must match (`slug`, `name`, `description`, `href`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `app/app/(site)/projects/page.test.tsx`:
 
@@ -704,12 +704,12 @@ describe("ProjectsPage", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && npx vitest run "app/(site)/projects/page.test.tsx"`
 Expected: FAIL — `Cannot find module './page'`
 
-- [ ] **Step 3: Create the project content data**
+- [x] **Step 3: Create the project content data**
 
 Create `app/content/projects.ts`:
 
@@ -732,7 +732,7 @@ export const projects: Project[] = [
 ];
 ```
 
-- [ ] **Step 4: Implement the projects page**
+- [x] **Step 4: Implement the projects page**
 
 Create `app/app/(site)/projects/page.tsx`:
 
@@ -759,12 +759,12 @@ export default function ProjectsPage() {
 }
 ```
 
-- [ ] **Step 5: Run it to verify it passes**
+- [x] **Step 5: Run it to verify it passes**
 
 Run: `cd app && npx vitest run "app/(site)/projects/page.test.tsx"`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/content/projects.ts "app/app/(site)/projects"
@@ -783,7 +783,7 @@ git commit -m "feat: add portfolio projects page"
 **Interfaces:**
 - Produces: `ResumeEntry` type and `resume` array — shape any future entry must match (`role`, `org`, `start`, `end`, `bullets`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `app/app/(site)/resume/page.test.tsx`:
 
@@ -805,12 +805,12 @@ describe("ResumePage", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && npx vitest run "app/(site)/resume/page.test.tsx"`
 Expected: FAIL — `Cannot find module './page'`
 
-- [ ] **Step 3: Create the resume content data**
+- [x] **Step 3: Create the resume content data**
 
 Create `app/content/resume.ts`:
 
@@ -837,7 +837,7 @@ export const resume: ResumeEntry[] = [
 ];
 ```
 
-- [ ] **Step 4: Implement the resume page**
+- [x] **Step 4: Implement the resume page**
 
 Create `app/app/(site)/resume/page.tsx`:
 
@@ -879,12 +879,12 @@ export default function ResumePage() {
 }
 ```
 
-- [ ] **Step 5: Run it to verify it passes**
+- [x] **Step 5: Run it to verify it passes**
 
 Run: `cd app && npx vitest run "app/(site)/resume/page.test.tsx"`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/content/resume.ts "app/app/(site)/resume"
@@ -901,7 +901,7 @@ git commit -m "feat: add portfolio resume page"
 - Create: `app/app/(site)/contact/page.tsx`
 - Create: `app/app/(site)/contact/page.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `app/app/(site)/contact/page.test.tsx`:
 
@@ -921,12 +921,12 @@ describe("ContactPage", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && npx vitest run "app/(site)/contact/page.test.tsx"`
 Expected: FAIL — `Cannot find module './page'`
 
-- [ ] **Step 3: Implement the contact page**
+- [x] **Step 3: Implement the contact page**
 
 Create `app/app/(site)/contact/page.tsx`:
 
@@ -955,12 +955,12 @@ export default function ContactPage() {
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `cd app && npx vitest run "app/(site)/contact/page.test.tsx"`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add "app/app/(site)/contact"
@@ -979,25 +979,25 @@ git commit -m "feat: add portfolio contact page"
 - Consumes: every component and page from Tasks 1–9 as its starting point (functional but visually minimal utility-class markup).
 - Produces: no new interfaces — this task only restyles existing components/pages, it must not change any component's props, exported names, or the `Project`/`ResumeEntry` data shapes, since Tasks 5–9's tests assert against those.
 
-- [ ] **Step 1: Invoke the design skill**
+- [x] **Step 1: Invoke the design skill**
 
 Run the `frontend-design` skill (via the `Skill` tool) against the current state of the `(site)` route group and shared components, with the brief: dark-default technical aesthetic (monospace accents, audio/DSP-engineer feel), light-mode toggle already wired up in `ThemeToggle`/`globals.css` theme tokens. Follow its guidance for typography scale, spacing, and color-token refinement.
 
-- [ ] **Step 2: Apply the recommended changes**
+- [x] **Step 2: Apply the recommended changes**
 
 Edit `globals.css` theme tokens and component/page class names per the skill's output. Do not rename exported component/type identifiers or change data shapes.
 
-- [ ] **Step 3: Re-run the full test suite after restyling**
+- [x] **Step 3: Re-run the full test suite after restyling**
 
 Run: `cd app && npm test`
 Expected: PASS — restyling only changes `className` strings and CSS, none of which the existing tests assert on (they assert roles, text, hrefs — not classes).
 
-- [ ] **Step 4: Run lint and build**
+- [x] **Step 4: Run lint and build**
 
 Run: `cd app && npm run lint && npm run build`
 Expected: both succeed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1010,17 +1010,17 @@ git commit -m "style: apply frontend-design visual pass to portfolio pages"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full automated test suite**
+- [x] **Step 1: Run the full automated test suite**
 
 Run: `cd app && npm test`
 Expected: PASS — all tests across `lib/`, `components/site/`, `app/(site)/*`, and `app/tools/bgm-looper/*` green.
 
-- [ ] **Step 2: Run lint and build**
+- [x] **Step 2: Run lint and build**
 
 Run: `cd app && npm run lint && npm run build`
 Expected: both succeed with no errors or warnings.
 
-- [ ] **Step 3: Start the dev server and manually verify in a browser**
+- [x] **Step 3: Start the dev server and manually verify in a browser**
 
 Run: `cd app && APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev`
 
@@ -1031,7 +1031,7 @@ Manually check, per `CLAUDE.md`'s guidance to verify UI changes in a real browse
 - The theme toggle in the header switches between dark and light, and the choice survives a page reload.
 - The "BGM Looper" nav link and the Projects-page project card both land on `/tools/bgm-looper`.
 
-- [ ] **Step 4: Commit any fixes found during manual QA, if needed**
+- [x] **Step 4: Commit any fixes found during manual QA, if needed**
 
 If manual QA surfaces a bug, fix it, re-run the relevant automated test, then:
 
