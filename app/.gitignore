@@ -2,3 +2,9 @@ node_modules/
 .next/
 .env
 .env*.local
+
+# Playwright / Vitest generated output
+/test-results/
+/playwright-report/
+playwright-results.json
+vitest-results.json
