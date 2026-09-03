@@ -1,5 +1,5 @@
 librosa>=0.10,<0.11
-numpy>=1.26,<2.0
+numpy>=2.5.2,<3.0
 soundfile>=0.14.0,<0.15
 pyloudnorm>=0.2.0,<0.3
 boto3>=1.43.83,<2.0
