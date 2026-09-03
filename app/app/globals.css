@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Palette: anodised graphite + the amber of a lit VU meter, with a peak-hold
+ * Palette: soft graphite neutrals with a cool teal accent, and a peak-hold
  * red reserved for signal that crosses the threshold. Every token below is
  * declared in BOTH blocks (light default in @theme, dark override in
  * :root.dark) so neither mode can silently fall back to the other's value.
@@ -10,9 +10,9 @@
   --color-bg: #f4f4f2;
   --color-surface: #ffffff;
   --color-fg: #16161a;
-  --color-muted: #63625e;
-  --color-line: #dcdad4;
-  --color-accent: #8a4b00;
+  --color-muted: #5b6478;
+  --color-line: #d3dae6;
+  --color-accent: #187a73;
   --color-peak: #a8362a;
 
   --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Segoe UI Mono",
@@ -25,9 +25,9 @@
   --color-bg: #0b0b0d;
   --color-surface: #131317;
   --color-fg: #e8e6e2;
-  --color-muted: #8f8d88;
-  --color-line: #26262b;
-  --color-accent: #f0a202;
+  --color-muted: #8894ac;
+  --color-line: #253046;
+  --color-accent: #5ec8c0;
   --color-peak: #e2574c;
 }
 
