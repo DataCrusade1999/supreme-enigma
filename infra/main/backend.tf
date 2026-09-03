@@ -16,7 +16,7 @@ terraform {
     }
     vercel = {
       source  = "vercel/vercel"
-      version = "~> 1.0"
+      version = "~> 5.14"
     }
     random = {
       source  = "hashicorp/random"
