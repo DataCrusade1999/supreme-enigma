@@ -137,9 +137,12 @@ APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev
 # Lambda DSP pipeline (into a local venv, to leave the global interpreter alone)
 cd lambda
 python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt pytest moto   # Windows
-# .venv/bin/python -m pip install -r requirements.txt pytest moto     # macOS/Linux
+# Windows
+.venv/Scripts/python -m pip install -r requirements.txt pytest moto
 .venv/Scripts/python -m pytest -q
+# macOS/Linux
+# .venv/bin/python -m pip install -r requirements.txt pytest moto
+# .venv/bin/python -m pytest -q
 ```
 
 Re-run that `pip install` whenever a dependency bump to `lambda/requirements.txt`
