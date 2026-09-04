@@ -132,6 +132,7 @@ resource "vercel_project_environment_variable" "s3_bucket_production" {
   key        = "S3_BUCKET_NAME"
   value      = aws_s3_bucket.audio.bucket
   target     = ["production"]
+  sensitive  = false
 }
 
 resource "vercel_project_environment_variable" "s3_bucket_preview" {
@@ -139,6 +140,7 @@ resource "vercel_project_environment_variable" "s3_bucket_preview" {
   key        = "S3_BUCKET_NAME"
   value      = aws_s3_bucket.audio_env["dev"].bucket
   target     = ["preview"]
+  sensitive  = false
 }
 
 resource "vercel_project_environment_variable" "s3_bucket_stage" {
@@ -147,6 +149,7 @@ resource "vercel_project_environment_variable" "s3_bucket_stage" {
   value      = aws_s3_bucket.audio_env["stage"].bucket
   target     = ["preview"]
   git_branch = "stage"
+  sensitive  = false
 }
 
 resource "vercel_project_environment_variable" "lambda_function_name_production" {
@@ -154,6 +157,7 @@ resource "vercel_project_environment_variable" "lambda_function_name_production"
   key        = "LAMBDA_FUNCTION_NAME"
   value      = aws_lambda_function.looper.function_name
   target     = ["production"]
+  sensitive  = false
 }
 
 resource "vercel_project_environment_variable" "lambda_function_name_preview" {
@@ -161,6 +165,7 @@ resource "vercel_project_environment_variable" "lambda_function_name_preview" {
   key        = "LAMBDA_FUNCTION_NAME"
   value      = aws_lambda_function.looper_env["dev"].function_name
   target     = ["preview"]
+  sensitive  = false
 }
 
 resource "vercel_project_environment_variable" "lambda_function_name_stage" {
@@ -169,4 +174,5 @@ resource "vercel_project_environment_variable" "lambda_function_name_stage" {
   value      = aws_lambda_function.looper_env["stage"].function_name
   target     = ["preview"]
   git_branch = "stage"
+  sensitive  = false
 }
