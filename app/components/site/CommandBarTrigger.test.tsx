@@ -44,4 +44,13 @@ describe("CommandBarTrigger", () => {
     act(() => {});
     expect(screen.getByRole("button", { name: "Open command bar" })).toHaveTextContent("Ctrl K");
   });
+
+  it("uses the shell's UI face and a 44px hit target", () => {
+    render(<CommandBarTrigger />);
+    const button = screen.getByRole("button", { name: "Open command bar" });
+    // Spec §2: no third face. `--font-mono` is gone from the project theme,
+    // so `font-mono` would fall through to Tailwind's own system mono stack.
+    expect(button).not.toHaveClass("font-mono");
+    expect(button).toHaveClass("min-h-11");
+  });
 });

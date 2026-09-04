@@ -31,11 +31,15 @@ export function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
-              // The underline wipes in from the left on scaleX rather than
-              // fading a border — one rule, no SVG per link. Spec §6.
-              className="relative pb-0.5 text-muted transition-colors duration-200 ease-out after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:scale-x-0 after:bg-accent after:transition-transform after:duration-200 after:ease-out hover:text-fg hover:after:scale-x-100 motion-reduce:transition-none motion-reduce:after:transition-none"
+              // The 44px hit target is the link box; the inner span keeps the
+              // underline on the baseline instead of the bottom of that box.
+              className="group inline-flex min-h-11 items-center text-muted transition-colors duration-200 ease-out hover:text-fg motion-reduce:transition-none"
             >
-              {link.label}
+              {/* The underline wipes in from the left on scaleX rather than
+               * fading a border — one rule, no SVG per link. Spec §6. */}
+              <span className="relative pb-0.5 after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:scale-x-0 after:bg-accent after:transition-transform after:duration-200 after:ease-out group-hover:after:scale-x-100 motion-reduce:after:transition-none">
+                {link.label}
+              </span>
             </Link>
           ))}
 

@@ -27,4 +27,11 @@ describe("SiteHeader", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open command bar" }));
     expect(openCommandBar).toHaveBeenCalledOnce();
   });
+
+  it("gives every nav link a 44px hit target", () => {
+    render(<SiteHeader />);
+    for (const label of ["Home", "About", "Projects", "Resume", "Blog", "Contact"]) {
+      expect(screen.getByRole("link", { name: label })).toHaveClass("min-h-11");
+    }
+  });
 });
