@@ -35,6 +35,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- Public portfolio redesigned as an editorial system: a warm paper ground and
+  matching warm near-black dark mode, Instrument Serif + IBM Plex Sans loaded
+  through `next/font/google` (self-hosted, no `fonts.googleapis.com` link), a
+  visible 12-column grid with ruled rows instead of cards and terminal chrome,
+  a shared bar envelope rendered both as the home page's waveform and as the
+  About page's `LoopRing`, and a new `/projects/[slug]` detail page with an
+  optional demo-GIF slot. Hover motion is gated with `motion-reduce:` and every
+  looping animation has a `prefers-reduced-motion` off-switch.
+
 - Portfolio accent swapped from the warm amber/VU-meter tone to a cool
   teal (`#187a73` light, `#5ec8c0` dark), with the secondary greys
   re-tinted to match. Includes the terminal chrome's own accent, which

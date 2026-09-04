@@ -5,6 +5,7 @@ const PATHS = [
   "/",
   "/about",
   "/projects",
+  "/projects/bgm-looper",
   "/resume",
   "/contact",
   "/blog",
