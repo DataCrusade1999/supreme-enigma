@@ -57,7 +57,7 @@ describe("ThemeToggle", () => {
     // property, not to `transform`, so `rotate` has to be named in the
     // arbitrary transition list or the icon swap snaps instead of turning.
     const { container } = render(<ThemeToggle />);
-    for (const icon of container.querySelectorAll("svg")) {
+    for (const icon of Array.from(container.querySelectorAll("svg"))) {
       expect(icon).toHaveClass("transition-[opacity,rotate]");
     }
   });

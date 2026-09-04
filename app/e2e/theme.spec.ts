@@ -7,10 +7,19 @@ test("theme toggle flips the dark class and persists across navigation", async (
   const html = page.locator("html");
   await expect(html).toHaveClass(/dark/);
 
-  // The button names the mode it switches *to*, so it reads "Light mode"
-  // while the site is in its default dark mode.
-  await page.getByRole("button", { name: "Light mode" }).click();
+  // The toggle is an icon button: both SVGs are aria-hidden, so it carries no
+  // text and its accessible name comes from `aria-label`, which names the mode
+  // the click will produce rather than the current one.
+  const toggle = page.getByRole("button", {
+    name: "Switch to light mode",
+    exact: true,
+  });
+  await expect(toggle).toHaveText("");
+  await toggle.click();
   await expect(html).not.toHaveClass(/dark/);
+  await expect(
+    page.getByRole("button", { name: "Switch to dark mode", exact: true }),
+  ).toBeVisible();
   const stored = await page.evaluate(() => localStorage.getItem("theme"));
   expect(stored).toBe("light");
 

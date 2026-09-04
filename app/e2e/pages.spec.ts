@@ -4,6 +4,7 @@ const PAGES = [
   { path: "/", heading: "Ashutosh Pandey" },
   { path: "/about", heading: "About" },
   { path: "/projects", heading: "Projects" },
+  { path: "/projects/bgm-looper", heading: "BGM Looper" },
   { path: "/resume", heading: "Resume" },
   { path: "/contact", heading: "Contact" },
   { path: "/blog", heading: "Blog" },
