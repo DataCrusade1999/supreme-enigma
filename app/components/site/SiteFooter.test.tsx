@@ -8,8 +8,11 @@ describe("SiteFooter", () => {
     expect(
       screen.getByText(`© ${new Date().getFullYear()} Ashutosh Pandey`),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("next · vercel · aws lambda · python dsp"),
-    ).toBeInTheDocument();
+    // The stack is a wrapping list now, so each item is its own element rather
+    // than one interpunct-joined string.
+    for (const item of ["next", "vercel", "aws lambda", "python dsp"]) {
+      expect(screen.getByText(item)).toBeInTheDocument();
+    }
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
   });
 });

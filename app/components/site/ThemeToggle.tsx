@@ -32,9 +32,44 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="border border-line px-2.5 py-1.5 font-mono text-[0.6875rem] uppercase tracking-[0.16em] text-muted transition-colors hover:border-accent hover:text-fg"
+      // Names the state the click will produce, not the current one — spec §9.
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      className="relative inline-flex min-h-11 min-w-11 items-center justify-center border border-line text-muted transition-colors duration-200 ease-out hover:border-accent hover:text-fg motion-reduce:transition-none"
     >
-      {isDark ? "Light mode" : "Dark mode"}
+      {/* Both icons are always mounted and stacked; the inactive one is rotated
+       * out and faded, so the swap is one crossfade rather than a remount. */}
+      <Icon visible={isDark}>
+        <circle cx="8" cy="8" r="3.25" />
+        <path d="M8 1v1.75M8 13.25V15M1 8h1.75M13.25 8H15M3.05 3.05l1.24 1.24M11.71 11.71l1.24 1.24M12.95 3.05l-1.24 1.24M4.29 11.71l-1.24 1.24" />
+      </Icon>
+      <Icon visible={!isDark}>
+        <path d="M13.25 9.6A5.75 5.75 0 0 1 6.4 2.75 5.75 5.75 0 1 0 13.25 9.6Z" />
+      </Icon>
     </button>
+  );
+}
+
+function Icon({
+  visible,
+  children,
+}: {
+  visible: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`absolute h-4 w-4 transition-[opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none ${
+        visible ? "rotate-0 opacity-100" : "-rotate-90 opacity-0"
+      }`}
+    >
+      {children}
+    </svg>
   );
 }
