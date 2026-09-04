@@ -1,34 +1,52 @@
 @import "tailwindcss";
 
 /*
- * Palette: anodised graphite + the amber of a lit VU meter, with a peak-hold
- * red reserved for signal that crosses the threshold. Every token below is
- * declared in BOTH blocks (light default in @theme, dark override in
+ * Palette: a warm paper ground with near-black ink, a teal accent, and a
+ * peak-hold red reserved for signal that crosses the threshold. Every token
+ * below is declared in BOTH blocks (light default in @theme, dark override in
  * :root.dark) so neither mode can silently fall back to the other's value.
  */
 @theme {
-  --color-bg: #f4f4f2;
+  --color-bg: #eceae5;
   --color-surface: #ffffff;
-  --color-fg: #16161a;
-  --color-muted: #63625e;
-  --color-line: #dcdad4;
-  --color-accent: #8a4b00;
+  --color-fg: #111110;
+  --color-muted: #5f5d57;
+  --color-line: rgba(17, 17, 16, 0.14);
+  /* The 2px rules. Full-strength ink on paper; dialled back on the dark ground,
+   * where a 2px rule at full strength vibrates. See lib/portfolio-tokens.test.ts. */
+  --color-rule-heavy: #111110;
+  --color-accent: #146b64;
   --color-peak: #a8362a;
 
-  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Segoe UI Mono",
-    Menlo, Consolas, "Liberation Mono", monospace;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  /* Both faces are loaded by next/font/google in app/layout.tsx, which owns the
+   * fallback stacks and writes these two variables onto <html>. */
+  --font-display: var(--font-instrument-serif), serif;
+  --font-ui: var(--font-ibm-plex-sans), sans-serif;
 }
 
 :root.dark {
-  --color-bg: #0b0b0d;
+  --color-bg: #131311;
   --color-surface: #131317;
-  --color-fg: #e8e6e2;
-  --color-muted: #8f8d88;
-  --color-line: #26262b;
-  --color-accent: #f0a202;
+  --color-fg: #eceae5;
+  --color-muted: #9a968c;
+  --color-line: rgba(236, 234, 229, 0.16);
+  --color-rule-heavy: rgba(236, 234, 229, 0.72);
+  --color-accent: #5ec8c0;
   --color-peak: #e2574c;
+}
+
+/*
+ * Terminal chrome is intentionally fixed-dark regardless of site theme —
+ * that's what makes it read as a terminal rather than just a bordered box.
+ * Not declared inside @theme/:root.dark, so the theme toggle doesn't touch it.
+ */
+:root {
+  --color-terminal-bg: #0e1420;
+  --color-terminal-fg: #d7deec;
+  /* The dark-mode teal, not var(--color-accent): this chrome is fixed-dark in
+   * both themes, and light mode's #187a73 only reaches ~3.6:1 on the terminal
+   * background. Asserted in lib/portfolio-tokens.test.ts. */
+  --color-terminal-accent: #5ec8c0;
 }
 
 html {
@@ -65,9 +83,9 @@ p {
 }
 
 /*
- * The one animated element on the site: a playhead sweeping the waveform.
- * Linear and infinite, so the wrap from 100% back to 0% has no seam — which
- * is the entire point of the tool the site is attached to.
+ * A playhead sweeping the waveform. Linear and infinite, so the wrap from 100%
+ * back to 0% has no seam — which is the entire point of the tool the site is
+ * attached to. Everything else on the 9s loop clock shares it.
  */
 @keyframes playhead {
   from {
@@ -86,5 +104,143 @@ p {
   .playhead {
     animation: none;
     left: 0%;
+  }
+}
+
+/*
+ * The waveform bars rise from the baseline once per page load, left to right —
+ * never on scroll, so there is no scroll listener anywhere. `--bar-index` is
+ * set inline per bar; the 560ms rise and the 8ms-per-bar stagger live here.
+ * `both` is load-bearing: without the backwards fill a bar would stand at full
+ * height through its own delay and the stagger would be invisible.
+ */
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.bar-rise {
+  transform-origin: bottom;
+  animation: bar-rise 560ms ease-out both;
+  animation-delay: calc(var(--bar-index) * 8ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-rise {
+    animation: none;
+  }
+}
+
+/*
+ * The played region of the waveform, on the same 9s linear clock as .playhead
+ * so the two stay in phase. Width snapping from 100% back to 0% at the wrap is
+ * the reset; linear is what keeps that edge invisible.
+ */
+@keyframes played-tint {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.played-tint {
+  animation: played-tint 9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .played-tint {
+    animation: none;
+    width: 0;
+  }
+}
+
+@keyframes commandbar-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.commandbar-fade-in {
+  animation: commandbar-fade-in 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .commandbar-fade-in {
+    animation: none;
+  }
+}
+
+/*
+ * LoopRing's hand, on the same 9s linear clock as .playhead so the ring and the
+ * waveform stay in phase when both are on screen. `rotate` rather than a
+ * `transform` rotation: the hand is positioned with inset utilities, but the
+ * bars around it compose their own transforms, and keeping the two properties
+ * separate means neither can clobber the other.
+ */
+@keyframes ring-hand {
+  from {
+    rotate: -90deg;
+  }
+  to {
+    rotate: 270deg;
+  }
+}
+
+.ring-hand {
+  transform-origin: left center;
+  rotate: -90deg;
+  animation: ring-hand 9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-hand {
+    animation: none;
+  }
+}
+
+/*
+ * The seam mark, visible for ~3% of the cycle as the wrap passes twelve
+ * o'clock — split either side of the wrap so the flash is centred on it rather
+ * than trailing it. Reduced motion leaves the mark standing.
+ */
+@keyframes ring-seam {
+  0% {
+    opacity: 1;
+  }
+  1.5% {
+    opacity: 1;
+  }
+  1.51% {
+    opacity: 0;
+  }
+  98.49% {
+    opacity: 0;
+  }
+  98.5% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.ring-seam {
+  opacity: 0;
+  animation: ring-seam 9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-seam {
+    animation: none;
+    opacity: 1;
   }
 }

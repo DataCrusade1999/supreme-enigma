@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { middleware } from "./middleware";
+import { proxy } from "./proxy";
 
-describe("middleware", () => {
+describe("proxy", () => {
   it("redirects an unauthenticated request for a gated path to login with ?next set", () => {
     const request = new NextRequest(new URL("http://localhost:3000/keystatic"));
-    const response = middleware(request);
+    const response = proxy(request);
 
     expect(response.status).toBe(307);
     const location = response.headers.get("location");

@@ -1,5 +1,5 @@
-librosa>=0.10,<0.11
-numpy>=1.26,<2.0
-soundfile>=0.12,<0.13
-pyloudnorm>=0.1.1,<0.2
-boto3>=1.34,<2.0
+librosa>=1.0.0,<1.1
+numpy>=2.5.2,<3.0
+soundfile>=0.14.0,<0.15
+pyloudnorm>=0.2.0,<0.3
+boto3>=1.43.85,<2.0

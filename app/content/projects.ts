@@ -3,6 +3,10 @@ export type Project = {
   name: string;
   description: string;
   href: string;
+  /** Path under /public, e.g. "/demos/bgm-looper.gif". Unset until a real
+   * recording exists — the detail page omits the section rather than stubbing
+   * it. */
+  demoGif?: string;
 };
 
 export const projects: Project[] = [

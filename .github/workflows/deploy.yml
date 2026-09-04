@@ -36,20 +36,79 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install app dependencies
         working-directory: app
         run: npm install
 
       - name: Run app tests
+        id: vitest
         working-directory: app
-        run: npm test
+        run: |
+          set -o pipefail
+          EXIT_CODE=0
+          npx vitest run --reporter=default --reporter=json --outputFile.json=vitest-results.json || EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-  deploy:
-    needs: test
+      - name: Vitest job summary
+        if: always()
+        run: node .github/scripts/test-summary.mjs --kind vitest app/vitest-results.json
+
+      - name: Install Playwright browsers
+        working-directory: app
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e + a11y tests
+        id: playwright
+        working-directory: app
+        run: |
+          set -o pipefail
+          EXIT_CODE=0
+          npx playwright test || EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Playwright job summary
+        if: always()
+        run: node .github/scripts/test-summary.mjs --kind playwright app/playwright-results.json
+
+      - name: Fail the job if any test suite failed
+        if: steps.vitest.outputs.exit_code != '0' || steps.playwright.outputs.exit_code != '0'
+        run: exit 1
+
+  changes:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
+    outputs:
+      lambda: ${{ steps.check.outputs.lambda }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check for lambda changes
+        id: check
+        run: |
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            echo "lambda=true" >> "$GITHUB_OUTPUT"
+            echo "No previous commit to diff against (new branch or rewritten history) — building to be safe."
+            exit 0
+          fi
+          if git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- lambda/ .github/workflows/deploy.yml; then
+            echo "lambda=false" >> "$GITHUB_OUTPUT"
+            echo "No changes under lambda/ or deploy.yml — skipping the Lambda image build."
+          else
+            echo "lambda=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: [test, changes]
+    runs-on: ubuntu-latest
+    # A custom `if:` replaces the default `if: success()` entirely, so
+    # test's success is checked explicitly here rather than assumed.
+    # `changes` only runs (and is only needed) on push — on workflow_dispatch
+    # it's skipped, and deploy proceeds anyway, ignoring its output.
+    if: always() && needs.test.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.lambda == 'true'))
     steps:
       - uses: actions/checkout@v7
 
@@ -79,11 +138,20 @@ jobs:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           TAG_PREFIX: ${{ steps.env.outputs.tag_prefix }}
         run: |
-          docker build -t "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}" .
-          docker push "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}"
-          if [ "$TAG_PREFIX" = "main" ]; then
-            docker tag "$REGISTRY/$ECR_REPOSITORY:${TAG_PREFIX}-${{ github.sha }}" "$REGISTRY/$ECR_REPOSITORY:latest"
-            docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+          set +e
+          TAG="${TAG_PREFIX}-${{ github.sha }}"
+          OUT=$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$TAG" 2>&1)
+          RC=$?
+          set -e
+          if [ $RC -eq 0 ]; then
+            echo "Image $TAG already pushed (job retry on the same commit) — skipping build/push. The repo is IMMUTABLE, so re-pushing the same tag would fail."
+          elif echo "$OUT" | grep -q "ImageNotFoundException"; then
+            docker build -t "$REGISTRY/$ECR_REPOSITORY:$TAG" .
+            docker push "$REGISTRY/$ECR_REPOSITORY:$TAG"
+          else
+            echo "describe-images failed for an unexpected reason (not \"image not found\"), refusing to guess whether it's safe to push:"
+            echo "$OUT"
+            exit 1
           fi
 
       - name: Update Lambda function code
@@ -101,9 +169,16 @@ jobs:
           fi
 
   release:
-    needs: deploy
+    needs: [test, deploy]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # deploy is legitimately skipped (not failed) on a main push that touches
+    # no lambda/ files — release must still run in that case, so this can't
+    # rely on the default `if: success()` gating, which treats a skipped
+    # `needs` job the same as a failed one. test.result is checked
+    # explicitly too: deploy.result == 'skipped' is ambiguous on its own
+    # between "no lambda changes" (fine, release should run) and "test
+    # failed so deploy's own condition never ran" (must not release).
+    if: always() && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled'
     permissions:
       contents: write
       pull-requests: write

@@ -1,0 +1,4 @@
+# Normalize all text files to LF in the repo and in the working tree.
+# Without this, editors on Windows rewrite files as CRLF and every touched
+# file shows up as a whole-file diff (see the 2026-09 line-ending cleanup).
+* text=auto eol=lf

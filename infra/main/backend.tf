@@ -12,11 +12,11 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.62"
     }
     vercel = {
       source  = "vercel/vercel"
-      version = "~> 1.0"
+      version = "~> 5.15"
     }
     random = {
       source  = "hashicorp/random"
