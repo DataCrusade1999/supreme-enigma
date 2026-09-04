@@ -22,7 +22,7 @@ export default function ProjectsPage() {
               aria-hidden="true"
               className="absolute inset-0 origin-left scale-x-0 bg-accent/10 transition-transform duration-200 ease-out group-hover:scale-x-100 motion-reduce:transition-none"
             />
-            <div className="relative grid grid-cols-12 gap-4 py-7 transition-[padding] duration-200 ease-out group-hover:pl-3 motion-reduce:transition-none">
+            <div className="relative grid grid-cols-12 gap-6 py-7 transition-[padding] duration-200 ease-out group-hover:pl-3 motion-reduce:transition-none">
               <span className="col-span-2 text-sm tabular-nums text-muted md:col-span-1">
                 {String(index + 1).padStart(2, "0")}
               </span>
