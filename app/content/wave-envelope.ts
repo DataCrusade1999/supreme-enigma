@@ -14,3 +14,15 @@ export const BODY = [
 ];
 export const WAVE = [...HEAD, ...BODY, ...HEAD];
 export const PEAK = 78;
+
+/**
+ * Head and tail bars take the accent, peaks take the peak colour, the rest the
+ * ink — shared so the linear figure on the home page and LoopRing's circle
+ * cannot drift apart. See the design spec §5.
+ */
+export function barClass(height: number, index: number) {
+  if (height >= PEAK) return "bg-peak";
+  if (index < HEAD.length || index >= HEAD.length + BODY.length)
+    return "bg-accent";
+  return "bg-fg/25";
+}

@@ -178,3 +178,69 @@ p {
     animation: none;
   }
 }
+
+/*
+ * LoopRing's hand, on the same 9s linear clock as .playhead so the ring and the
+ * waveform stay in phase when both are on screen. `rotate` rather than a
+ * `transform` rotation: the hand is positioned with inset utilities, but the
+ * bars around it compose their own transforms, and keeping the two properties
+ * separate means neither can clobber the other.
+ */
+@keyframes ring-hand {
+  from {
+    rotate: -90deg;
+  }
+  to {
+    rotate: 270deg;
+  }
+}
+
+.ring-hand {
+  transform-origin: left center;
+  rotate: -90deg;
+  animation: ring-hand 9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-hand {
+    animation: none;
+  }
+}
+
+/*
+ * The seam mark, visible for ~3% of the cycle as the wrap passes twelve
+ * o'clock — split either side of the wrap so the flash is centred on it rather
+ * than trailing it. Reduced motion leaves the mark standing.
+ */
+@keyframes ring-seam {
+  0% {
+    opacity: 1;
+  }
+  1.5% {
+    opacity: 1;
+  }
+  1.51% {
+    opacity: 0;
+  }
+  98.49% {
+    opacity: 0;
+  }
+  98.5% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.ring-seam {
+  opacity: 0;
+  animation: ring-seam 9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-seam {
+    animation: none;
+    opacity: 1;
+  }
+}
