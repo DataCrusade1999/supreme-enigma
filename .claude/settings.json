@@ -1,5 +1,6 @@
 {
   "env": {
-    "CLAUDE_CODE_NEW_INIT": "1"
+    "CLAUDE_CODE_NEW_INIT": "1",
+    "AWS_PROFILE": "personal"
   }
 }

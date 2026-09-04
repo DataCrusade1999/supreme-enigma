@@ -1,0 +1,16 @@
+name: Chore
+description: Maintenance work - deps, refactors, infra cleanup, docs
+labels: []
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What needs doing?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now?
+    validations:
+      required: false

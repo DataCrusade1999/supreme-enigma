@@ -31,23 +31,23 @@ Every code snippet, file path, and API call in this plan was verified against th
 
 **Interfaces:** none — this task has no code dependents, it's a prerequisite for the human's later manual setup step (not part of this plan) to be safe.
 
-- [ ] **Step 1: Confirm the gap**
+- [x] **Step 1: Confirm the gap**
 
 Run: `cd app && cat .gitignore`
 Expected output includes `node_modules/`, `.next/`, `.env*.local` — and does **not** include a bare `.env` entry. (`.env*.local` matches `.env.local`, `.env.production.local`, etc. — it does not match plain `.env`.)
 
-- [ ] **Step 2: Add the missing entry**
+- [x] **Step 2: Add the missing entry**
 
 In `app/.gitignore`, add a new line: `.env`
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `cd app && touch .env && git check-ignore -q .env && echo "ignored" || echo "NOT ignored"`
 Expected: `ignored`
 
 Run: `cd app && rm .env`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/.gitignore
@@ -69,13 +69,13 @@ git commit -m "chore: gitignore plain .env, not just .env*.local"
 - Produces: `getReader(): Reader` from `app/lib/keystatic-reader.ts` — every later task that reads blog content (Task 7) imports this, not `createReader` directly.
 - Produces: the `blog` collection schema (`title: string`, `date: string | null`, `summary: string`, `tags: readonly string[]`, `content: () => Promise<string>`) — Tasks 6 and 7 depend on exactly these field names and shapes.
 
-- [ ] **Step 1: Install dependencies**
+- [x] **Step 1: Install dependencies**
 
 ```bash
 cd app && npm install @keystatic/core @keystatic/next @markdoc/markdoc next-mdx-remote
 ```
 
-- [ ] **Step 2: Create the Keystatic config**
+- [x] **Step 2: Create the Keystatic config**
 
 Create `app/keystatic.config.ts`:
 
@@ -105,7 +105,7 @@ export default config({
 });
 ```
 
-- [ ] **Step 3: Write the failing reader test**
+- [x] **Step 3: Write the failing reader test**
 
 Create `app/lib/keystatic-reader.test.ts`:
 
@@ -130,12 +130,12 @@ describe("getReader", () => {
 });
 ```
 
-- [ ] **Step 4: Run it to verify it fails**
+- [x] **Step 4: Run it to verify it fails**
 
 Run: `cd app && npx vitest run lib/keystatic-reader.test.ts`
 Expected: FAIL — `Cannot find module './keystatic-reader'`
 
-- [ ] **Step 5: Implement the repo-rooted reader**
+- [x] **Step 5: Implement the repo-rooted reader**
 
 Create `app/lib/keystatic-reader.ts`:
 
@@ -151,7 +151,7 @@ export function getReader() {
 
 This resolves one directory above `process.cwd()` — `app/` locally (`npm run dev`/`npm test` both run from `app/`) and on Vercel (`root_directory = "app"`) — landing on the repo root, matching where Keystatic's GitHub-mode API writes (`content/blog/*`, always repo-root-relative regardless of Vercel's root-directory setting).
 
-- [ ] **Step 6: Create the seed post**
+- [x] **Step 6: Create the seed post**
 
 Create `content/blog/hello-world.mdx` **at the repo root** (i.e. `E:\Personal\looper\content\blog\hello-world.mdx` if you're in the main checkout, or `<worktree-root>/content/blog/hello-world.mdx` — a sibling to this branch's `app/` directory, not inside it):
 
@@ -171,12 +171,12 @@ plain file in this repo, committed through
 
 This is real, shipped seed content (not a hidden test fixture) — it both proves the read pipeline works end-to-end and gives the blog a non-empty starting point. The frontmatter above is Keystatic's own file format for this collection (YAML frontmatter + MDX body, per `format: { contentField: 'content' }`).
 
-- [ ] **Step 7: Run it to verify it passes**
+- [x] **Step 7: Run it to verify it passes**
 
 Run: `cd app && npx vitest run lib/keystatic-reader.test.ts`
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/keystatic.config.ts app/lib/keystatic-reader.ts app/lib/keystatic-reader.test.ts app/package.json app/package-lock.json content/blog/hello-world.mdx
@@ -195,7 +195,7 @@ git commit -m "feat: add Keystatic config, repo-rooted reader, and a seed blog p
 
 **Interfaces:** none — this is Keystatic's own boilerplate wiring, verified by the build succeeding and the route appearing in the build's route table, not by a unit test (it's a third-party editor UI, not application logic this project owns — per the phase-2 spec's testing section).
 
-- [ ] **Step 1: Create the admin app entry point**
+- [x] **Step 1: Create the admin app entry point**
 
 Create `app/app/keystatic/keystatic.ts`:
 
@@ -208,7 +208,7 @@ import config from "../../keystatic.config";
 export default makePage(config);
 ```
 
-- [ ] **Step 2: Create the admin layout**
+- [x] **Step 2: Create the admin layout**
 
 Create `app/app/keystatic/layout.tsx`:
 
@@ -220,7 +220,7 @@ export default function Layout() {
 }
 ```
 
-- [ ] **Step 3: Create the required catch-all page**
+- [x] **Step 3: Create the required catch-all page**
 
 Create `app/app/keystatic/[[...params]]/page.tsx`:
 
@@ -230,7 +230,7 @@ export default function Page() {
 }
 ```
 
-- [ ] **Step 4: Create the API route handler**
+- [x] **Step 4: Create the API route handler**
 
 Create `app/app/api/keystatic/[...params]/route.ts`:
 
@@ -241,7 +241,7 @@ import config from "../../../../keystatic.config";
 export const { POST, GET } = makeRouteHandler({ config });
 ```
 
-- [ ] **Step 5: Run the full test suite and build**
+- [x] **Step 5: Run the full test suite and build**
 
 Run: `cd app && npm test`
 Expected: PASS — no existing test touches these new files.
@@ -249,7 +249,7 @@ Expected: PASS — no existing test touches these new files.
 Run: `cd app && npm run lint && npm run build`
 Expected: both succeed. The build's route table should list `/keystatic`, `/keystatic/[[...params]]`, and `/api/keystatic/[...params]`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/app/keystatic app/app/api/keystatic
@@ -267,7 +267,7 @@ git commit -m "feat: add Keystatic admin UI and API route"
 **Interfaces:**
 - Consumes: `isGatedPath(pathname: string): boolean` — unchanged signature, just new gated prefixes.
 
-- [ ] **Step 1: Add the failing test cases**
+- [x] **Step 1: Add the failing test cases**
 
 In `app/lib/route-gate.test.ts`, add these cases to the existing `it.each` table (keep all existing cases):
 
@@ -277,12 +277,12 @@ In `app/lib/route-gate.test.ts`, add these cases to the existing `it.each` table
     ["/api/keystatic/github/oauth/callback", true],
 ```
 
-- [ ] **Step 2: Run it to verify the new cases fail**
+- [x] **Step 2: Run it to verify the new cases fail**
 
 Run: `cd app && npx vitest run lib/route-gate.test.ts`
 Expected: FAIL — the 3 new cases return `false` (not yet gated).
 
-- [ ] **Step 3: Add the new gated prefixes**
+- [x] **Step 3: Add the new gated prefixes**
 
 In `app/lib/route-gate.ts`, change:
 
@@ -294,17 +294,17 @@ to:
 const GATED_PREFIXES = ["/tools/bgm-looper", "/api/looper", "/keystatic", "/api/keystatic"];
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `cd app && npx vitest run lib/route-gate.test.ts`
 Expected: PASS — all cases (old and new) green.
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `cd app && npm test`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/lib/route-gate.ts app/lib/route-gate.test.ts
@@ -324,7 +324,7 @@ git commit -m "feat: gate /keystatic and /api/keystatic/* behind the existing pa
 
 Context: today, any unauthenticated request to a gated path redirects to `/tools/bgm-looper/login`, and logging in always sends the user to `/tools/bgm-looper` — so visiting `/keystatic` while logged out currently lands the user back on the *tool* after logging in, not `/keystatic`. This task carries the original path through as a `next` query param.
 
-- [ ] **Step 1: Update the middleware's redirect**
+- [x] **Step 1: Update the middleware's redirect**
 
 In `app/middleware.ts`, change:
 
@@ -338,7 +338,7 @@ to:
     return NextResponse.redirect(loginUrl);
 ```
 
-- [ ] **Step 2: Write the failing login page test**
+- [x] **Step 2: Write the failing login page test**
 
 Create `app/app/tools/bgm-looper/login/page.test.tsx`:
 
@@ -391,12 +391,12 @@ describe("LoginPage", () => {
 });
 ```
 
-- [ ] **Step 3: Run it to verify it fails**
+- [x] **Step 3: Run it to verify it fails**
 
 Run: `cd app && npx vitest run app/tools/bgm-looper/login/page.test.tsx`
 Expected: FAIL — the current page always calls `router.push("/tools/bgm-looper")` regardless of `next`.
 
-- [ ] **Step 4: Update the login page**
+- [x] **Step 4: Update the login page**
 
 Replace the contents of `app/app/tools/bgm-looper/login/page.tsx`:
 
@@ -457,12 +457,12 @@ export default function LoginPage() {
 
 `useSearchParams()` requires a `<Suspense>` boundary in the Next.js App Router (otherwise the build emits a warning and the route can't be statically analyzed) — this page was already effectively dynamic (behind auth, form-driven), so this has no behavioral downside.
 
-- [ ] **Step 5: Run it to verify it passes**
+- [x] **Step 5: Run it to verify it passes**
 
 Run: `cd app && npx vitest run app/tools/bgm-looper/login/page.test.tsx`
 Expected: PASS — all 3 cases green.
 
-- [ ] **Step 6: Run the full suite and build**
+- [x] **Step 6: Run the full suite and build**
 
 Run: `cd app && npm test`
 Expected: PASS.
@@ -470,7 +470,7 @@ Expected: PASS.
 Run: `cd app && npm run lint && npm run build`
 Expected: both succeed, no `useSearchParams` Suspense warning.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/middleware.ts "app/app/tools/bgm-looper/login/page.tsx" "app/app/tools/bgm-looper/login/page.test.tsx"
@@ -491,7 +491,7 @@ git commit -m "feat: carry a next redirect param through login so /keystatic ret
 - Produces: `BlogListPost` type (`{slug, title, date, summary, tags}`, all strings except `tags: readonly string[]`) and `BlogList({posts: BlogListPost[]})` — Task 7's `/blog` page must build this exact shape from the reader's output.
 - Produces: `PostBody({title, date, children}: {title: string; date: string; children: React.ReactNode})` — deliberately takes `children` rather than an MDX source string, so `next-mdx-remote/rsc`'s `<MDXRemote>` (untestable under Vitest) is never imported inside a tested component — Task 7's `/blog/[slug]` page passes `<MDXRemote source={mdxSource} />` as `PostBody`'s `children`.
 
-- [ ] **Step 1: Write the failing BlogList test**
+- [x] **Step 1: Write the failing BlogList test**
 
 Create `app/components/blog/BlogList.test.tsx`:
 
@@ -525,12 +525,12 @@ describe("BlogList", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && npx vitest run components/blog/BlogList.test.tsx`
 Expected: FAIL — `Cannot find module './BlogList'`
 
-- [ ] **Step 3: Implement BlogList**
+- [x] **Step 3: Implement BlogList**
 
 Create `app/components/blog/BlogList.tsx`:
 
@@ -584,12 +584,12 @@ export function BlogList({ posts }: { posts: BlogListPost[] }) {
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `cd app && npx vitest run components/blog/BlogList.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Write the failing PostBody test**
+- [x] **Step 5: Write the failing PostBody test**
 
 Create `app/components/blog/PostBody.test.tsx`:
 
@@ -612,12 +612,12 @@ describe("PostBody", () => {
 });
 ```
 
-- [ ] **Step 6: Run it to verify it fails**
+- [x] **Step 6: Run it to verify it fails**
 
 Run: `cd app && npx vitest run components/blog/PostBody.test.tsx`
 Expected: FAIL — `Cannot find module './PostBody'`
 
-- [ ] **Step 7: Implement PostBody**
+- [x] **Step 7: Implement PostBody**
 
 Create `app/components/blog/PostBody.tsx`:
 
@@ -647,17 +647,17 @@ export function PostBody({
 
 Note this file imports nothing from `next-mdx-remote` — per the Global Constraints, that stays confined to Task 7's untested async `page.tsx`.
 
-- [ ] **Step 8: Run it to verify it passes**
+- [x] **Step 8: Run it to verify it passes**
 
 Run: `cd app && npx vitest run components/blog/PostBody.test.tsx`
 Expected: PASS
 
-- [ ] **Step 9: Run the full suite**
+- [x] **Step 9: Run the full suite**
 
 Run: `cd app && npm test`
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add app/components/blog
@@ -677,7 +677,7 @@ git commit -m "feat: add BlogList and PostBody presentational components"
 
 These two files are async Server Components (they `await` the reader) and are **not unit-tested directly** — per the Global Constraints, React Testing Library cannot render an async component, and this is exactly why Task 6 exists: all the testable logic already lives in `BlogList`/`PostBody`. These pages are thin read-then-render wrappers, verified by the build succeeding (Step 3) — which exercises the real reader against Task 2's real seed post, giving genuine end-to-end proof the content-path fix works, not just a unit-level assertion.
 
-- [ ] **Step 1: Implement the blog list page**
+- [x] **Step 1: Implement the blog list page**
 
 Create `app/app/(site)/blog/page.tsx`:
 
@@ -712,7 +712,7 @@ export default async function BlogPage() {
 }
 ```
 
-- [ ] **Step 2: Implement the single-post page**
+- [x] **Step 2: Implement the single-post page**
 
 Create `app/app/(site)/blog/[slug]/page.tsx`:
 
@@ -751,7 +751,7 @@ export default async function PostPage({
 
 `params` is a `Promise` here (not a plain object) — required by Next.js 15's App Router API, which this project is on (`"next": "^15.0.0"` in `app/package.json`).
 
-- [ ] **Step 3: Run the full suite, lint, and build**
+- [x] **Step 3: Run the full suite, lint, and build**
 
 Run: `cd app && npm test`
 Expected: PASS — no new test files in this task; existing ones (including Task 6's) still pass.
@@ -759,7 +759,7 @@ Expected: PASS — no new test files in this task; existing ones (including Task
 Run: `cd app && npm run lint && npm run build`
 Expected: both succeed. The build output must show `/blog` and `/blog/hello-world` (from `generateStaticParams`, using Task 2's seed post) as statically generated routes — if `hello-world` is missing from the build's route list, the content-path resolution is broken and must be fixed before continuing (re-check Task 2's `getReader()` implementation against the Global Constraints' explanation).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add "app/app/(site)/blog"
@@ -774,7 +774,7 @@ git commit -m "feat: add /blog and /blog/[slug] pages"
 - Modify: `app/components/site/SiteHeader.tsx`
 - Modify: `app/components/site/SiteHeader.test.tsx`
 
-- [ ] **Step 1: Add the failing assertion**
+- [x] **Step 1: Add the failing assertion**
 
 In `app/components/site/SiteHeader.test.tsx`, add inside the existing test:
 
@@ -782,12 +782,12 @@ In `app/components/site/SiteHeader.test.tsx`, add inside the existing test:
     expect(screen.getByRole("link", { name: "Blog" })).toHaveAttribute("href", "/blog");
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd app && npx vitest run components/site/SiteHeader.test.tsx`
 Expected: FAIL — no "Blog" link exists yet.
 
-- [ ] **Step 3: Add the nav link**
+- [x] **Step 3: Add the nav link**
 
 In `app/components/site/SiteHeader.tsx`, change:
 
@@ -812,17 +812,17 @@ const NAV_LINKS = [
 ];
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `cd app && npx vitest run components/site/SiteHeader.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `cd app && npm test`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/components/site/SiteHeader.tsx app/components/site/SiteHeader.test.tsx
@@ -836,11 +836,11 @@ git commit -m "feat: add Blog to site navigation"
 **Files:**
 - Modify: `CHANGELOG.md`
 
-- [ ] **Step 1: Read the existing format**
+- [x] **Step 1: Read the existing format**
 
 Run: `cat CHANGELOG.md` (or Read the file) — match its existing `## [Unreleased]` heading style and `### Added`/`### Changed` subsection/bullet format exactly.
 
-- [ ] **Step 2: Add entries**
+- [x] **Step 2: Add entries**
 
 Under `## [Unreleased]`, add (adjust subsection headers to match whatever's already there — create `### Added` if it doesn't exist yet):
 
@@ -850,7 +850,7 @@ Under `## [Unreleased]`, add (adjust subsection headers to match whatever's alre
   (behind the existing password). Public posts at `/blog`.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add CHANGELOG.md
@@ -863,17 +863,17 @@ git commit -m "docs: add changelog entry for the blog"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full automated test suite**
+- [x] **Step 1: Run the full automated test suite**
 
 Run: `cd app && npm test`
 Expected: PASS — all tests across `lib/`, `components/blog/`, `components/site/`, `app/(site)/blog/*`, and the login page green.
 
-- [ ] **Step 2: Run lint and build**
+- [x] **Step 2: Run lint and build**
 
 Run: `cd app && npm run lint && npm run build`
 Expected: both succeed. Confirm the build's route table includes `/blog`, `/blog/hello-world`, `/keystatic`, `/keystatic/[[...params]]`.
 
-- [ ] **Step 3: Start the dev server and verify gating via curl**
+- [x] **Step 3: Start the dev server and verify gating via curl**
 
 Run: `cd app && APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev`
 
@@ -885,7 +885,7 @@ Then verify the login round-trip carries `next` correctly: POST `/api/login` wit
 
 Stop the dev server when done.
 
-- [ ] **Step 4: Report the manual setup steps to the human**
+- [x] **Step 4: Report the manual setup steps to the human**
 
 This step cannot be automated — report it as the final output of this plan, not as a commit. Tell the human:
 

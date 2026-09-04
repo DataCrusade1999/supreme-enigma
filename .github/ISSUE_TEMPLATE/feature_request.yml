@@ -1,0 +1,44 @@
+name: Feature / enhancement
+description: A new feature, tool, or improvement to build
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should exist, in a sentence or two?
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why does this matter? What problem does it solve?
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: Design spec
+      description: Link/path to the design spec, if one exists (docs/superpowers/specs/...)
+      placeholder: docs/superpowers/specs/YYYY-MM-DD-topic-design.md
+    validations:
+      required: false
+  - type: input
+    id: plan
+    attributes:
+      label: Implementation plan
+      description: Link/path to the implementation plan, if one exists (docs/superpowers/plans/...)
+      placeholder: docs/superpowers/plans/YYYY-MM-DD-topic-plan.md
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How do we know this is done?
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true

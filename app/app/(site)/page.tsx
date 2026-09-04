@@ -1,80 +1,120 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { barClass, WAVE } from "../../content/wave-envelope";
+import { projects } from "../../content/projects";
+import { FeaturedTool } from "../../components/site/FeaturedTool";
 
-/*
- * A stylised envelope, not a real analysis. The first and last eight bars are
- * the same eight values, which is what a seamless loop actually looks like:
- * the tail is already the head. Bars over PEAK read as peaks.
- */
-const HEAD = [18, 34, 27, 52, 41, 63, 38, 46];
-const BODY = [
-  30, 47, 71, 55, 82, 61, 44, 58, 73, 49, 36, 66, 88, 70, 52, 39, 57, 80, 62,
-  45, 33, 51, 68, 84, 59, 42, 30, 48, 65, 77, 54, 40, 62, 86, 69, 47, 35, 53,
-  44, 29,
+// The three numbers the deployed pipeline actually runs on, quoted from
+// lambda/src/looper/: pipeline.py's `target_lufs=-14.0` and `top_db=40.0`, and
+// crossfade.py's `fade_sec=0.05`.
+const SETTINGS = [
+  { label: "Loudness target", value: "−14.0 LUFS" },
+  { label: "Crossfade", value: "50 ms" },
+  { label: "Silence trim", value: "top_db 40" },
 ];
-const WAVE = [...HEAD, ...BODY, ...HEAD];
-const PEAK = 78;
-
-function barClass(height: number, index: number) {
-  if (height >= PEAK) return "bg-peak";
-  if (index < HEAD.length || index >= HEAD.length + BODY.length)
-    return "bg-accent";
-  return "bg-fg/25";
-}
 
 export default function HomePage() {
+  // Same narrowing as the project detail page: the slug is looked up rather
+  // than hardcoded, and a missing one is a 404, never a placeholder.
+  const featured = projects.find((entry) => entry.slug === "bgm-looper");
+  if (!featured) {
+    notFound();
+  }
+
   return (
     <div>
-      <section>
-        <p className="font-mono text-[0.6875rem] uppercase tracking-[0.2em] text-muted">
-          Software engineer
-        </p>
-        <h1 className="mt-4 font-mono text-4xl font-semibold tracking-tight sm:text-5xl">
-          Ashutosh Pandey
-        </h1>
-        <p className="mt-6 max-w-xl text-base leading-relaxed text-fg/80 sm:text-lg">
-          I build small, finished tools end to end — the interface, the signal
-          processing underneath it, and the infrastructure it runs on.
-        </p>
-      </section>
+      {/* No masthead here — the name is the masthead. It shares one band with
+       * the featured tool so the waveform below still clears a 900px fold. */}
+      <div className="grid grid-cols-12 gap-6">
+        <section className="col-span-12 md:col-span-5">
+          <p className="text-xs uppercase tracking-[0.14em] text-muted">
+            Software engineer
+          </p>
+          <h1 className="mt-4 font-display text-[4.125rem] leading-[0.95] md:text-[6.5rem]">
+            <span className="block">Ashutosh</span>{" "}
+            <span className="block">Pandey</span>
+          </h1>
+        </section>
 
-      <figure className="mt-16">
-        <div className="border border-line bg-surface px-4 py-6 sm:px-6 sm:py-8">
-          <div className="relative flex h-24 items-center gap-[2px] sm:h-32">
-            {WAVE.map((height, index) => (
-              <span
-                key={index}
-                aria-hidden="true"
-                style={{ height: `${height}%` }}
-                className={`min-w-px flex-1 ${barClass(height, index)}`}
-              />
-            ))}
-            <span
-              aria-hidden="true"
-              className="playhead absolute inset-y-0 w-px bg-fg"
-            />
-          </div>
+        <div className="col-span-12 mt-10 md:col-span-6 md:col-start-7 md:mt-0">
+          <FeaturedTool project={featured} />
         </div>
-        <figcaption className="mt-4 font-mono text-[0.6875rem] leading-relaxed tracking-[0.04em] text-muted">
+      </div>
+
+      <figure className="mt-14">
+        {/* Rules, not cards: the bars stand on a 2px baseline rather than
+         * sitting inside a bordered box. */}
+        <div className="relative flex h-24 items-end gap-[2px] border-b-2 border-rule-heavy sm:h-32">
+          {/* The played region, tinted at 10% accent on the same 9s linear
+           * clock as the playhead, so both wrap together without a seam. */}
           <span
             aria-hidden="true"
-            className="mr-2 inline-block h-2 w-2 bg-accent align-middle"
+            className="played-tint absolute inset-y-0 left-0 bg-accent/10"
           />
+          {WAVE.map((height, index) => (
+            <span
+              key={index}
+              aria-hidden="true"
+              data-wave-bar
+              // `--bar-index` drives the 8ms-per-bar stagger; the 560ms rise
+              // and the stagger itself both live in globals.css.
+              style={
+                {
+                  height: `${height}%`,
+                  "--bar-index": index,
+                } as React.CSSProperties
+              }
+              className={`bar-rise relative min-w-px flex-1 ${barClass(height, index)}`}
+            />
+          ))}
+          <span
+            aria-hidden="true"
+            className="playhead absolute inset-y-0 w-px bg-fg"
+          />
+        </div>
+        <div className="mt-3 flex justify-between text-xs uppercase tracking-[0.14em] text-accent">
+          <span>Head</span>
+          <span>Tail</span>
+        </div>
+        <figcaption className="mt-6 max-w-[46ch] text-sm leading-relaxed text-muted">
           The bars at each end are identical: the tail already is the head, so
           the loop closes without a seam. Finding that point in a real track is
           the whole job of BGM Looper.
         </figcaption>
       </figure>
 
-      <div className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-3 font-mono text-[0.6875rem] uppercase tracking-[0.16em]">
-        <Link
-          href="/tools/bgm-looper"
-          className="bg-accent px-3 py-2 font-semibold text-bg transition-opacity hover:opacity-85"
-        >
-          Open the tool
-        </Link>
+      <div className="mt-14 grid grid-cols-12 gap-6">
+        <p className="col-span-12 text-base leading-relaxed text-fg/80 md:col-span-5">
+          I build small, finished tools end to end — the interface, the signal
+          processing underneath it, and the infrastructure it runs on.
+        </p>
+
+        <table className="col-span-12 mt-8 w-full border-collapse text-sm md:col-span-5 md:col-start-8 md:mt-0">
+          <caption className="border-b border-line pb-2 text-left text-xs uppercase tracking-[0.14em] text-muted">
+            Pipeline settings
+          </caption>
+          <tbody>
+            {SETTINGS.map((setting) => (
+              <tr key={setting.label} className="border-b border-line">
+                <th
+                  scope="row"
+                  className="py-3 text-left font-normal text-muted"
+                >
+                  {setting.label}
+                </th>
+                <td className="py-3 text-right tabular-nums">
+                  {setting.value}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-12 text-[0.6875rem] uppercase tracking-[0.16em]">
         <Link
           href="/projects"
-          className="border-b border-line pb-0.5 text-muted transition-colors hover:border-accent hover:text-fg"
+          className="inline-flex min-h-11 items-center border-b border-line pb-0.5 text-muted transition-colors duration-200 ease-out hover:border-accent hover:text-fg motion-reduce:transition-none"
         >
           All projects
         </Link>

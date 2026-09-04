@@ -42,7 +42,7 @@
 **Interfaces:**
 - Produces: `app/` (Next.js workspace), `lambda/` (Python DSP package `looper`), `infra/` (Terraform layers) — the three top-level directories every later task writes into.
 
-- [ ] **Step 1: Create root `.gitignore`**
+- [x] **Step 1: Create root `.gitignore`**
 
 ```gitignore
 node_modules/
@@ -57,7 +57,7 @@ __pycache__/
 *.tfvars
 ```
 
-- [ ] **Step 2: Scaffold the Next.js app**
+- [x] **Step 2: Scaffold the Next.js app**
 
 `app/package.json`:
 ```json
@@ -137,7 +137,7 @@ node_modules/
 .env*.local
 ```
 
-- [ ] **Step 3: Scaffold the Lambda Python package**
+- [x] **Step 3: Scaffold the Lambda Python package**
 
 `lambda/requirements.txt`:
 ```
@@ -149,16 +149,16 @@ pyloudnorm>=0.1.1,<0.2
 
 `lambda/src/looper/__init__.py`: empty file.
 
-- [ ] **Step 4: Create empty Terraform layer directories**
+- [x] **Step 4: Create empty Terraform layer directories**
 
 `infra/bootstrap/.gitkeep` and `infra/main/.gitkeep`: empty files (placeholders so git tracks the directories; removed once real `.tf` files land in Tasks 9–12).
 
-- [ ] **Step 5: Install app dependencies**
+- [x] **Step 5: Install app dependencies**
 
 Run: `cd app && npm install`
 Expected: `node_modules/` created, no errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app lambda infra .gitignore
@@ -176,7 +176,7 @@ git commit -m "chore: scaffold app, lambda, and infra directories"
 **Interfaces:**
 - Produces: `normalize_loudness(y: np.ndarray, sr: int, target_lufs: float = -14.0, true_peak_ceiling_db: float = -1.0) -> np.ndarray` — accepts shape `(n_samples,)` or `(n_samples, n_channels)`, returns same shape.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `lambda/tests/test_loudness.py`:
 ```python
@@ -219,12 +219,12 @@ def test_normalize_preserves_stereo_shape():
     assert out.shape == y.shape
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd lambda && pip install -r requirements.txt pytest && pytest tests/test_loudness.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'looper.loudness'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `lambda/src/looper/loudness.py`:
 ```python
@@ -252,12 +252,12 @@ def normalize_loudness(
     return y_norm
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd lambda && pytest tests/test_loudness.py -v`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lambda/src/looper/loudness.py lambda/tests/test_loudness.py lambda/requirements.txt
@@ -275,7 +275,7 @@ git commit -m "feat(lambda): add loudness normalization"
 **Interfaces:**
 - Produces: `trim_silence(mono: np.ndarray, top_db: float = 40.0) -> tuple[int, int]` — returns `(start_sample, end_sample)` indices into `mono`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `lambda/tests/test_trim.py`:
 ```python
@@ -297,12 +297,12 @@ def test_trim_removes_leading_and_trailing_silence():
     assert end > start
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd lambda && pytest tests/test_trim.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'looper.trim'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `lambda/src/looper/trim.py`:
 ```python
@@ -315,12 +315,12 @@ def trim_silence(mono: np.ndarray, top_db: float = 40.0) -> tuple[int, int]:
     return int(index[0]), int(index[1])
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd lambda && pytest tests/test_trim.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lambda/src/looper/trim.py lambda/tests/test_trim.py
@@ -338,7 +338,7 @@ git commit -m "feat(lambda): add silence trim"
 **Interfaces:**
 - Produces: `find_loop_point(mono: np.ndarray, sr: int, min_loop_sec: float = 2.0, window_sec: float = 0.05) -> tuple[int, int] | None` — returns `(start_sample, end_sample)` of the best-scoring beat-aligned loop region, or `None` if fewer than 2 beats are detected.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `lambda/tests/test_loop_point.py`:
 ```python
@@ -377,12 +377,12 @@ def test_returns_none_with_no_beats():
     assert result is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd lambda && pytest tests/test_loop_point.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'looper.loop_point'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `lambda/src/looper/loop_point.py`:
 ```python
@@ -434,12 +434,12 @@ def find_loop_point(
     return best
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd lambda && pytest tests/test_loop_point.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lambda/src/looper/loop_point.py lambda/tests/test_loop_point.py
@@ -457,7 +457,7 @@ git commit -m "feat(lambda): add beat-aligned loop-point finder"
 **Interfaces:**
 - Produces: `crossfade_loop(y: np.ndarray, start: int, end: int, sr: int, fade_sec: float = 0.05) -> np.ndarray` — accepts `(n_samples,)` or `(n_samples, n_channels)`, returns the loop buffer with the seam blended (length `end - start - fade_len`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `lambda/tests/test_crossfade.py`:
 ```python
@@ -496,12 +496,12 @@ def test_crossfade_preserves_stereo_shape():
     assert out.shape == (sr - fade_len, 2)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd lambda && pytest tests/test_crossfade.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'looper.crossfade'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `lambda/src/looper/crossfade.py`:
 ```python
@@ -533,12 +533,12 @@ def crossfade_loop(
     return np.concatenate([blended, loop[fade_len:-fade_len]], axis=0)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd lambda && pytest tests/test_crossfade.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lambda/src/looper/crossfade.py lambda/tests/test_crossfade.py
@@ -557,7 +557,7 @@ git commit -m "feat(lambda): add equal-power seam crossfade"
 - Consumes: `normalize_loudness` (Task 2), `trim_silence` (Task 3), `find_loop_point` (Task 4), `crossfade_loop` (Task 5).
 - Produces: `process(input_path: str, output_path: str, target_lufs: float = -14.0) -> None` — reads any soundfile-readable input, writes a looped, format-matched file to `output_path` (caller must give `output_path` the same extension as the input).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `lambda/tests/test_pipeline.py`:
 ```python
@@ -596,12 +596,12 @@ def test_process_produces_shorter_looped_wav(tmp_path):
     assert out_info.frames > 0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd lambda && pytest tests/test_pipeline.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'looper.pipeline'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `lambda/src/looper/pipeline.py`:
 ```python
@@ -645,12 +645,12 @@ def process(input_path: str, output_path: str, target_lufs: float = -14.0) -> No
         os.remove(tmp_wav)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd lambda && pytest tests/test_pipeline.py -v`
 Expected: PASS (requires `ffmpeg` on PATH locally — install it if the run fails with `FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'`)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lambda/src/looper/pipeline.py lambda/tests/test_pipeline.py
@@ -669,7 +669,7 @@ git commit -m "feat(lambda): add pipeline orchestrator"
 - Consumes: `process(input_path, output_path)` (Task 6).
 - Produces: `handler(event: dict, context) -> dict` — `event` shape `{"bucket": str, "input_key": str, "output_key": str}`, returns `{"output_key": str}`. This is the exact contract the Terraform-provisioned Lambda and the `/api/process` route (Task 18) both rely on.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `lambda/tests/test_handler.py`:
 ```python
@@ -703,12 +703,12 @@ def test_handler_downloads_processes_and_uploads(monkeypatch):
     assert body == b"fake-audio-bytes-processed"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd lambda && pip install moto pytest && pytest tests/test_handler.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'looper.handler'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `lambda/src/looper/handler.py`:
 ```python
@@ -737,12 +737,12 @@ def handler(event: dict, context) -> dict:
     return {"output_key": output_key}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd lambda && pytest tests/test_handler.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lambda/src/looper/handler.py lambda/tests/test_handler.py
@@ -760,7 +760,7 @@ git commit -m "feat(lambda): add S3-wired Lambda handler"
 - Consumes: `lambda/src/looper/` package (Tasks 2–7), `lambda/requirements.txt`.
 - Produces: a Dockerfile with `looper.handler.handler` as the Lambda entrypoint — Task 13's GitHub Actions workflow is what actually builds and pushes this image to ECR. A local Docker build is optional here (not required to proceed): Docker is slow on this machine, so CI is the authoritative build/verify step.
 
-- [ ] **Step 1: Write the Dockerfile**
+- [x] **Step 1: Write the Dockerfile**
 
 `lambda/Dockerfile`:
 ```dockerfile
@@ -780,18 +780,18 @@ COPY src/looper ${LAMBDA_TASK_ROOT}/looper
 CMD ["looper.handler.handler"]
 ```
 
-- [ ] **Step 2: Structural review (no Docker required)**
+- [x] **Step 2: Structural review (no Docker required)**
 
 Read through the Dockerfile and confirm: the base image tag (`public.ecr.aws/lambda/python:3.12`) matches the Python version used elsewhere in `lambda/`; the `COPY src/looper ...` path matches the package layout from Task 1 (`lambda/src/looper/`); the `CMD` module path (`looper.handler.handler`) matches Task 7's `handler.py` location and function name exactly.
 
-- [ ] **Step 3: (Optional) local build sanity-check**
+- [x] **Step 3: (Optional) local build sanity-check**
 
 Skip this step if Docker is slow/unavailable on this machine — Task 13's CI run is the authoritative build. If you do want to check locally:
 
 Run (optional): `cd lambda && docker build -t bgm-looper-lambda:local .`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lambda/Dockerfile
@@ -809,7 +809,7 @@ git commit -m "feat(lambda): add container image for Lambda deployment"
 **Interfaces:**
 - Produces: an S3 bucket named `bgm-looper-tf-state-<account_id>`, output `state_bucket_name` — Task 10's `backend.tf` hardcodes this name (fill in your real account ID after Step 3 below).
 
-- [ ] **Step 1: Write the bootstrap config**
+- [x] **Step 1: Write the bootstrap config**
 
 `infra/bootstrap/main.tf`:
 ```hcl
@@ -867,19 +867,19 @@ output "state_bucket_name" {
 }
 ```
 
-- [ ] **Step 2: Validate and plan**
+- [x] **Step 2: Validate and plan**
 
 Prerequisite: AWS credentials for your personal account configured (`aws configure` or `AWS_PROFILE`).
 
 Run: `cd infra/bootstrap && terraform init && terraform validate && terraform plan`
 Expected: validate succeeds; plan shows 4 resources to add (bucket, versioning, encryption, public-access-block), 0 to change/destroy.
 
-- [ ] **Step 3: Apply (one-time, manual)**
+- [x] **Step 3: Apply (one-time, manual)**
 
 Run: `terraform apply`
 Expected: after confirming, 4 resources created; output `state_bucket_name` printed. Note this value — Task 10 needs it verbatim.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git rm infra/bootstrap/.gitkeep
@@ -899,7 +899,7 @@ git commit -m "feat(infra): add Terraform bootstrap layer for state bucket"
 - Produces: `aws_s3_bucket.audio` (output `audio_bucket_name`) — Task 12's Lambda IAM policy and Task 15's `S3_BUCKET_NAME` env var both reference this resource.
 - Consumes: `state_bucket_name` output from Task 9.
 
-- [ ] **Step 1: Write backend and provider config**
+- [x] **Step 1: Write backend and provider config**
 
 `infra/main/backend.tf` (replace `<ACCOUNT_ID>` with the real value from Task 9, Step 3):
 ```hcl
@@ -971,7 +971,7 @@ variable "github_repo" {
 }
 ```
 
-- [ ] **Step 2: Write the S3 audio bucket**
+- [x] **Step 2: Write the S3 audio bucket**
 
 `infra/main/s3.tf`:
 ```hcl
@@ -1018,7 +1018,7 @@ output "audio_bucket_name" {
 }
 ```
 
-- [ ] **Step 3: Validate and plan**
+- [x] **Step 3: Validate and plan**
 
 Run: `cd infra/main && terraform init && terraform validate`
 Expected: validate succeeds (init will complain about missing `vercel_api_token`/`app_password`/`github_repo` only when running `plan`/`apply`, not `validate`).
@@ -1026,7 +1026,7 @@ Expected: validate succeeds (init will complain about missing `vercel_api_token`
 Run: `terraform plan -var="vercel_api_token=placeholder" -var="app_password=placeholder" -var="github_repo=youruser/looper"`
 Expected: plan shows 4 S3-related resources to add, 0 to change/destroy (Vercel/Lambda/IAM resources don't exist yet — added in later tasks).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git rm infra/main/.gitkeep
@@ -1046,7 +1046,7 @@ git commit -m "feat(infra): add Terraform main layer with S3 audio bucket"
 - Consumes: nothing new (only `var.project_name` from Task 10).
 - Produces: `aws_ecr_repository.looper` (output `ecr_repository_url`) — Task 12's CI-deploy IAM user policy references this repo's ARN, Task 13's CI workflow pushes images into it, and Task 14's Lambda function reads its URL for `image_uri`.
 
-- [ ] **Step 1: Write the ECR repo**
+- [x] **Step 1: Write the ECR repo**
 
 `infra/main/ecr.tf`:
 ```hcl
@@ -1056,7 +1056,7 @@ resource "aws_ecr_repository" "looper" {
 }
 ```
 
-- [ ] **Step 2: Add the output**
+- [x] **Step 2: Add the output**
 
 Add to `infra/main/outputs.tf`:
 ```hcl
@@ -1065,7 +1065,7 @@ output "ecr_repository_url" {
 }
 ```
 
-- [ ] **Step 3: Validate, plan, and apply**
+- [x] **Step 3: Validate, plan, and apply**
 
 Run: `cd infra/main && terraform validate`
 Expected: succeeds.
@@ -1076,7 +1076,7 @@ Expected: plan adds 1 resource (the ECR repo), 0 destroy. No `-target` needed �
 Run: `terraform apply` (same vars)
 Expected: ECR repo created.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add infra/main/ecr.tf infra/main/outputs.tf
@@ -1095,7 +1095,7 @@ git commit -m "feat(infra): add ECR repo for the Lambda container image"
 - Consumes: `aws_s3_bucket.audio` (Task 10), `aws_ecr_repository.looper` (Task 11).
 - Produces: `aws_iam_role.lambda_exec` and `local.lambda_function_name` / `local.lambda_function_arn` — Task 14 attaches the role to the Lambda function it creates, using the same name/ARN locals defined here. `aws_iam_user.vercel` + its access key — Task 15's Vercel env vars. `aws_iam_user.ci_deploy` + its access key — you manually copy these into GitHub Actions repository secrets before Task 13's workflow can run. Both IAM users' Lambda-related policy statements reference the function by its deterministic ARN (`local.lambda_function_arn`), not `aws_lambda_function.looper.arn`, because the function resource itself isn't created until Task 14 — this is what lets IAM be provisioned ahead of the image.
 
-- [ ] **Step 1: Write the Lambda execution role**
+- [x] **Step 1: Write the Lambda execution role**
 
 `infra/main/lambda.tf`:
 ```hcl
@@ -1137,7 +1137,7 @@ resource "aws_iam_role_policy" "lambda_s3" {
 }
 ```
 
-- [ ] **Step 2: Write the Vercel SA and CI deploy IAM users**
+- [x] **Step 2: Write the Vercel SA and CI deploy IAM users**
 
 `infra/main/iam.tf`:
 ```hcl
@@ -1214,7 +1214,7 @@ resource "aws_iam_user_policy" "ci_deploy" {
 
 Note: `ecr:GetAuthorizationToken` requires `Resource = "*"` — AWS doesn't support scoping this specific action to a repo ARN. It only grants the ability to obtain a login token; actual repo access is scoped by the second statement.
 
-- [ ] **Step 3: Add outputs**
+- [x] **Step 3: Add outputs**
 
 Add to `infra/main/outputs.tf`:
 ```hcl
@@ -1234,7 +1234,7 @@ output "ci_deploy_secret_access_key" {
 }
 ```
 
-- [ ] **Step 4: Validate, plan, and apply**
+- [x] **Step 4: Validate, plan, and apply**
 
 Run: `cd infra/main && terraform validate`
 Expected: succeeds.
@@ -1245,7 +1245,7 @@ Expected: plan adds the exec role + policy + attachment, both IAM users, both ac
 Run: `terraform apply` (same vars)
 Expected: resources created.
 
-- [ ] **Step 5: Copy the CI deploy credentials into GitHub Actions secrets**
+- [x] **Step 5: Copy the CI deploy credentials into GitHub Actions secrets**
 
 This is a manual, sensitive step — run these yourself and paste the values into GitHub (Settings → Secrets and variables → Actions → New repository secret), or use `gh secret set`:
 
@@ -1256,7 +1256,7 @@ terraform output -raw ci_deploy_secret_access_key
 ```
 Set these as repository secrets named `AWS_CI_ACCESS_KEY_ID` and `AWS_CI_SECRET_ACCESS_KEY`. Task 13's workflow cannot authenticate to AWS without them.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add infra/main/lambda.tf infra/main/iam.tf infra/main/outputs.tf
@@ -1274,7 +1274,7 @@ git commit -m "feat(infra): add Lambda execution role and Vercel/CI IAM users"
 - Consumes: `lambda/tests/`, `lambda/requirements.txt` (Tasks 2–7), `lambda/Dockerfile` (Task 8), `app/package.json` `test` script (Task 1), GitHub repo secrets `AWS_CI_ACCESS_KEY_ID` / `AWS_CI_SECRET_ACCESS_KEY` (Task 12, Step 5), the ECR repo and Lambda function names (`bgm-looper-lambda`, `bgm-looper-processor` — must match `var.project_name` default `bgm-looper` from Task 10's `variables.tf`, and `local.lambda_function_name` from Task 12).
 - Produces: on every push to `main` and on manual `workflow_dispatch`, runs the Lambda pytest suite and the Next.js vitest suite; if both pass, builds the Lambda image, tags it `<git-sha>` and `latest`, pushes both tags to ECR, and updates the Lambda function's code to the SHA-tagged image (logging a notice and exiting 0, not failing the job, if the function doesn't exist yet).
 
-- [ ] **Step 1: Write the workflow**
+- [x] **Step 1: Write the workflow**
 
 `.github/workflows/deploy.yml`:
 ```yaml
@@ -1365,7 +1365,7 @@ jobs:
           fi
 ```
 
-- [ ] **Step 2: Commit and push**
+- [x] **Step 2: Commit and push**
 
 ```bash
 git add .github/workflows/deploy.yml
@@ -1374,7 +1374,7 @@ git push origin HEAD
 ```
 Note: `workflow_dispatch` only becomes callable via `gh workflow run`/the Actions UI once the workflow file exists on the repo's **default** branch (`main`) — GitHub registers dispatchable workflows by scanning the default branch, not the branch that pushed them. Since this repo's `main` has no workflow file yet, `gh workflow run` will 404 here. `on: push` triggers don't have this restriction — a push event fires the workflow on whatever branch it lands on, immediately, with no registration step. Step 3 below uses that fact instead of `workflow_dispatch` for the one-time bootstrap run.
 
-- [ ] **Step 3: Manual bootstrap trigger (via a temporary push-trigger widening, not `workflow_dispatch`)**
+- [x] **Step 3: Manual bootstrap trigger (via a temporary push-trigger widening, not `workflow_dispatch`)**
 
 After Task 12 Step 5's secrets are in place, temporarily widen the workflow's triggers so a push to the current feature branch fires a real run:
 
@@ -1384,7 +1384,7 @@ After Task 12 Step 5's secrets are in place, temporarily widen the workflow's tr
    Expected: `test` job passes; `deploy` job's build/push steps succeed; the "Update Lambda function code" step logs "does not exist yet" and exits 0 — this is expected, since Task 14 hasn't run yet. Any other failure (test failure, Docker build failure, ECR auth failure) is a real problem — investigate, don't force it green.
 4. Revert the trigger widening: `git revert <the throwaway commit>` (or hand-edit back to `branches: [main]` / the main-only `if`) and push. This final, reverted state — `push: branches: [main]` only — is what Task 20 relies on for the real, steady-state CI/CD trigger.
 
-- [ ] **Step 4: Verify the image landed in ECR**
+- [x] **Step 4: Verify the image landed in ECR**
 
 Run: `aws ecr describe-images --repository-name bgm-looper-lambda`
 Expected: shows an image with the `latest` tag (and a git-SHA tag).
@@ -1400,7 +1400,7 @@ Expected: shows an image with the `latest` tag (and a git-SHA tag).
 - Consumes: `aws_ecr_repository.looper` (Task 11, must already have a `:latest` image — confirmed in Task 13 Step 4), `aws_iam_role.lambda_exec` and `local.lambda_function_name` (Task 12).
 - Produces: `aws_lambda_function.looper` (output `lambda_function_name`) — Task 15's `LAMBDA_FUNCTION_NAME` Vercel env var and the `/api/process` route (Task 18) both reference this by name.
 
-- [ ] **Step 1: Add the Lambda function resource**
+- [x] **Step 1: Add the Lambda function resource**
 
 Add to `infra/main/lambda.tf`:
 ```hcl
@@ -1416,7 +1416,7 @@ resource "aws_lambda_function" "looper" {
 }
 ```
 
-- [ ] **Step 2: Add the output**
+- [x] **Step 2: Add the output**
 
 Add to `infra/main/outputs.tf`:
 ```hcl
@@ -1425,7 +1425,7 @@ output "lambda_function_name" {
 }
 ```
 
-- [ ] **Step 3: Validate, plan, and apply**
+- [x] **Step 3: Validate, plan, and apply**
 
 Confirm Task 13 Step 4 already showed a `:latest` image in ECR — this apply fails otherwise.
 
@@ -1435,7 +1435,7 @@ Expected: plan adds 1 resource (the Lambda function), 0 destroy. No `-target` ne
 Run: `terraform apply` (same vars)
 Expected: Lambda function created.
 
-- [ ] **Step 4: Verify with a real invoke**
+- [x] **Step 4: Verify with a real invoke**
 
 Manually upload a small test WAV to `s3://<audio_bucket_name>/uploads/test.wav`, then:
 
@@ -1448,7 +1448,7 @@ cat out.json
 ```
 Expected: `{"output_key": "outputs/test.wav"}`, and `outputs/test.wav` exists in the bucket.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add infra/main/lambda.tf infra/main/outputs.tf
@@ -1467,7 +1467,7 @@ git commit -m "feat(infra): add Lambda function resource"
 - Consumes: `aws_s3_bucket.audio` (Task 10), `aws_iam_access_key.vercel` (Task 12), `aws_lambda_function.looper` (Task 14).
 - Produces: a Vercel project with env vars `APP_PASSWORD`, `COOKIE_SECRET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `APP_AWS_REGION`, `S3_BUCKET_NAME`, `LAMBDA_FUNCTION_NAME` — every Next.js route in Tasks 16–18 reads these exact names via `process.env`.
 
-- [ ] **Step 1: Write the Vercel project and env vars**
+- [x] **Step 1: Write the Vercel project and env vars**
 
 `infra/main/vercel.tf`:
 ```hcl
@@ -1545,7 +1545,7 @@ resource "vercel_project_environment_variable" "lambda_function_name" {
 }
 ```
 
-- [ ] **Step 2: Add the sensitive output**
+- [x] **Step 2: Add the sensitive output**
 
 Add to `infra/main/outputs.tf`:
 ```hcl
@@ -1554,7 +1554,7 @@ output "vercel_project_id" {
 }
 ```
 
-- [ ] **Step 3: Validate, plan, and apply**
+- [x] **Step 3: Validate, plan, and apply**
 
 Run: `cd infra/main && terraform validate`
 Expected: succeeds.
@@ -1565,7 +1565,7 @@ Expected: plan adds the Vercel project + 7 env vars, 0 destroy.
 Run: `terraform apply` (same vars)
 Expected: resources created; confirm in the Vercel dashboard that the project exists with all 7 env vars set.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add infra/main/vercel.tf infra/main/outputs.tf
@@ -1584,7 +1584,7 @@ git commit -m "feat(infra): add Vercel project and env vars"
 - Produces: `COOKIE_NAME: string`, `createSessionCookieValue(secret: string): string`, `verifySessionCookieValue(cookieValue: string | undefined, secret: string): boolean`, `checkPassword(submitted: string, actual: string): boolean` — Task 17 and 18's routes rely on the middleware already gating them; no other task calls these directly.
 - Env vars consumed: `APP_PASSWORD`, `COOKIE_SECRET` (both provisioned by Task 15).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `app/lib/auth.test.ts`:
 ```typescript
@@ -1629,12 +1629,12 @@ describe("checkPassword", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd app && npm test -- auth.test.ts`
 Expected: FAIL — `./auth` module not found.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `app/lib/auth.ts`:
 ```typescript
@@ -1675,12 +1675,12 @@ export function checkPassword(submitted: string, actual: string): boolean {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd app && npm test -- auth.test.ts`
 Expected: PASS (7 tests)
 
-- [ ] **Step 5: Write the middleware**
+- [x] **Step 5: Write the middleware**
 
 `app/middleware.ts`:
 ```typescript
@@ -1713,7 +1713,7 @@ export const config = {
 };
 ```
 
-- [ ] **Step 6: Write the login route and page**
+- [x] **Step 6: Write the login route and page**
 
 `app/app/api/login/route.ts`:
 ```typescript
@@ -1786,12 +1786,12 @@ export default function LoginPage() {
 }
 ```
 
-- [ ] **Step 7: Manual verification**
+- [x] **Step 7: Manual verification**
 
 Run: `cd app && APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev`
 Expected: visiting `http://localhost:3000/` redirects to `/login`; submitting the wrong password shows "Invalid password"; submitting `test123` redirects to `/` and stays there on refresh.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/lib/auth.ts app/lib/auth.test.ts app/middleware.ts app/app/api/login/route.ts app/app/login/page.tsx
@@ -1810,7 +1810,7 @@ git commit -m "feat(app): add single-user password auth with signed cookie"
 - Produces: `keyForUpload(filename: string): string` (returns `uploads/<uuid><ext>`), `presignUpload(key: string, contentType: string): Promise<string>`, `presignDownload(key: string): Promise<string>`, `getS3Client(): S3Client`. Task 18 imports `presignDownload` and `getS3Client` (or reuses the S3 client pattern) from this same file.
 - Env vars consumed: `APP_AWS_REGION`, `S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (all provisioned by Task 15; the AWS SDK reads the last two automatically).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `app/lib/aws.test.ts`:
 ```typescript
@@ -1830,12 +1830,12 @@ describe("keyForUpload", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd app && npm test -- aws.test.ts`
 Expected: FAIL — `./aws` module not found.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Install SDK presigner: `cd app && npm install @aws-sdk/s3-request-presigner`
 
@@ -1887,12 +1887,12 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd app && npm test -- aws.test.ts`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/lib/aws.ts app/lib/aws.test.ts app/app/api/upload-url/route.ts app/package.json app/package-lock.json
@@ -1912,7 +1912,7 @@ git commit -m "feat(app): add presigned S3 upload-url route"
 - Consumes: `presignDownload`, `getS3Client` pattern (Task 17); Lambda handler contract `{bucket, input_key, output_key} -> {output_key}` (Task 7); `LAMBDA_FUNCTION_NAME` env var (Task 15).
 - Produces: `deriveOutputKey(inputKey: string): string` (returns `outputs/<rest>` for a `uploads/<rest>` key), `POST` handler returning `{ downloadUrl: string }`.
 
-- [ ] **Step 1: Write the failing test for `deriveOutputKey`**
+- [x] **Step 1: Write the failing test for `deriveOutputKey`**
 
 Add to `app/lib/aws.test.ts`:
 ```typescript
@@ -1925,12 +1925,12 @@ describe("deriveOutputKey", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd app && npm test -- aws.test.ts`
 Expected: FAIL — `deriveOutputKey` is not exported.
 
-- [ ] **Step 3: Add `deriveOutputKey` to `app/lib/aws.ts`**
+- [x] **Step 3: Add `deriveOutputKey` to `app/lib/aws.ts`**
 
 ```typescript
 export function deriveOutputKey(inputKey: string): string {
@@ -1938,12 +1938,12 @@ export function deriveOutputKey(inputKey: string): string {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd app && npm test -- aws.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Install the Lambda SDK client and write the process route**
+- [x] **Step 5: Install the Lambda SDK client and write the process route**
 
 Run: `cd app && npm install @aws-sdk/client-lambda`
 
@@ -1980,12 +1980,12 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-- [ ] **Step 6: Manual verification (requires Tasks 14/15 infra applied)**
+- [x] **Step 6: Manual verification (requires Tasks 14/15 infra applied)**
 
 Run: `cd app && npm run dev`, log in, then `curl` the two routes in sequence with a real file, or exercise via the UI once Task 19 lands.
 Expected: `/api/process` returns a `downloadUrl` that plays the processed audio.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/lib/aws.ts app/lib/aws.test.ts app/app/api/process/route.ts app/package.json app/package-lock.json
@@ -2003,7 +2003,7 @@ git commit -m "feat(app): add process route invoking the Lambda DSP pipeline"
 **Interfaces:**
 - Consumes: `/api/upload-url` (Task 17) and `/api/process` (Task 18) via `fetch`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `app/app/page.test.tsx`:
 ```tsx
@@ -2072,12 +2072,12 @@ describe("Home", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd app && npm test -- page.test.tsx`
 Expected: FAIL — `./page` module not found (or the file exists but lacks a `label` for the file input).
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `app/app/page.tsx`:
 ```tsx
@@ -2155,12 +2155,12 @@ export default function Home() {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd app && npm test -- page.test.tsx`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/app/page.tsx app/app/page.test.tsx
@@ -2177,11 +2177,11 @@ git commit -m "feat(app): add upload/preview/download UI"
 **Interfaces:**
 - Consumes: everything from Tasks 1–19.
 
-- [ ] **Step 1: Merge to `main` and confirm CI is green**
+- [x] **Step 1: Merge to `main` and confirm CI is green**
 
 Push/merge this branch to `main`. Confirm in the GitHub Actions tab: the `test` job passes (Lambda pytest + app vitest), and the `deploy` job builds, tags (`<sha>` + `latest`), and pushes the image, then successfully runs `aws lambda update-function-code` (the function exists now, from Task 14 — this should no longer log the "does not exist yet" notice from Task 13 Step 3).
 
-- [ ] **Step 2: Apply the full Terraform stack with real secrets**
+- [x] **Step 2: Apply the full Terraform stack with real secrets**
 
 Run (from `infra/main`, with real values — do not commit these):
 ```bash
@@ -2192,27 +2192,27 @@ terraform apply \
 ```
 Expected: 0 errors (everything was already created incrementally in Tasks 11, 12, 14, 15 with placeholder vars — this run just swaps in the real `vercel_api_token`/`app_password`, which changes the `APP_PASSWORD` env var and re-authenticates the Vercel provider); `vercel_project_id` output populated.
 
-- [ ] **Step 3: Confirm the Vercel deployment**
+- [x] **Step 3: Confirm the Vercel deployment**
 
 Vercel's own git integration builds on every push to `main` independently of GitHub Actions. Confirm in the Vercel dashboard that the latest deployment succeeded.
 
-- [ ] **Step 4: Manual end-to-end test with a real audio file**
+- [x] **Step 4: Manual end-to-end test with a real audio file**
 
 Open the deployed Vercel URL, log in with the password, upload a real short BGM file (<5 min), wait through "Uploading…" → "Processing…", then listen to the looped preview player and confirm the loop is audibly seamless (no click/pop at the repeat point) and volume is consistent with typical streaming loudness.
 Expected: preview loops cleanly; download link produces a file in the same format as the original upload.
 
-- [ ] **Step 5: Verify the kill switch**
+- [x] **Step 5: Verify the kill switch**
 
 Run: `cd infra/main && terraform destroy` (with the same `-var` flags as Step 2)
 Expected: Vercel project, Lambda, ECR repo, S3 audio bucket, and IAM resources (including both the Vercel SA and CI-deploy IAM users) are all removed. Confirm in both the AWS console and Vercel dashboard. The `infra/bootstrap` state bucket is untouched (never destroyed by this command).
 
 Note: destroying removes the CI-deploy IAM user, which invalidates the `AWS_CI_ACCESS_KEY_ID`/`AWS_CI_SECRET_ACCESS_KEY` GitHub secrets. If you re-`apply` later, repeat Task 12 Step 5 (copy the new CI-deploy credentials into GitHub secrets) before CI can deploy again — otherwise CI's `test` job still runs and passes, but the `deploy` job's AWS steps will fail authentication.
 
-- [ ] **Step 6: Re-apply to leave the app running (if desired)**
+- [x] **Step 6: Re-apply to leave the app running (if desired)**
 
 Run: `terraform apply` (same vars as Step 2) if you want the app live after verifying the kill switch works. If you do, repeat Task 12 Step 5 to refresh the GitHub secrets per the note above.
 
-- [ ] **Step 7: Commit any leftover changes**
+- [x] **Step 7: Commit any leftover changes**
 
 ```bash
 git status
