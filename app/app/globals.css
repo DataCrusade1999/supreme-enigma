@@ -83,9 +83,9 @@ p {
 }
 
 /*
- * The one animated element on the site: a playhead sweeping the waveform.
- * Linear and infinite, so the wrap from 100% back to 0% has no seam — which
- * is the entire point of the tool the site is attached to.
+ * A playhead sweeping the waveform. Linear and infinite, so the wrap from 100%
+ * back to 0% has no seam — which is the entire point of the tool the site is
+ * attached to. Everything else on the 9s loop clock shares it.
  */
 @keyframes playhead {
   from {
@@ -104,6 +104,59 @@ p {
   .playhead {
     animation: none;
     left: 0%;
+  }
+}
+
+/*
+ * The waveform bars rise from the baseline once per page load, left to right —
+ * never on scroll, so there is no scroll listener anywhere. `--bar-index` is
+ * set inline per bar; the 560ms rise and the 8ms-per-bar stagger live here.
+ * `both` is load-bearing: without the backwards fill a bar would stand at full
+ * height through its own delay and the stagger would be invisible.
+ */
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.bar-rise {
+  transform-origin: bottom;
+  animation: bar-rise 560ms ease-out both;
+  animation-delay: calc(var(--bar-index) * 8ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-rise {
+    animation: none;
+  }
+}
+
+/*
+ * The played region of the waveform, on the same 9s linear clock as .playhead
+ * so the two stay in phase. Width snapping from 100% back to 0% at the wrap is
+ * the reset; linear is what keeps that edge invisible.
+ */
+@keyframes played-tint {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.played-tint {
+  animation: played-tint 9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .played-tint {
+    animation: none;
+    width: 0;
   }
 }
 
