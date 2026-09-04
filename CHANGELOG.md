@@ -35,6 +35,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- Home page recomposed so the animated waveform clears the fold at 1440x900:
+  the name and a new `FeaturedTool` block share one 12-column band (the h1
+  drops from 148px to 104px), the figure moves directly beneath it, and the
+  intro paragraph plus pipeline-settings table drop below it. The page's
+  bottom "Open the tool" bar is gone — the featured-tool block now owns that
+  call to action.
+
 - Public portfolio redesigned as an editorial system: a warm paper ground and
   matching warm near-black dark mode, Instrument Serif + IBM Plex Sans loaded
   through `next/font/google` (self-hosted, no `fonts.googleapis.com` link), a

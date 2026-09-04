@@ -31,6 +31,14 @@ describe("HomePage", () => {
     expect(screen.getByText("Tail")).toBeInTheDocument();
   });
 
+  it("features the tool in the top band", () => {
+    render(<HomePage />);
+    expect(screen.getByText("Featured tool")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "BGM Looper" }),
+    ).toBeInTheDocument();
+  });
+
   it("links to the tool and to the project index", () => {
     render(<HomePage />);
     expect(screen.getByRole("link", { name: "Open the tool" })).toHaveAttribute(
