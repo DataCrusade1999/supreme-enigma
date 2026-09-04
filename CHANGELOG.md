@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-04
+
 ### Security
 
 - Bumped the transitive `nanoid` (3.3.16 → 3.3.18, GHSA-2v37-7h3g-55p8) and
