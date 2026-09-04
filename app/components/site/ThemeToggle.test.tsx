@@ -9,6 +9,21 @@ describe("ThemeToggle", () => {
     localStorage.clear();
   });
 
+  it("names the mode the click will produce, not the current one", () => {
+    render(<ThemeToggle />);
+    expect(screen.getByRole("button")).toHaveAttribute(
+      "aria-label",
+      "Switch to light mode",
+    );
+
+    document.documentElement.classList.remove("dark");
+    render(<ThemeToggle />);
+    expect(screen.getAllByRole("button")[1]).toHaveAttribute(
+      "aria-label",
+      "Switch to dark mode",
+    );
+  });
+
   it("switches from dark to light and persists the choice", () => {
     render(<ThemeToggle />);
     fireEvent.click(screen.getByRole("button"));
@@ -28,12 +43,12 @@ describe("ThemeToggle", () => {
 
   it("stays in sync when the theme is changed externally via a command-bar command", () => {
     render(<ThemeToggle />);
-    expect(screen.getByRole("button")).toHaveTextContent("Light mode");
+    expect(screen.getByRole("button")).toHaveAccessibleName("Switch to light mode");
 
     const themeLight = COMMANDS.find((command) => command.id === "theme-light");
     act(() => themeLight?.run({ push: vi.fn() }));
 
-    expect(screen.getByRole("button")).toHaveTextContent("Dark mode");
+    expect(screen.getByRole("button")).toHaveAccessibleName("Switch to dark mode");
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 });
