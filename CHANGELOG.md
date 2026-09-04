@@ -35,6 +35,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- CI `test` job now runs on Node 22 (was Node 20). Node 20 lacks
+  `v8.markAsUncloneable` (added in 22.12), which undici 8's `CacheStorage`
+  requires — pinning to 20 blocks the pending jsdom 30 bump, whose engines
+  range starts at `^22.22.2`.
+
 - Home page recomposed so the animated waveform clears the fold at 1440x900:
   the name and a new `FeaturedTool` block share one 12-column band (the h1
   drops from 148px to 104px), the figure moves directly beneath it, and the
