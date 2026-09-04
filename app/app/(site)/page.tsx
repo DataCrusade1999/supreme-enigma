@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BODY, HEAD, PEAK, WAVE } from "../../content/wave-envelope";
+import { barClass, WAVE } from "../../content/wave-envelope";
 
 // The three numbers the deployed pipeline actually runs on, quoted from
 // lambda/src/looper/: pipeline.py's `target_lufs=-14.0` and `top_db=40.0`, and
@@ -9,13 +9,6 @@ const SETTINGS = [
   { label: "Crossfade", value: "50 ms" },
   { label: "Silence trim", value: "top_db 40" },
 ];
-
-function barClass(height: number, index: number) {
-  if (height >= PEAK) return "bg-peak";
-  if (index < HEAD.length || index >= HEAD.length + BODY.length)
-    return "bg-accent";
-  return "bg-fg/25";
-}
 
 export default function HomePage() {
   return (
