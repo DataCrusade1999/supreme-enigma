@@ -7,6 +7,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Fixed
+
+- `lambda/Dockerfile` now fetches ffmpeg with `curl -fL` instead of `curl -L`.
+  Without `-f`, curl exits 0 on an HTTP error and writes the error page to
+  `ffmpeg.tar.xz`, so the build failed a layer later with a misleading
+  `xz: (stdin): File format not recognized` — as it did on the v1.2.0
+  promotion. `-f` fails at the fetch with curl exit 22 and the real status
+  code instead.
+
 ## [1.2.0] - 2026-09-04
 
 ### Security
