@@ -14,7 +14,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
   `ffmpeg.tar.xz`, so the build failed a layer later with a misleading
   `xz: (stdin): File format not recognized` — as it did on the v1.2.0
   promotion. `-f` fails at the fetch with curl exit 22 and the real status
-  code instead.
+  code instead. The same fetch now also retries with `--retry 3
+  --retry-delay 5`, so a transient `johnvansickle.com` blip (connection
+  timeout or 5xx — the failure mode that has broken `deploy` twice) is
+  ridden out in-build rather than needing a `workflow_dispatch` rerun. A
+  permanent error such as a 404 still fails on the first attempt.
 
 ## [1.2.0] - 2026-09-04
 
