@@ -59,7 +59,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body className="min-h-screen bg-bg font-mono text-fg">{children}</body>
+      <body className="min-h-screen bg-bg font-ui text-fg">{children}</body>
     </html>
   );
 }
