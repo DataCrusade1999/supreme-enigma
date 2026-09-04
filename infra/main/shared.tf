@@ -253,4 +253,5 @@ resource "vercel_project_environment_variable" "aws_region" {
   key        = "APP_AWS_REGION"
   value      = var.aws_region
   target     = local.env_targets
+  sensitive  = false
 }
