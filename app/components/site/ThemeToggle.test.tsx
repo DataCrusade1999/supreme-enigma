@@ -51,4 +51,14 @@ describe("ThemeToggle", () => {
     expect(screen.getByRole("button")).toHaveAccessibleName("Switch to dark mode");
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
+
+  it("transitions the rotation, not just the opacity, on the interaction curve", () => {
+    // Tailwind v4 compiles `rotate-0`/`-rotate-90` to the standalone `rotate`
+    // property, not to `transform`, so `rotate` has to be named in the
+    // arbitrary transition list or the icon swap snaps instead of turning.
+    const { container } = render(<ThemeToggle />);
+    for (const icon of container.querySelectorAll("svg")) {
+      expect(icon).toHaveClass("transition-[opacity,rotate]");
+    }
+  });
 });

@@ -41,7 +41,7 @@ export function CommandBarTrigger() {
       type="button"
       onClick={(event) => openCommandBar(event.currentTarget)}
       aria-label="Open command bar"
-      className="inline-flex items-center border border-line px-2 py-1.5 font-mono text-[0.6875rem] text-muted transition-colors hover:border-accent hover:text-fg"
+      className="inline-flex min-h-11 items-center border border-line px-2 py-1.5 text-[0.6875rem] text-muted transition-colors hover:border-accent hover:text-fg motion-reduce:transition-none"
     >
       {label}
     </button>

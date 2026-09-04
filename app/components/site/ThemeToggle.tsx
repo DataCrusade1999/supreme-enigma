@@ -65,7 +65,10 @@ function Icon({
       strokeWidth="1.25"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={`absolute h-4 w-4 transition-[opacity,transform] duration-[160ms] ease-out motion-reduce:transition-none ${
+      // `rotate`, not `transform`: Tailwind v4 compiles `rotate-0`/`-rotate-90`
+      // to the standalone `rotate` property, so naming `transform` here would
+      // crossfade the opacity while the turn snapped.
+      className={`absolute h-4 w-4 transition-[opacity,rotate] duration-[160ms] ease-out motion-reduce:transition-none ${
         visible ? "rotate-0 opacity-100" : "-rotate-90 opacity-0"
       }`}
     >
