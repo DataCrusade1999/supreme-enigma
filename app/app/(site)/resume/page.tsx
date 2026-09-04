@@ -1,50 +1,47 @@
 import { resume } from "../../../content/resume";
+import { PageMasthead } from "../../../components/site/PageMasthead";
 
 export default function ResumePage() {
   return (
     <section>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="font-mono text-[0.6875rem] uppercase tracking-[0.2em] text-muted">
-            Timeline
-          </p>
-          <h1 className="mt-4 font-mono text-3xl font-semibold tracking-tight">
-            Resume
-          </h1>
-        </div>
-        <a
-          href="/resume.pdf"
-          download
-          className="bg-accent px-3 py-2 font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-bg transition-opacity hover:opacity-85"
-        >
-          Download PDF
-        </a>
-      </div>
-
-      <ol className="mt-12 flex flex-col gap-12 border-l border-line">
-        {resume.map((entry) => (
-          <li key={`${entry.org}-${entry.start}`} className="relative pl-6 sm:pl-8">
+      <PageMasthead
+        eyebrow="Timeline"
+        title="Resume"
+        right={
+          <a
+            href="/resume.pdf"
+            download
+            className="group inline-flex min-h-11 items-center gap-2 bg-fg px-3 text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-bg transition-colors duration-200 ease-out hover:bg-accent motion-reduce:transition-none"
+          >
+            Download PDF
             <span
               aria-hidden="true"
-              className="absolute left-0 top-[0.5rem] h-px w-4 bg-accent sm:w-6"
-            />
-            <p className="font-mono text-[0.6875rem] uppercase tracking-[0.16em] tabular-nums text-accent">
+              className="transition-transform duration-200 ease-out group-hover:translate-x-2 motion-reduce:transition-none"
+            >
+              →
+            </span>
+          </a>
+        }
+      />
+
+      <ol className="mt-10">
+        {resume.map((entry) => (
+          <li
+            key={`${entry.org}-${entry.start}`}
+            className="grid grid-cols-12 gap-6 border-b border-line py-7"
+          >
+            <p className="col-span-12 text-xs uppercase tracking-[0.14em] tabular-nums text-accent md:col-span-2">
               {entry.start} — {entry.end}
             </p>
-            <p className="mt-3 font-mono text-lg font-semibold tracking-tight">
-              {entry.role}
-            </p>
-            <p className="mt-1 font-mono text-sm text-muted">{entry.org}</p>
-            <ul className="mt-4 flex max-w-xl flex-col gap-2.5">
+
+            <div className="col-span-12 md:col-span-6 md:col-start-3">
+              <p className="text-base font-medium">{entry.role}</p>
+              <p className="mt-1 text-sm text-muted">{entry.org}</p>
+            </div>
+
+            <ul className="col-span-12 flex flex-col gap-2.5 md:col-span-4 md:col-start-9">
               {entry.bullets.map((bullet) => (
-                <li
-                  key={bullet}
-                  className="relative pl-5 text-[0.9375rem] leading-relaxed text-fg/75"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="absolute left-0 top-[0.65em] h-1 w-1 bg-muted/60"
-                  />
+                <li key={bullet} className="text-sm leading-relaxed text-muted">
                   {bullet}
                 </li>
               ))}

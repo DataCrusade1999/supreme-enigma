@@ -1,5 +1,6 @@
 import { getReader } from "../../../lib/keystatic-reader";
 import { BlogList } from "../../../components/blog/BlogList";
+import { PageMasthead } from "../../../components/site/PageMasthead";
 
 export default async function BlogPage() {
   const reader = getReader();
@@ -10,10 +11,7 @@ export default async function BlogPage() {
 
   return (
     <section>
-      <p className="font-mono text-[0.6875rem] uppercase tracking-[0.2em] text-muted">
-        Writing
-      </p>
-      <h1 className="mt-4 font-mono text-3xl font-semibold tracking-tight">Blog</h1>
+      <PageMasthead eyebrow="Writing" title="Blog" />
       <BlogList
         posts={sorted.map(({ slug, entry }) => ({
           slug,

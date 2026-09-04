@@ -9,6 +9,11 @@ describe("BlogPage", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Blog" }),
     ).toBeInTheDocument();
+    // The masthead's serif title, not the old mono heading.
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Blog" }),
+    ).toHaveClass("font-display");
+    expect(screen.getByText("Writing")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Hello, World" })).toHaveAttribute(
       "href",
       "/blog/hello-world",
