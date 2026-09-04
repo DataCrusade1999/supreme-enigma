@@ -14,6 +14,13 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      # typescript-eslint (via eslint-config-next) declares
+      # `typescript: >=4.8.4 <6.1.0`; on TS 7 it throws at config-load time and
+      # `npm run lint` exits 2 without linting anything. Unignore once
+      # typescript-eslint ships TS 7 support (typescript-eslint#10940).
+      - dependency-name: typescript
+        versions: [">=6"]
 
   - package-ecosystem: pip
     directory: /lambda

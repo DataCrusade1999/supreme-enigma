@@ -71,6 +71,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - Line endings normalized to LF across the repo, pinned by a new
   `.gitattributes` — editors on Windows were writing CRLF back over blobs
   git stored as LF, so any touched file surfaced as a whole-file diff.
+- `npm run lint` in `app/` restored: `typescript` pinned back from `^7.0.2` to
+  `~5.9.3`. `typescript-eslint` (pulled in by `eslint-config-next`) declares
+  `typescript: >=4.8.4 <6.1.0` and throws at ESLint config-load time on TS 7,
+  so the command exited 2 without linting anything. Dependabot now ignores
+  `typescript >=6` until typescript-eslint ships TS 7 support
+  (typescript-eslint#10940). CI was unaffected — it runs no lint step and
+  Next 16's `next build` no longer runs ESLint.
 
 ## [1.1.0] - 2026-08-01
 
