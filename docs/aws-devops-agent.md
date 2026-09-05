@@ -100,6 +100,31 @@ Do all of the above **before** the first dispatch: an unset `vars.*` renders as
 an empty string rather than erroring, so a premature run fails inside the action
 rather than at input validation.
 
+**What the action actually puts on the wire** (from its `dist/index.js` — AWS
+documents only the `eventType: "incident"` investigation payload, so this is
+recorded here rather than guessed at later):
+
+```json
+{
+  "eventType": "deployment_completed",
+  "testProfileId": "ki-...",
+  "testRequirement": "...",
+  "repository": "owner/repo",
+  "headSha": "...",
+  "prNumber": null
+}
+```
+
+Profileless mode replaces `testProfileId` with
+`testProfileValues: { testAgentType, targetUrl, apiSpec? }`. The envelope is the
+same as the documented incident one — HMAC-SHA256 over `` `${timestamp}:${payload}` ``,
+base64, in `x-amzn-event-signature` alongside an `x-amzn-event-timestamp` of the
+form `2026-09-05T00:00:00.000Z`. So a single generic **HMAC** webhook serves both
+investigations and release testing; that is why HMAC (not API key) is the right
+choice when generating it. The action retries once after 2s on a 403, and
+resolves `prNumber` via `listPullRequestsAssociatedWithCommit`, leaving it
+`null` on a direct push or a manual dispatch.
+
 Gotchas:
 
 - **`workflow_dispatch` only lists branches where the file already exists**, and
