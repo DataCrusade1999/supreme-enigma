@@ -68,6 +68,52 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
   agent is that its topology and blast-radius reasoning stay limited to what
   you attached.
 
+## Release testing (UI) — `.github/workflows/release-tests.yml`
+
+Manual-dispatch workflow that runs the agent's UI release testing against the
+`stage` deployment and reports the verdict as a GitHub Check Run.
+
+```bash
+gh workflow run release-tests.yml --ref stage   -f test_requirement="verify the home/about/projects nav and the resume page"
+```
+
+**The action name in the AWS docs is wrong.** The prose says
+`aws-actions/devops-agent-release-testing@v1`; that repo 404s. The real action
+is `aws-actions/devops-agent-qa@v1` — which is what the doc's own YAML sample
+uses. Only the `v1` tag is published.
+
+Configuration (all console-only on the AWS side — there is no MCP or CLI tool
+to create a webhook or a test profile; `create_release_testing_job` only
+consumes an existing profile id):
+
+| Where | What |
+|---|---|
+| Console → Agent Space → **Capabilities** → Webhook → Generate | Auth type **HMAC** (the action signs HMAC-SHA256). Secret is shown once — download the CSV. Auth type is fixed for the webhook's life; to switch, delete and recreate. |
+| Web app → **Release Manager** → Test profiles → Add | Type **UI testing**; target URL is the stage URL *with* the Vercel bypass params (see `.claude/rules/infra.md`). Yields a `ki-…` id. |
+| Repo secrets | `DEVOPS_AGENT_WEBHOOK_URL`, `DEVOPS_AGENT_WEBHOOK_SECRET` |
+| Repo variable | `DEVOPS_AGENT_TEST_PROFILE_ID` (the `ki-…` id — not a secret, kept out of the workflow file so rebuilding the profile doesn't need a PR) |
+
+Gotchas:
+
+- **`workflow_dispatch` only lists branches where the file already exists**, and
+  the Check Run lands on that branch's HEAD SHA. The file lands on `dev` first,
+  so until it is promoted you must dispatch `--ref dev` — the run still tests
+  the *stage* URL (that's baked into the test profile, not the workflow), but
+  the check attaches to a `dev` commit. Promote through `dev → stage → main` as
+  usual and this resolves itself.
+- **The agent performs real writes** (POST/PUT/DELETE) while exploring. Against
+  stage that means real uploads to `bgm-looper-audio-stage-*` and real
+  `bgm-looper-processor-stage` invocations. Objects expire after 1 day, so the
+  cost is bounded but not zero.
+- **`/tools/bgm-looper` is not reachable by the agent.** The Vercel bypass gets
+  it past Vercel Authentication, but `app/lib/route-gate.ts` gates the tool,
+  `/api/looper`, and `/keystatic` behind `APP_PASSWORD` independently. Scope
+  `test_requirement` to the public portfolio pages, or accept putting the app
+  password into the requirement string — where it would land in Actions logs
+  and the Agent Space journal.
+- The profileless path (`target-url` + `agent-type: ui` inputs, no profile) is
+  in the action's `action.yml` but undocumented by AWS — treat it as a fallback.
+
 ## Sample review: `dev` → `main` (2026-08-06)
 
 First real run, reviewing 29 commits (Next.js 15→16 upgrade, CI/CD refactor,

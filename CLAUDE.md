@@ -64,7 +64,7 @@ Work is tracked as GitHub issues, labeled `area: *` (bgm-looper/bgm-extractor/po
 
 ## AWS DevOps Agent
 
-An AWS DevOps Agent Space (`bgm-looper`, id `bbfee9b3-446d-46b4-89e5-5a25fa1fc1ec`) is set up, scoped to exactly this project — the personal AWS account (`223376380711`) and the `DataCrusade1999/supreme-enigma` GitHub repo, nothing else. Used for release-readiness review (e.g. before a `dev → main` promotion), cost/recommendation queries, and incident investigation. See `docs/aws-devops-agent.md` for setup details and operational gotchas (polling patterns, output-size limits, how to invoke a review without an open PR).
+An AWS DevOps Agent Space (`bgm-looper`, id `bbfee9b3-446d-46b4-89e5-5a25fa1fc1ec`) is set up, scoped to exactly this project — the personal AWS account (`223376380711`) and the `DataCrusade1999/supreme-enigma` GitHub repo, nothing else. Used for release-readiness review (e.g. before a `dev → main` promotion), UI release testing against `stage` (manual `gh workflow run release-tests.yml`), cost/recommendation queries, and incident investigation. See `docs/aws-devops-agent.md` for setup details and operational gotchas (polling patterns, output-size limits, how to invoke a review without an open PR).
 
 ## Gotchas
 
