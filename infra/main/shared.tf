@@ -210,6 +210,17 @@ resource "vercel_project" "looper" {
     repo              = var.github_repo
     production_branch = "main"
   }
+
+  # Preview deployments (dev/stage) are publicly reachable. The AWS DevOps Agent's
+  # UI release testing cannot get through Vercel Authentication: it navigates to
+  # sub-paths directly, so the bypass token in the test profile's query string is
+  # never carried over, and the plan-generation step truncates the token when the
+  # agent tries to re-add it itself. Execution 6d2c9593 blocked 12/12 test cases
+  # on this. The gated parts of the app (/tools/bgm-looper, /api/looper,
+  # /keystatic) are protected by APP_PASSWORD in app/lib/route-gate.ts regardless,
+  # so this exposes only the public portfolio pages, which are already public on
+  # production.
+  vercel_authentication = { deployment_type = "none" }
 }
 
 locals {

@@ -10,3 +10,6 @@ __pycache__/
 *.tfvars
 .claude/worktrees/
 .worktrees/
+
+# Downloaded AWS DevOps Agent webhook credential exports — never commit
+webhook-creds-*.csv
