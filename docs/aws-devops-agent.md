@@ -92,7 +92,7 @@ consumes an existing profile id):
 | Where | What |
 |---|---|
 | Console → Agent Space → **Capabilities** → Webhook → Generate | Auth type **HMAC** (the action signs HMAC-SHA256). Secret is shown once — download the CSV. Auth type is fixed for the webhook's life; to switch, delete and recreate. |
-| Web app → **Release Manager** → Test profiles → Add | Type **UI testing**; target URL is the stage URL *with* the Vercel bypass params (see `.claude/rules/infra.md`). Yields a `ki-…` id. |
+| Web app → **Release Manager** → Test profiles → Add | Type **UI testing**; target URL is the plain stage URL, no query params. Yields a `ki-…` id. |
 | Repo secrets | `DEVOPS_AGENT_WEBHOOK_URL`, `DEVOPS_AGENT_WEBHOOK_SECRET` |
 | Repo variable (`gh variable set DEVOPS_AGENT_TEST_PROFILE_ID --body ki-…`) | `DEVOPS_AGENT_TEST_PROFILE_ID` (the `ki-…` id — not a secret, kept out of the workflow file so rebuilding the profile doesn't need a PR) |
 
@@ -124,6 +124,27 @@ investigations and release testing; that is why HMAC (not API key) is the right
 choice when generating it. The action retries once after 2s on a 403, and
 resolves `prNumber` via `listPullRequestsAssociatedWithCommit`, leaving it
 `null` on a direct push or a manual dispatch.
+
+**The agent cannot use a Vercel protection bypass token** — this cost a whole
+run (execution `6d2c9593`, 12/12 test cases blocked) before it was understood.
+Two independent reasons:
+
+1. The token only lives in the test profile URL's query string. When a test
+   intent names a specific page, the agent navigates **directly** to that path
+   (`/resume`), never loading the profile URL, so `x-vercel-set-bypass-cookie`
+   never fires and no cookie is established.
+2. When the agent tries to re-add the token itself, it only has what survived
+   plan generation — the report records *"partial bypass token"* and
+   *"truncated in user request"*. It never sees the full 32 characters.
+
+Hence `vercel_authentication = { deployment_type = "none" }` on the project: the
+preview URLs are simply public. Do not "fix" this by putting the bypass params
+back on the test profile URL — that configuration was tested and does not work.
+
+**The agent's browser cannot resize the viewport**, so mobile-responsiveness
+test cases come back `Blocked` no matter what. Don't write intents that ask for
+them; Playwright's projects in `app/playwright.config.ts` are the right tool for
+viewport testing.
 
 Gotchas:
 

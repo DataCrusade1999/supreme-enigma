@@ -7,6 +7,16 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- Vercel Authentication is now disabled for preview deployments
+  (`vercel_authentication = { deployment_type = "none" }`), making the `dev` and
+  `stage` URLs publicly reachable. The AWS DevOps Agent's UI release testing
+  cannot use a protection bypass token — it navigates to sub-paths directly, so
+  the token in the test profile's query string is never carried over, and plan
+  generation truncates it when the agent tries to re-add it. `APP_PASSWORD` still
+  gates `/tools/bgm-looper`, `/api/looper` and `/keystatic` independently.
+
 ### Added
 
 - `.github/workflows/release-tests.yml` — manual-dispatch workflow that runs the
