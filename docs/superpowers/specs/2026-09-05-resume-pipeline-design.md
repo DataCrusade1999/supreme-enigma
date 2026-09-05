@@ -25,13 +25,15 @@ Updating any of it means editing TypeScript and redeploying. The goal is to uplo
 - Preview on `dev`/`stage`; publish only from production.
 - Render the resume and About pages from the published JSON, and make the PDF download work.
 - Keep AWS cost negligible and IAM least-privilege.
+- Close the pre-existing gaps that stand between "the public cannot upload" and "only I can upload"
+  (see §11), before the bucket holds anything worth keeping.
 
 **Non-goals**
 
 - Multi-user auth or roles. The existing single shared-password gate is the whole security model.
 - Editing the PDF itself, or generating a PDF from the JSON.
 - Replacing Keystatic for blog content. This is a separate, non-git content path.
-- Education/certifications extraction (explicitly deferred — see §13).
+- Education/certifications extraction (explicitly deferred — see §14).
 
 ## 3. Decisions
 
@@ -231,8 +233,8 @@ This feature's own cost: Bedrock on-demand has no idle charge, S3 storage for `r
 The per-call price is negligible; the real exposure is an unbounded loop. Four controls:
 
 1. **`maxTokens` capped at 4000** on the Converse call, bounding worst-case cost per invocation.
-2. **PDF size capped at 5 MB**, enforced on the presigned PUT and re-checked with `HeadObject` before
-   invoking Bedrock.
+2. **PDF size capped at 5 MB, enforced inside the signature** — see §11.3. Checking the size after the
+   object lands means the oversized upload has already been paid for.
 3. **Extraction is idempotent per draft.** If `resume.json` already exists for that draft ID it is
    returned as-is; re-extraction requires an explicit force flag. A refresh loop cannot generate
    repeated model calls.
@@ -257,7 +259,70 @@ Because this modifies an existing policy, the infra PR's acceptance criterion is
 `terraform plan` (run in a scratch worktree against real state, per CLAUDE.md) shows **exactly the
 intended adds and changes** — not `No changes.`
 
-## 11. Testing
+## 11. Security hardening
+
+### 11.0 Verified starting state
+
+Checked live against `bgm-looper-audio-223376380711` on 2026-09-05:
+
+- Public access block: `BlockPublicAcls`, `IgnorePublicAcls`, `BlockPublicPolicy`,
+  `RestrictPublicBuckets` all `true`.
+- No bucket policy (`NoSuchBucketPolicy`) — nothing grants anonymous access.
+- ACL: owner `FULL_CONTROL` only, no other grantees.
+- Uploads occur solely through presigned PUTs issued by `/api/looper/upload-url`, which is gated by
+  the `/api/looper` prefix in `GATED_PREFIXES`.
+
+**There is no path for an anonymous member of the public to write to the bucket, and the `resume/`
+prefix inherits that.** The four items below are the gaps between that and the stronger claim the
+feature actually depends on — that *only the owner* can upload. All four are pre-existing; none is
+introduced by this feature. They are in scope because the resume is the first thing stored here that
+is worth keeping, rather than a scratch audio file that expires in a day.
+
+### 11.1 Rate-limit `/api/login`
+
+`app/app/api/login/route.ts` accepts unlimited password attempts at any rate. `APP_PASSWORD` is a
+single static string, so this is the single point of failure for the entire "only I can upload"
+guarantee — every other control below assumes the password holds.
+
+Add per-IP attempt limiting with a lockout window. This is the highest-priority item in the spec.
+
+### 11.2 Give the session cookie a real expiry
+
+`createSessionCookieValue` in `app/lib/auth.ts` signs the constant payload `"authenticated"`, so the
+cookie value is byte-identical on every login and carries no timestamp. Consequences:
+
+- The `maxAge: 60 * 60 * 24 * 7` set in the login route is a browser-side hint only. A copied cookie
+  remains valid indefinitely, until `COOKIE_SECRET` is rotated.
+- There is no way to revoke a single session.
+
+Fix: include an issued-at timestamp in the signed payload and reject expired values in
+`verifySessionCookieValue`. Rotating `COOKIE_SECRET` remains the "log everyone out" lever.
+
+While in this file, fix the length-based early return in `checkPassword`: it returns before reaching
+`timingSafeEqual` when lengths differ, leaking the password length through timing. The intent to be
+constant-time is already there; the guard undoes it.
+
+### 11.3 Enforce the upload size limit in the signature
+
+`presignUpload` signs only `Bucket`, `Key`, and `ContentType`. A signed URL therefore authorizes an
+object of *any* size, up to S3's 5 GB single-PUT ceiling.
+
+Fix: bind the limit into the signature — either `ContentLength` on the `PutObjectCommand`, or a
+presigned POST carrying a `content-length-range` condition. This is what makes §9.1's 5 MB cap real
+rather than advisory. Applies to the audio upload path as well as the new resume one.
+
+### 11.4 Scope CORS, and add an account-level public access block
+
+`aws_s3_bucket_cors_configuration.audio` (`infra/main/environments.tf:22-29`) sets
+`allowed_origins = ["*"]`. This is not an authorization hole — CORS does not grant permission, the
+signature does — but it should be the three known deployment origins.
+
+Separately, `GetPublicAccessBlock` at the **account** level returns
+`NoSuchPublicAccessBlockConfiguration`. The bucket-level blocks cover today's buckets; the
+account-level one is a cheap backstop preventing a future bucket from being created public by
+accident.
+
+## 12. Testing
 
 **Vitest** (S3 and Bedrock mocked):
 
@@ -267,24 +332,41 @@ intended adds and changes** — not `No changes.`
 - Publish guard: 403 when `VERCEL_ENV` is not `production`, success when it is.
 - Publish archive step: archives an existing current pair; succeeds with nothing to archive.
 - Extraction idempotency: an existing draft `resume.json` short-circuits the model call.
-- Size cap: a PDF over 5 MB is rejected before Bedrock is invoked.
+- Size cap: the presigned URL is signed with the 5 MB constraint, not merely checked afterward.
 - Missing-object fallback: both pages render placeholder content when `resume/current.json` is absent.
 - Route gate: `/tools/resume-admin` and `/api/resume/*` are gated; existing paths unaffected.
+
+Security (§11):
+
+- Login rate limiting: attempts beyond the threshold are rejected; the window resets as specified.
+- `checkPassword` is constant-time for a wrong password of a *different* length, not just an equal one.
+- Session cookie: a value with an expired issued-at timestamp is rejected; a fresh one is accepted;
+  a value signed with a different secret is rejected.
 
 **Playwright:** unauthenticated `/tools/resume-admin` redirects to the login page with the correct
 `?next=`; authenticated, the admin page renders its upload control.
 
 Both runners are the CI gate — `cd app && npm test` covers only Vitest (see CLAUDE.md).
 
-## 12. Implementation phases
+## 13. Implementation phases
 
 Each phase is independently shippable and lands as its own PR into `dev`.
 
-**Phase 1 — Infrastructure.** Unblock the Bedrock prerequisites in the console and re-probe. Split the
-lifecycle rule into four prefix-scoped rules across all three buckets. Add `RESUME_BUCKET_NAME` and
-`BEDROCK_MODEL_ID` to `shared.tf`. Tighten the Vercel IAM policy per §10. Add the project budget with
-SNS alerts. Verify with `terraform plan` in a scratch worktree. Prerequisite for everything else, and
-valuable on its own — it fixes an over-broad IAM policy and adds a missing budget.
+**Phase 1 — Infrastructure and hardening.** Nothing in the resume pipeline is built until this ships.
+
+- Unblock the Bedrock prerequisites in the console (§5.1) and re-probe.
+- Split the lifecycle rule into four prefix-scoped rules across all three buckets (§4.2).
+- Add `RESUME_BUCKET_NAME` and `BEDROCK_MODEL_ID` to `shared.tf` (§4.1).
+- Tighten the Vercel IAM policy to least privilege (§10).
+- Add the `bgm-looper-monthly-cap` budget with SNS alerts (§9.1).
+- All four hardening items: login rate limiting, session cookie expiry plus the `checkPassword`
+  timing fix, signature-bound upload size limit, scoped CORS, and the account-level public access
+  block (§11).
+- Verify with `terraform plan` in a scratch worktree.
+
+This phase is valuable on its own even if the resume work stopped here: it fixes an over-broad IAM
+policy, adds a missing budget, and closes an unrate-limited login. Its size makes it a candidate for
+splitting into two PRs (infra, then hardening) — either way, both land before Phase 2 starts.
 
 **Phase 2 — Admin pipeline.** Schema, key helpers, the four API routes, the gate entries, and the
 admin UI with review and preview.
@@ -294,7 +376,7 @@ new skills section, About page headline and summary, and the `/resume.pdf` route
 
 `CHANGELOG.md` gets an `## [Unreleased]` entry in each PR, per CLAUDE.md.
 
-## 13. Open items
+## 14. Open items
 
 - Nova Lite's actual extraction quality on the real PDF is unmeasured; §5.2 defines the escalation
   path if it is inadequate.
