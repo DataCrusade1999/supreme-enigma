@@ -1,0 +1,31 @@
+name: Release Tests (UI)
+
+# Manual only. Runs the AWS DevOps Agent's UI release testing against the stage
+# deployment, and reports the verdict back as a GitHub Check Run on the SHA of
+# whichever branch this was dispatched from.
+on:
+  workflow_dispatch:
+    inputs:
+      test_requirement:
+        description: "What to focus the UI tests on (blank = full exploratory run)"
+        required: false
+        type: string
+
+permissions:
+  checks: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  ui-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger release testing
+        uses: aws-actions/devops-agent-qa@v1
+        with:
+          webhook-url: ${{ secrets.DEVOPS_AGENT_WEBHOOK_URL }}
+          webhook-secret: ${{ secrets.DEVOPS_AGENT_WEBHOOK_SECRET }}
+          test-profile-id: ${{ vars.DEVOPS_AGENT_TEST_PROFILE_ID }}
+          test-requirement: ${{ inputs.test_requirement }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
