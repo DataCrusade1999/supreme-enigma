@@ -4,7 +4,7 @@
 
 **Goal:** Prepare the S3 bucket, IAM, cost controls, and application auth so the resume pipeline has a safe, least-privilege, owner-only foundation to be built on.
 
-**Architecture:** Two independent workstreams that land as two PRs into `dev`. The Terraform stream replaces the audio bucket's blanket lifecycle rule with prefix-scoped rules, scopes IAM and CORS down to least privilege, and adds a project budget. The application stream closes four auth and upload gaps in `app/lib/`. Neither stream depends on the other; both must land before Phase 2 begins.
+**Architecture:** A throwaway spike (Task 1) that validates the OpenRouter extraction path, then two independent workstreams landing as two PRs into `dev`. The Terraform stream replaces the audio bucket's blanket lifecycle rule with prefix-scoped rules, scopes IAM and CORS down to least privilege, and adds a project budget. The application stream closes four auth and upload gaps in `app/lib/`. Neither stream depends on the other; both must land before Phase 2 begins.
 
 **Tech Stack:** Terraform (AWS + Vercel providers), Next.js 16.3.3, TypeScript, Vitest, Playwright, AWS SDK v3.
 
@@ -23,6 +23,7 @@
 - Commit messages end with: `Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>`
 - Add a `CHANGELOG.md` entry under `## [Unreleased]` in each PR.
 - Do not enable S3 bucket versioning (spec §4.2 — it breaks the audio 1-day expiry).
+- **The OpenRouter API key never enters the repo.** It lives in the gitignored `infra/main/terraform.tfvars` and, for the Task 1 probe, in a shell env var only. Never write it into a committed file, a code comment, a test fixture, or a commit message.
 
 ## File Structure
 
@@ -32,8 +33,8 @@
 |---|---|---|
 | `environments.tf` | per-branch buckets, lifecycle, CORS, Lambdas | Modify: replace lifecycle rules, scope CORS |
 | `shared.tf` | one-of-each resources, IAM, Vercel env vars | Modify: IAM policy; add env vars, budget, SNS, account PAB |
-| `variables.tf` | input variables | Modify: add `alert_email` |
-| `terraform.tfvars` | gitignored secrets | Modify: add `alert_email` value (local only) |
+| `variables.tf` | input variables | Modify: add `alert_email`, `openrouter_api_key`, `openrouter_model` |
+| `terraform.tfvars` | gitignored secrets | Modify: add `alert_email` and `openrouter_api_key` (local only) |
 
 **Application stream** (`app/`)
 
@@ -53,53 +54,179 @@
 
 ---
 
-## Task 1: Unblock Bedrock and re-probe
+## Task 1: Verify the OpenRouter path end to end
 
-No code. This is a verification gate: spec §5.1 recorded that **both** candidate models are currently unusable, and Phase 2 cannot be planned until we know which one works.
+A spike, not a gate. Bedrock is blocked account-wide (spec §5.1) and extraction moved to
+OpenRouter, which unblocks planning Phase 2 — but three assumptions are unverified: that the key
+works, that `anthropic/claude-haiku-4.5` accepts a PDF through the `file-parser` plugin, and that
+`response_format: json_schema` returns schema-valid output. Find out before building on them.
 
-**Files:** none
+**Files:**
+- Create: `<scratchpad>/openrouter-probe.mjs` (throwaway — do not commit)
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: a confirmed working model id, consumed by Task 4 (the IAM policy's model ARNs) and Task 6 (the `bedrock_model_id` variable default)
+- Produces: confirmation of the model slug and request shape used by Phase 2's extract route
 
-- [ ] **Step 1: Submit the Anthropic use-case form**
+- [ ] **Step 1: Confirm the key is available**
 
-In the AWS console, account `223376380711`, region `us-east-1`: **Bedrock → Model access**. Find Claude Haiku 4.5 and complete the "use case details" form. This is what the probe's `ResourceNotFoundException: Model use case details have not been submitted for this account` refers to. AWS says to allow 15 minutes.
-
-- [ ] **Step 2: Check the Nova Lite daily token quota**
-
-Console → **Service Quotas → Amazon Bedrock → us-east-1**. Find the on-demand tokens-per-day quota for Nova Lite. The probe hit `ThrottlingException: Too many tokens per day`, so a ceiling exists and was exhausted. Record the value. Request an increase only if it is below roughly 50k tokens/day.
-
-- [ ] **Step 3: Re-probe both models**
+The key is the user's; it is not in the repo. Ask for it and export it in the shell for this probe
+only — do not write it to a file, and do not commit it anywhere.
 
 ```bash
-aws bedrock-runtime converse \
-  --profile personal --region us-east-1 \
-  --model-id amazon.nova-lite-v1:0 \
-  --messages '[{"role":"user","content":[{"text":"Reply with exactly: OK"}]}]' \
-  --inference-config '{"maxTokens":10}'
-
-aws bedrock-runtime converse \
-  --profile personal --region us-east-1 \
-  --model-id us.anthropic.claude-haiku-4-5-20251001-v1:0 \
-  --messages '[{"role":"user","content":[{"text":"Reply with exactly: OK"}]}]' \
-  --inference-config '{"maxTokens":10}'
+export OPENROUTER_API_KEY='<the key>'
 ```
 
-Expected: both return an `output.message.content[0].text` of `OK`.
+- [ ] **Step 2: Confirm the key authenticates and has credit**
 
-Note that Claude Haiku 4.5 **must** use the `us.` inference profile id — `inferenceTypesSupported` for the bare model id is `["INFERENCE_PROFILE"]` only, so `anthropic.claude-haiku-4-5-20251001-v1:0` will fail.
+```bash
+curl -s https://openrouter.ai/api/v1/key -H "Authorization: Bearer $OPENROUTER_API_KEY"
+```
 
-- [ ] **Step 4: Record the outcome in the spec**
+Expected: JSON with `data.limit_remaining` non-zero (or `null`, meaning no cap). A 401 means the
+key is wrong or revoked — stop and resolve that before continuing.
 
-Edit `docs/superpowers/specs/2026-09-05-resume-pipeline-design.md` §5.1 to replace the "blocked" findings with the confirmed state, and §14 to close the two Bedrock open items. If a model is still blocked, say so explicitly — do not delete the finding.
+- [ ] **Step 3: Probe with a real resume PDF**
 
-- [ ] **Step 5: Commit**
+Write this to the scratchpad directory (not the repo) and run it with a real PDF path.
+
+```javascript
+// Throwaway probe. Confirms: PDF file input, the file-parser native engine, and
+// json_schema structured outputs all work together on this model.
+import { readFile } from "node:fs/promises";
+
+const pdfPath = process.argv[2];
+const b64 = (await readFile(pdfPath)).toString("base64");
+
+const schema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["headline", "work", "skills"],
+  properties: {
+    headline: {
+      type: "object",
+      additionalProperties: false,
+      required: ["name", "title", "summary"],
+      properties: {
+        name: { type: "string" },
+        title: { type: "string" },
+        summary: { type: "string" },
+      },
+    },
+    work: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["role", "org", "start", "end", "bullets"],
+        properties: {
+          role: { type: "string" },
+          org: { type: "string" },
+          start: { type: "string" },
+          end: { type: "string" },
+          bullets: { type: "array", items: { type: "string" } },
+        },
+      },
+    },
+    skills: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["group", "items"],
+        properties: {
+          group: { type: "string" },
+          items: { type: "array", items: { type: "string" } },
+        },
+      },
+    },
+  },
+};
+
+const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    model: "anthropic/claude-haiku-4.5",
+    max_tokens: 4000,
+    plugins: [{ id: "file-parser", pdf: { engine: "native" } }],
+    response_format: {
+      type: "json_schema",
+      json_schema: { name: "resume", strict: true, schema },
+    },
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              "Extract this resume into the required JSON schema. Use the exact wording from " +
+              "the document for bullets. For a current role, use \"Present\" as the end value.",
+          },
+          {
+            type: "file",
+            file: {
+              filename: "resume.pdf",
+              file_data: `data:application/pdf;base64,${b64}`,
+            },
+          },
+        ],
+      },
+    ],
+  }),
+});
+
+const json = await res.json();
+console.log("status:", res.status);
+console.log("usage:", JSON.stringify(json.usage, null, 2));
+console.log("content:", json.choices?.[0]?.message?.content);
+console.log("error:", JSON.stringify(json.error ?? null));
+```
+
+Run it:
+
+```bash
+node <scratchpad>/openrouter-probe.mjs /path/to/your/resume.pdf
+```
+
+- [ ] **Step 4: Judge the result**
+
+Check all four:
+
+1. `status: 200`.
+2. `content` parses as JSON and matches the schema shape.
+3. The extracted content is actually right — real job titles, real dates, bullets that appear in
+   the document. Structured-output validity is not accuracy; read it.
+4. `usage.cost` is in the expected range (roughly $0.01). A much larger number means the `native`
+   engine is charging more page tokens than estimated — note the real figure.
+
+If accuracy is poor, try `anthropic/claude-sonnet-4.5` and compare before changing the plan; the
+model is an env var, so this is a config decision, not a code one.
+
+- [ ] **Step 5: Record the outcome in the spec**
+
+Update §5.2 with the measured per-run cost and the model that passed, and close the first item in
+§14. If something did not work, write down what — a wrong assumption recorded is worth more than
+a plan that pretends it held.
+
+- [ ] **Step 6: Delete the probe**
+
+```bash
+rm <scratchpad>/openrouter-probe.mjs
+```
+
+It is throwaway by design — the real implementation lives in Phase 2's extract route. Confirm no
+key was written into any file: `git status` must be clean apart from the spec edit.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-09-05-resume-pipeline-design.md
-git commit -m "docs(spec): record verified Bedrock model access
+git commit -m "docs(spec): record verified OpenRouter extraction path
 
 Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 ```
@@ -323,8 +450,8 @@ The policy at `shared.tf:133-152` grants `s3:PutObject, s3:GetObject` on `<bucke
 - Modify: `infra/main/shared.tf:133-152` (`aws_iam_user_policy.vercel`)
 
 **Interfaces:**
-- Consumes: the `resume/` prefixes from Task 2; the model id confirmed in Task 1
-- Produces: the permissions the Phase 2 routes rely on
+- Consumes: the `resume/` prefixes from Task 2
+- Produces: the S3 permissions the Phase 2 routes rely on
 
 - [ ] **Step 1: Replace the policy**
 
@@ -333,13 +460,6 @@ locals {
   # Only main's bucket holds resume data — dev/stage read and write it too, via the
   # env-agnostic RESUME_BUCKET_NAME. See the design spec §4.1.
   resume_bucket_arn = aws_s3_bucket.audio.arn
-
-  bedrock_model_arns = [
-    "arn:aws:bedrock:${var.aws_region}::foundation-model/amazon.nova-lite-v1:0",
-    "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.amazon.nova-lite-v1:0",
-    "arn:aws:bedrock:${var.aws_region}::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
-    "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
-  ]
 }
 
 resource "aws_iam_user_policy" "vercel" {
@@ -370,12 +490,6 @@ resource "aws_iam_user_policy" "vercel" {
         Resource = ["${local.resume_bucket_arn}/resume/drafts/*"]
       },
       {
-        Sid      = "InvokeExtractionModel"
-        Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel"]
-        Resource = local.bedrock_model_arns
-      },
-      {
         Sid      = "InvokeProcessor"
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
@@ -386,7 +500,7 @@ resource "aws_iam_user_policy" "vercel" {
 }
 ```
 
-Both model families are listed because Task 1 decides between them empirically and the spec keeps `BEDROCK_MODEL_ID` swappable as config. Both the foundation-model ARN and the inference-profile ARN are needed: invoking through a profile authorizes against both. `bedrock:InvokeModelWithResponseStream` is deliberately absent — the design does not stream.
+**No Bedrock statement.** Extraction moved to OpenRouter (spec §5.1-5.2), so the app's AWS credentials grant nothing beyond scoped S3 and the existing Lambda invoke — strictly less privilege than the Bedrock design needed. The OpenRouter key is a separate credential whose blast radius is OpenRouter credit and nothing else.
 
 - [ ] **Step 2: Confirm the Lambda's own policy is unaffected**
 
@@ -410,9 +524,8 @@ Expected: `Success! The configuration is valid.`
 git add infra/main/shared.tf
 git commit -m "feat(infra): scope Vercel IAM policy to least privilege
 
-Replaces bucket-wide s3 access with explicit prefixes, adds DeleteObject
-on resume drafts only, and adds bedrock:InvokeModel scoped to the two
-candidate extraction models.
+Replaces bucket-wide s3 access with explicit prefixes and adds
+DeleteObject on resume drafts only.
 
 Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 ```
@@ -531,18 +644,60 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 
 ---
 
-## Task 6: Add the resume env vars
+## Task 6: Add the resume and OpenRouter env vars
 
 **Files:**
-- Modify: `infra/main/shared.tf` (append two `vercel_project_environment_variable` resources)
+- Modify: `infra/main/shared.tf` (append four `vercel_project_environment_variable` resources)
+- Modify: `infra/main/variables.tf` (add `openrouter_api_key`, `openrouter_model`)
+- Modify: `infra/main/terraform.tfvars` (gitignored — add the key locally)
 
 **Interfaces:**
-- Consumes: the model id confirmed in Task 1
-- Produces: `RESUME_BUCKET_NAME` and `BEDROCK_MODEL_ID`, read by Phase 2's routes
+- Consumes: the model slug confirmed in Task 1
+- Produces: `RESUME_BUCKET_NAME`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`,
+  read by Phase 2's routes
 
 - [ ] **Step 1: Add the variables**
 
-These go in `shared.tf`, **not** `environments.tf` — they are env-agnostic, so they follow the `APP_PASSWORD` pattern rather than the per-branch `S3_BUCKET_NAME` overrides (spec §4.1).
+Append to `variables.tf`:
+
+```hcl
+variable "openrouter_api_key" {
+  description = "OpenRouter key used for resume extraction. Its blast radius is OpenRouter credit only — cap the key's spend limit in the OpenRouter dashboard as a backstop the app cannot override."
+  type        = string
+  sensitive   = true
+}
+
+variable "openrouter_model" {
+  description = "Model slug for resume extraction. A variable so switching model is config, not code — see the design spec §5.2."
+  type        = string
+  default     = "anthropic/claude-haiku-4.5"
+}
+```
+
+If Task 1 found Haiku 4.5's extraction quality inadequate, change the default to whichever slug
+passed there.
+
+- [ ] **Step 2: Add the key to tfvars**
+
+`terraform.tfvars` is gitignored, so this is a local-only edit. Append:
+
+```hcl
+openrouter_api_key = "<the key>"
+```
+
+Confirm it is not tracked before continuing:
+
+```bash
+git check-ignore -v infra/main/terraform.tfvars
+```
+
+Expected: a line naming the ignore rule. If it prints nothing, **stop** — the file is tracked and
+the key would be committed.
+
+- [ ] **Step 3: Add the env vars**
+
+These go in `shared.tf`, **not** `environments.tf` — they are env-agnostic, so they follow the
+`APP_PASSWORD` pattern rather than the per-branch `S3_BUCKET_NAME` overrides (spec §4.1).
 
 ```hcl
 # All three branches read and write the resume from main's bucket, so unlike
@@ -555,30 +710,38 @@ resource "vercel_project_environment_variable" "resume_bucket_name" {
   sensitive  = false
 }
 
-resource "vercel_project_environment_variable" "bedrock_model_id" {
+resource "vercel_project_environment_variable" "openrouter_api_key" {
   project_id = vercel_project.looper.id
-  key        = "BEDROCK_MODEL_ID"
-  value      = var.bedrock_model_id
+  key        = "OPENROUTER_API_KEY"
+  value      = var.openrouter_api_key
+  target     = local.env_targets
+  sensitive  = true
+}
+
+resource "vercel_project_environment_variable" "openrouter_model" {
+  project_id = vercel_project.looper.id
+  key        = "OPENROUTER_MODEL"
+  value      = var.openrouter_model
+  target     = local.env_targets
+  sensitive  = false
+}
+
+# Kept as config so the extract route can be pointed at any OpenAI-compatible
+# endpoint without a code change — see the design spec §5.2.
+resource "vercel_project_environment_variable" "openrouter_base_url" {
+  project_id = vercel_project.looper.id
+  key        = "OPENROUTER_BASE_URL"
+  value      = "https://openrouter.ai/api/v1"
   target     = local.env_targets
   sensitive  = false
 }
 ```
 
-- [ ] **Step 2: Add the backing variable**
+`sensitive = true` on the key matters: the Vercel provider requires it for secret values, and it
+keeps the key out of `terraform plan` output. This is the same break that bit PR #54 on the
+provider upgrade.
 
-Append to `variables.tf`, using whichever model Task 1 confirmed working:
-
-```hcl
-variable "bedrock_model_id" {
-  description = "Model used for resume extraction. Kept as a variable so switching is config, not code — see the design spec §5.2. Must be an inference-profile id for models whose inferenceTypesSupported is INFERENCE_PROFILE only (Claude Haiku 4.5 is)."
-  type        = string
-  default     = "amazon.nova-lite-v1:0"
-}
-```
-
-If Task 1 found Nova Lite unusable, change the default to `us.anthropic.claude-haiku-4-5-20251001-v1:0`.
-
-- [ ] **Step 3: Format and validate**
+- [ ] **Step 4: Format and validate**
 
 ```bash
 cd infra/main && terraform fmt && terraform validate
@@ -586,11 +749,19 @@ cd infra/main && terraform fmt && terraform validate
 
 Expected: `Success! The configuration is valid.`
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Confirm no secret leaked into the diff**
+
+```bash
+git diff --cached --no-color | grep -i "sk-or-" && echo "SECRET IN DIFF - STOP" || echo "clean"
+```
+
+Expected: `clean`.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add infra/main/shared.tf infra/main/variables.tf
-git commit -m "feat(infra): add RESUME_BUCKET_NAME and BEDROCK_MODEL_ID env vars
+git commit -m "feat(infra): add resume bucket and OpenRouter env vars
 
 Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 ```
@@ -634,7 +805,8 @@ Expected — **exactly** this set, and nothing else:
 - `aws_iam_user_policy.vercel` — **update in place**
 - `aws_sns_topic.budget_alerts`, `aws_sns_topic_subscription.budget_alerts_email`, `aws_sns_topic_policy.budget_alerts` — **create**
 - `aws_budgets_budget.project` — **create**
-- `vercel_project_environment_variable.resume_bucket_name`, `.bedrock_model_id` — **create**
+- `vercel_project_environment_variable.resume_bucket_name`, `.openrouter_api_key`,
+  `.openrouter_model`, `.openrouter_base_url` — **create**
 
 **Stop and investigate if the plan shows any destroy, or any change to a Lambda function, the ECR repo, the S3 buckets themselves, or an existing Vercel env var.** A destroy of `aws_s3_bucket.audio` would delete production audio. `No changes.` is *not* the expected outcome here — that would mean the edits are not being read.
 
@@ -653,14 +825,14 @@ Under `## [Unreleased]` in `CHANGELOG.md`:
 ### Added
 - Project-scoped AWS budget ($5/month) with SNS email alerts.
 - Account-level S3 public access block.
-- `RESUME_BUCKET_NAME` and `BEDROCK_MODEL_ID` environment variables.
+- `RESUME_BUCKET_NAME`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and `OPENROUTER_BASE_URL`
+  environment variables.
 
 ### Changed
 - S3 lifecycle rules are now prefix-scoped: audio scratch and resume drafts expire after
   1 day, resume archives after 365 days, and the live resume never expires.
 - Bucket CORS is scoped to the app's own origins instead of `*`.
-- The Vercel IAM user's S3 access is scoped to specific prefixes rather than whole
-  buckets, and gains `bedrock:InvokeModel` on the extraction models only.
+- The Vercel IAM user's S3 access is scoped to specific prefixes rather than whole buckets.
 ```
 
 - [ ] **Step 5: Commit and open the PR**
@@ -678,7 +850,7 @@ Implements §4.2, §9.1, §10, and §11.4 of
 `docs/superpowers/specs/2026-09-05-resume-pipeline-design.md`.
 
 - Prefix-scoped S3 lifecycle rules so a stored resume is not deleted after a day
-- Vercel IAM policy scoped to prefixes and specific Bedrock model ARNs
+- Vercel IAM policy scoped to specific S3 prefixes
 - Bucket CORS scoped to app origins; account-level public access block added
 - $5/month project budget with SNS email alerts
 
@@ -1505,12 +1677,14 @@ expected) and that repeated bad passwords produce a 429.
 
 Not planned in this document, deliberately.
 
-Phase 2's extraction task cannot be written in bite-sized detail until Task 1 resolves
-which model actually works — spec §5.2 makes the model choice an empirical outcome of
-Phase 1, and both candidates were blocked when the spec was written. Writing those steps
-now would mean inventing the answer.
+Phase 2's extraction task depends on Task 1's spike: the exact request shape, the model
+that passes, and the measured per-run cost all come out of running the probe against your
+real resume. Writing those steps before the probe would mean inventing them.
 
-Once Phase 1 is merged and Task 1's finding is recorded in the spec, invoke
+Unlike the original Bedrock design, this is no longer blocked on AWS — Task 1 is runnable
+now, and Phase 2 can be planned as soon as it has run.
+
+Once Task 1's finding is recorded in the spec, invoke
 `superpowers:writing-plans` again for:
 
 - `docs/superpowers/plans/<date>-resume-pipeline-phase-2.md` — schema, key helpers, the

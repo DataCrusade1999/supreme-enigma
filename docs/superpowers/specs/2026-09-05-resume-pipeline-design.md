@@ -20,7 +20,7 @@ Updating any of it means editing TypeScript and redeploying. The goal is to uplo
 
 - Store the resume PDF in S3 with prefix-scoped lifecycle rules, durable rather than expiring.
 - Upload it through an authenticated page on the portfolio site — no AWS console, no redeploy.
-- Derive structured JSON (headline, work history, skills) from the PDF via Amazon Bedrock.
+- Derive structured JSON (headline, work history, skills) from the PDF via a hosted Claude model.
 - Review and correct the extraction before publishing.
 - Preview on `dev`/`stage`; publish only from production.
 - Render the resume and About pages from the published JSON, and make the PDF download work.
@@ -40,7 +40,7 @@ Updating any of it means editing TypeScript and redeploying. The goal is to uplo
 | Question | Decision |
 |---|---|
 | Source of truth | PDF is the artifact; extracted JSON drives the pages; the JSON is reviewed before going live |
-| Extraction | Amazon Bedrock, model chosen by measured cost/quality, not fixed to a vendor |
+| Extraction | OpenRouter → `anthropic/claude-haiku-4.5`. Bedrock was the original choice and is blocked account-wide (§5.1) |
 | Bucket | Reuse `main`'s existing audio bucket for all branches; no new bucket |
 | Bucket versioning | **No** — history via an `archive/` prefix instead (see §4.2) |
 | Render path | Server-render from S3 through a cached read, revalidated on publish |
@@ -76,62 +76,79 @@ The single blanket rule at `infra/main/environments.tf:32-43` (`filter {}` + `ex
 
 ## 5. Extraction
 
-### 5.1 Verified account state — both candidate models are blocked today
+### 5.1 Why not Amazon Bedrock
 
-Probed live against account `223376380711` in `us-east-1` on 2026-09-05:
+Bedrock was the original design. It is blocked account-wide and cannot be used. Probed live
+against account `223376380711` in `us-east-1` on 2026-09-05:
 
-- **`amazon.nova-lite-v1:0`** — supports `ON_DEMAND`. A minimal Converse call returned
-  `ThrottlingException: Too many tokens per day, please wait before trying again.`
-  Access is granted (the call reached a quota error, not an authorization error), but the account is
-  under a daily token ceiling that was already exhausted.
-- **`anthropic.claude-haiku-4-5-20251001-v1:0`** — `inferenceTypesSupported: ["INFERENCE_PROFILE"]`
-  only, so it **must** be invoked via the profile id
-  `us.anthropic.claude-haiku-4-5-20251001-v1:0`
-  (`arn:aws:bedrock:us-east-1:223376380711:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`).
-  A minimal Converse call returned
-  `ResourceNotFoundException: Model use case details have not been submitted for this account.`
+- Every model, every vendor, fails identically — Amazon Nova Lite/Micro/Pro, Mistral 7B, Meta
+  Llama 3, Anthropic Claude Haiku 4.5 and Claude 3 Haiku — with
+  `ThrottlingException: Too many tokens per day`.
+- The applied quota value is **0** for every Bedrock inference quota, against non-zero AWS
+  defaults: `L-58BE175A` applied 0 vs default 5,000,000; `L-6120CF2D` applied 0 vs default
+  3,600,000,000; `L-45E0AD92` applied 0 vs default 5,760,000,000.
+- CloudWatch reports **no `InputTokenCount` datapoints** and Cost Explorer **$0.00** Bedrock spend
+  for the account's lifetime, so nothing has been consumed — the allowance is genuinely zero.
+- The Anthropic use-case form was submitted and accepted (Claude's error changed from
+  `ResourceNotFoundException` to the same `ThrottlingException`), confirming model access is not
+  the problem.
+- Service Quotas cannot fix it: `RequestServiceQuotaIncrease` rejects any value below the default,
+  and the daily-token quotas are `Adjustable: false`. A support case is the only route, with
+  unknown turnaround.
 
-**Both are one-time manual console prerequisites that Terraform cannot perform.** Phase 1 must resolve
-them and re-run the probe before any extraction code is written:
+A support case has been raised. If Bedrock is ever restored, moving back is a client swap behind
+the same interface (§5.3) — but the design does not wait on it.
 
-1. Submit the Anthropic use-case details form in the Bedrock console (unblocks Claude models).
-2. Confirm the Nova Lite daily token quota, and request an increase via Service Quotas if the ceiling
-   is too low for occasional extraction.
+### 5.2 Provider and model
 
-If neither can be unblocked, the fallback is deterministic PDF parsing with manual correction in the
-review step — the review UI makes that degradation tolerable rather than fatal.
+**OpenRouter**, model `anthropic/claude-haiku-4.5`, chosen because an OpenRouter key already
+exists — no new vendor signup or billing setup — and it reaches Claude without depending on AWS.
 
-### 5.2 Model choice
+Verified 2026-09-05: the slug is `anthropic/claude-haiku-4.5` at **$1.00 / $5.00 per million
+input/output tokens**, and it accepts PDF file input and enforces structured outputs via
+`response_format: {type: "json_schema"}`.
 
-The model is **not fixed to a vendor**. `BEDROCK_MODEL_ID` is a Terraform-managed Vercel env var, so
-switching is a config change, not a code change. Selection procedure, in order:
+Both the model and the API base URL are Terraform-managed Vercel env vars (`OPENROUTER_MODEL`,
+`OPENROUTER_BASE_URL`), so switching model — or switching provider to any OpenAI-compatible
+endpoint, including a future Bedrock-backed one — is configuration, not code.
 
-1. Try `amazon.nova-lite-v1:0` against the real resume PDF once its quota is confirmed.
-2. Judge the output by whether the review step needs substantive correction.
-3. Escalate to `us.anthropic.claude-haiku-4-5-20251001-v1:0` only if Nova Lite's extraction is
-   materially worse.
-
-Indicative cost for a 2-page resume (~3-4k input, ~1.5k output tokens): Nova Lite ≈ $0.0006/run
-(₹0.06), Claude Haiku 4.5 ≈ $0.011/run (₹1). At a dozen extractions a year the feature costs between
-₹1 and ₹12 annually. See §9 for the measured account baseline this sits against.
+The trade-off accepted here: OpenRouter is an OpenAI-compatible shim rather than the first-party
+Anthropic SDK, so the code does not get `@anthropic-ai/sdk`'s typed helpers, and OpenRouter adds
+roughly 5% on credits. Neither matters at this volume, and the existing key is worth more than
+both.
 
 ### 5.3 Mechanism
 
-Bedrock's **Converse API `document` content block** accepts `format: "pdf"` and a
-`source.s3Location.uri`, so the PDF is passed **by S3 reference** — the route never downloads the
-bytes, and no PDF-parsing dependency is added to the app. The block also accepts `bucketOwner`, which
-is set explicitly.
+`POST /api/resume/extract` does the following:
 
-The model is prompted for JSON matching the §6 schema, and its response is parsed and validated with
-zod. A validation failure surfaces in the review UI as an error with the raw response shown, rather
-than writing malformed JSON to S3.
+1. `HeadObject` on the draft PDF to confirm it exists and is within the size cap (§9.1).
+2. `GetObject` to read the bytes, then base64-encode them into a
+   `data:application/pdf;base64,…` data URL. Unlike Bedrock's Converse API, OpenRouter cannot
+   read from S3 by reference, so the bytes transit the route. At the 5 MB cap this is ~6.7 MB
+   base64 in function memory — comfortably within Vercel's limits, and the reason the cap is not
+   negotiable.
+3. `POST https://openrouter.ai/api/v1/chat/completions` with:
+   - a `file` content block (`{type: "file", file: {filename, file_data}}`),
+   - `plugins: [{id: "file-parser", pdf: {engine: "native"}}]` so Claude reads the PDF itself
+     rather than a pre-extracted text dump — layout carries meaning in a resume, and the
+     alternative engines discard it. (`cloudflare-ai` is the free fallback if `native`'s
+     token cost ever matters; `mistral-ocr` at $2/1k pages is for scanned documents and is not
+     needed for a text PDF.)
+   - `response_format: {type: "json_schema", json_schema: {name, strict: true, schema}}`, the
+     JSON Schema generated from the §6 zod schema.
+   - `max_tokens` capped per §9.1.
+4. Parse the response and validate with zod. `strict: true` makes schema-valid output the API's
+   job rather than the prompt's, but the zod pass stays: it is the same schema the review UI and
+   the page props use, and a provider-side guarantee is not a reason to skip local validation.
+   A validation failure surfaces in the review UI with the raw response shown, rather than
+   writing malformed JSON to S3.
+5. Write the validated JSON to `resume/drafts/<uuid>/resume.json`.
 
-`ConverseStream` is not used — the response is small and nothing consumes it incrementally. This keeps
-`bedrock:InvokeModelWithResponseStream` out of the IAM policy.
+Response streaming is not used — the response is small and nothing consumes it incrementally.
 
 ## 6. Schema
 
-`app/lib/resume-schema.ts`, a zod schema that is the single source of truth for the Bedrock output
+`app/lib/resume-schema.ts`, a zod schema that is the single source of truth for the model's output
 contract, the review-step validation, and the page props.
 
 ```ts
@@ -160,9 +177,9 @@ contract, the review-step validation, and the page props.
 1. **Upload** — `POST /api/resume/upload-url` returns a presigned PUT to
    `resume/drafts/<uuid>/resume.pdf`. This needs a **new key helper**; reusing `keyForUpload` from
    `app/lib/aws.ts` would write to `uploads/` and expire the PDF within a day.
-2. **Extract** — `POST /api/resume/extract` invokes Bedrock against the draft's S3 URI, validates the
-   response, and writes `resume/drafts/<uuid>/resume.json`. The route sets an explicit `maxDuration`;
-   extraction can exceed Vercel's default function timeout.
+2. **Extract** — `POST /api/resume/extract` reads the draft PDF from S3, sends it to OpenRouter per
+   §5.3, validates the response, and writes `resume/drafts/<uuid>/resume.json`. The route sets an
+   explicit `maxDuration`; extraction can exceed Vercel's default function timeout.
 3. **Review** — the admin page shows the JSON in a textarea validated against the schema on change,
    with a live preview beside it. Corrections are saved back to the draft's `resume.json` via
    `PUT /api/resume/draft`, which re-validates server-side before writing.
@@ -225,14 +242,20 @@ Incidental finding, not addressed by this work: **Cost Explorer API calls are 25
 bill** — each `GetCostAndUsage` costs $0.01, so querying the bill currently costs more than running
 the application. Worth knowing before adding automated cost polling anywhere.
 
-This feature's own cost: Bedrock on-demand has no idle charge, S3 storage for `resume/` is well under
-1 MB, and page reads are cached. Total expected impact is **₹1-₹12 per year**.
+This feature's own cost sits outside the AWS bill entirely: extraction is billed by OpenRouter, not
+AWS. At `anthropic/claude-haiku-4.5`'s $1.00/$5.00 per million input/output tokens, a 2-page resume
+(~4k input, ~1.5k output, plus the `native` PDF engine's page tokens) is roughly **$0.011 per
+extraction (₹1)** — about **₹12/year** at a dozen runs, drawn from existing OpenRouter credit.
+
+On the AWS side the feature adds S3 storage for `resume/` (well under 1 MB) and cached page reads:
+under **₹1/month**, against the ₹26/month baseline.
 
 ### 9.1 Runaway guardrails
 
 The per-call price is negligible; the real exposure is an unbounded loop. Four controls:
 
-1. **`maxTokens` capped at 4000** on the Converse call, bounding worst-case cost per invocation.
+1. **`max_tokens` capped at 4000** on the OpenRouter call, bounding worst-case output cost per
+   invocation. A spend limit on the OpenRouter key itself is the backstop the app cannot override.
 2. **PDF size capped at 5 MB, enforced inside the signature** — see §11.3. Checking the size after the
    object lands means the oversized upload has already been paid for.
 3. **Extraction is idempotent per draft.** If `resume.json` already exists for that draft ID it is
@@ -251,9 +274,15 @@ this feature. It is tightened as part of this work:
 - S3 actions scoped to explicit prefixes — `uploads/*`, `outputs/*` on all three buckets, and
   `resume/*` on main's — rather than `/*`.
 - `s3:DeleteObject` added on `resume/drafts/*` only, for draft cleanup.
-- `bedrock:InvokeModel` scoped to the specific model ARN and, where the model requires one, its
-  inference profile ARN. Never `*`.
-- `bedrock:InvokeModelWithResponseStream` deliberately omitted — the design does not stream.
+- **No Bedrock permissions at all.** Moving extraction to OpenRouter removes `bedrock:InvokeModel`
+  from the policy entirely — the app's AWS credentials now grant nothing beyond scoped S3 and the
+  existing Lambda invoke. This is strictly less privilege than the Bedrock design would have needed.
+
+The OpenRouter key is a separate credential with its own blast radius: it can spend OpenRouter
+credit, and nothing else. It is stored as a `sensitive` Terraform-managed Vercel env var
+(`OPENROUTER_API_KEY`), never in the repo, and is read only by the extract route. Cap the key's
+spend limit in the OpenRouter dashboard as a backstop the application cannot override — that is the
+equivalent of §9.1's budget for the non-AWS half of the bill.
 
 Because this modifies an existing policy, the infra PR's acceptance criterion is that
 `terraform plan` (run in a scratch worktree against real state, per CLAUDE.md) shows **exactly the
@@ -324,7 +353,7 @@ accident.
 
 ## 12. Testing
 
-**Vitest** (S3 and Bedrock mocked):
+**Vitest** (S3 and the OpenRouter HTTP call mocked):
 
 - Schema validation: valid payload, missing field, wrong type, malformed model output.
 - Key helpers: draft, current, and archive key construction; confirmation that resume keys never land
@@ -332,6 +361,8 @@ accident.
 - Publish guard: 403 when `VERCEL_ENV` is not `production`, success when it is.
 - Publish archive step: archives an existing current pair; succeeds with nothing to archive.
 - Extraction idempotency: an existing draft `resume.json` short-circuits the model call.
+- Extract route: a non-200 from OpenRouter surfaces as an error, not a partial write to S3.
+- Extract route: a response that is valid JSON but fails the zod schema is not written to S3.
 - Size cap: the presigned URL is signed with the 5 MB constraint, not merely checked afterward.
 - Missing-object fallback: both pages render placeholder content when `resume/current.json` is absent.
 - Route gate: `/tools/resume-admin` and `/api/resume/*` are gated; existing paths unaffected.
@@ -354,9 +385,9 @@ Each phase is independently shippable and lands as its own PR into `dev`.
 
 **Phase 1 — Infrastructure and hardening.** Nothing in the resume pipeline is built until this ships.
 
-- Unblock the Bedrock prerequisites in the console (§5.1) and re-probe.
 - Split the lifecycle rule into four prefix-scoped rules across all three buckets (§4.2).
-- Add `RESUME_BUCKET_NAME` and `BEDROCK_MODEL_ID` to `shared.tf` (§4.1).
+- Add `RESUME_BUCKET_NAME`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and `OPENROUTER_BASE_URL`
+  to `shared.tf` (§4.1, §5.2).
 - Tighten the Vercel IAM policy to least privilege (§10).
 - Add the `bgm-looper-monthly-cap` budget with SNS alerts (§9.1).
 - All four hardening items: login rate limiting, session cookie expiry plus the `checkPassword`
@@ -378,8 +409,10 @@ new skills section, About page headline and summary, and the `/resume.pdf` route
 
 ## 14. Open items
 
-- Nova Lite's actual extraction quality on the real PDF is unmeasured; §5.2 defines the escalation
-  path if it is inadequate.
-- The Nova Lite daily token quota ceiling is unknown and may need a Service Quotas increase.
+- Claude Haiku 4.5's extraction quality on the real PDF is unmeasured. The review step exists
+  precisely so this is correctable rather than blocking; if it proves consistently poor,
+  `OPENROUTER_MODEL` moves to `anthropic/claude-sonnet-4.5` or similar with no code change.
+- The AWS support case for the zero Bedrock quota (§5.1) is open. Nothing depends on it — it is
+  tracked only so the option of moving back is not forgotten.
 - Education and certifications are deferred. Adding them later is a schema extension plus one render
   block, with no change to the pipeline.
