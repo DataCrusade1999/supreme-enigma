@@ -74,8 +74,11 @@ Manual-dispatch workflow that runs the agent's UI release testing against the
 `stage` deployment and reports the verdict as a GitHub Check Run.
 
 ```bash
-gh workflow run release-tests.yml --ref stage   -f test_requirement="verify the home/about/projects nav and the resume page"
+gh workflow run release-tests.yml --ref dev   -f test_requirement="verify the home/about/projects nav and the resume page"
 ```
+
+Use `--ref dev` until the file has been promoted to `stage`/`main` — the run
+tests the stage URL either way (that comes from the test profile, not the ref).
 
 **The action name in the AWS docs is wrong.** The prose says
 `aws-actions/devops-agent-release-testing@v1`; that repo 404s. The real action
@@ -91,7 +94,11 @@ consumes an existing profile id):
 | Console → Agent Space → **Capabilities** → Webhook → Generate | Auth type **HMAC** (the action signs HMAC-SHA256). Secret is shown once — download the CSV. Auth type is fixed for the webhook's life; to switch, delete and recreate. |
 | Web app → **Release Manager** → Test profiles → Add | Type **UI testing**; target URL is the stage URL *with* the Vercel bypass params (see `.claude/rules/infra.md`). Yields a `ki-…` id. |
 | Repo secrets | `DEVOPS_AGENT_WEBHOOK_URL`, `DEVOPS_AGENT_WEBHOOK_SECRET` |
-| Repo variable | `DEVOPS_AGENT_TEST_PROFILE_ID` (the `ki-…` id — not a secret, kept out of the workflow file so rebuilding the profile doesn't need a PR) |
+| Repo variable (`gh variable set DEVOPS_AGENT_TEST_PROFILE_ID --body ki-…`) | `DEVOPS_AGENT_TEST_PROFILE_ID` (the `ki-…` id — not a secret, kept out of the workflow file so rebuilding the profile doesn't need a PR) |
+
+Do all of the above **before** the first dispatch: an unset `vars.*` renders as
+an empty string rather than erroring, so a premature run fails inside the action
+rather than at input validation.
 
 Gotchas:
 
