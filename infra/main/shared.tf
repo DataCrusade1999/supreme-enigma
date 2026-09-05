@@ -255,3 +255,11 @@ resource "vercel_project_environment_variable" "aws_region" {
   target     = local.env_targets
   sensitive  = false
 }
+
+# Automation bypass token so the AWS DevOps Agent's release testing can reach the
+# stage preview URL without disabling Vercel Authentication for every preview.
+# Passed as the x-vercel-protection-bypass query param on the test profile URL.
+resource "vercel_project_protection_bypass" "automation" {
+  project_id = vercel_project.looper.id
+  note       = "AWS DevOps Agent release testing"
+}
