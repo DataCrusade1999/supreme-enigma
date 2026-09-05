@@ -7,6 +7,16 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Vercel automation bypass token (`vercel_project_protection_bypass.automation`
+  in `infra/main/shared.tf`) so the AWS DevOps Agent's release testing can reach
+  the `stage` preview URL. Preview deployments stay behind Vercel
+  Authentication; the agent's test profile URL carries
+  `?x-vercel-protection-bypass=<secret>&x-vercel-set-bypass-cookie=true`
+  instead. Read the secret with `terraform output -raw
+  protection_bypass_secret`.
+
 ### Fixed
 
 - `lambda/Dockerfile` now fetches ffmpeg with `curl -fL` instead of `curl -L`.
