@@ -63,6 +63,10 @@ Qualifiers that make the sequence actually safe:
 
 Work is tracked as GitHub issues, labeled `area: *` (bgm-looper/bgm-extractor/portfolio/infra/testing) and `priority: high/medium/low`, and triaged on the [BGM Looper Roadmap](https://github.com/users/DataCrusade1999/projects/4) project board (`Status`: Todo/In Progress/Done — GitHub's built-in workflows auto-update it on item-added/closed/PR-merged, already enabled by default, nothing to configure). Multi-phase initiatives (e.g. the portfolio UI overhaul) get an `epic`-labeled tracking issue with a task list linking each phase's issue. New issues should use the templates under `.github/ISSUE_TEMPLATE/` (feature/bug/chore — blank issues are disabled); PRs should reference the issue they close (`Closes #N`, per `.github/pull_request_template.md`). A design-spec-and-plan pair existing under `docs/superpowers/` does not imply an issue exists yet or vice versa — check the project board for current status, not just the docs.
 
+## Writing
+
+Remove all mannered prose — in docs, specs, plans, commit messages, PR descriptions, and blog content. Say the thing plainly; no throat-clearing, no rhetorical flourishes, no summary paragraphs restating what was just said.
+
 ## AWS DevOps Agent
 
 An AWS DevOps Agent Space (`bgm-looper`, id `bbfee9b3-446d-46b4-89e5-5a25fa1fc1ec`) is set up, scoped to exactly this project — the personal AWS account (`223376380711`) and the `DataCrusade1999/supreme-enigma` GitHub repo, nothing else. Used for release-readiness review (e.g. before a `dev → main` promotion), UI release testing against `stage` (manual `gh workflow run release-tests.yml`), cost/recommendation queries, and incident investigation. See `docs/aws-devops-agent.md` for setup details and operational gotchas (polling patterns, output-size limits, how to invoke a review without an open PR).
