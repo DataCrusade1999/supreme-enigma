@@ -7,7 +7,7 @@ Per-area detail lives in `.claude/rules/` (`app.md`, `lambda.md`, `infra.md`), p
 ## Structure
 
 Three independent sibling projects, no monorepo tooling (no workspaces/Turborepo/Nx):
-- `app/` — Next.js 16 + React 19 + TypeScript frontend, deployed to Vercel (`root_directory = "app"` — only changes here trigger a Vercel deploy). Public portfolio pages (home/about/projects/resume/blog/contact) live in the `app/app/(site)/` route group; the BGM Looper tool itself lives at `app/app/tools/bgm-looper/` and is the only gated part of the site — see `app/lib/route-gate.ts`.
+- `app/` — Next.js 16 + React 19 + TypeScript frontend, deployed to Vercel (`root_directory = "app"` — only changes here trigger a Vercel deploy). Public portfolio pages (home/about/projects/resume/blog/contact) live in the `app/app/(site)/` route group and have no auth check at all. The gated areas are the BGM Looper tool (`app/app/tools/bgm-looper/`, `/api/looper/*`) and the Keystatic admin (`/keystatic`, `/api/keystatic/*`); `app/lib/route-gate.ts` is the single source of truth for what's gated.
 - `lambda/` — Python 3.12 DSP pipeline (audio loop processing), packaged as a Lambda container image.
 - `infra/bootstrap/` — Terraform, applied once manually, creates only the Terraform state S3 bucket. Never destroyed by the kill switch.
 - `infra/main/` — Terraform, remote state, creates the per-branch audio S3 buckets and Lambda functions (three of each — see Branching & releases), the shared ECR repo, IAM users/roles, and the Vercel project.
