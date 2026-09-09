@@ -42,6 +42,14 @@ jobs:
         working-directory: app
         run: npm install
 
+      - name: Lint app
+        id: lint
+        working-directory: app
+        run: |
+          EXIT_CODE=0
+          npm run lint || EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
       - name: Run app tests
         id: vitest
         working-directory: app
@@ -72,8 +80,8 @@ jobs:
         if: always()
         run: node .github/scripts/test-summary.mjs --kind playwright app/playwright-results.json
 
-      - name: Fail the job if any test suite failed
-        if: steps.vitest.outputs.exit_code != '0' || steps.playwright.outputs.exit_code != '0'
+      - name: Fail the job if lint or any test suite failed
+        if: steps.lint.outputs.exit_code != '0' || steps.vitest.outputs.exit_code != '0' || steps.playwright.outputs.exit_code != '0'
         run: exit 1
 
   changes:

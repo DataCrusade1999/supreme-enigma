@@ -9,6 +9,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- CI `test` job now runs `npm run lint` alongside the Vitest and Playwright
+  suites, and fails the job if lint fails. Lint was previously outside the CI
+  gate entirely, so a dependency bump that broke the lint toolchain showed all
+  checks green — as the ESLint 10 bump did (#68, tracked in #79). Lint runs
+  before the test suites but only reports its exit code, so a lint error no
+  longer hides the test results.
 - Vercel Authentication is now disabled for preview deployments
   (`vercel_authentication = { deployment_type = "none" }`), making the `dev` and
   `stage` URLs publicly reachable. The AWS DevOps Agent's UI release testing
