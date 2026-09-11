@@ -1,5 +1,5 @@
 import numpy as np
-from looper.loop_point import find_loop_point
+from looper.loop_point import beat_grid, find_loop_point
 
 
 def test_finds_loop_point_in_repeating_beat_pattern():
@@ -22,6 +22,50 @@ def test_finds_loop_point_in_repeating_beat_pattern():
     start, end = result
     assert 0 <= start < end <= len(mono)
     assert (end - start) >= int(1.0 * sr)
+
+
+def test_beat_grid_returns_a_plain_float_tempo():
+    sr = 22050
+    bpm = 120
+    beat_sec = 60 / bpm
+    n_beats = 16
+    duration = beat_sec * n_beats
+    t = np.linspace(0, duration, int(sr * duration), endpoint=False)
+
+    mono = np.zeros_like(t)
+    for i in range(n_beats):
+        beat_start = i * beat_sec
+        click = (t >= beat_start) & (t < beat_start + 0.05)
+        mono[click] += np.sin(2 * np.pi * 440 * (t[click] - beat_start))
+
+    tempo, beats = beat_grid(mono, sr)
+
+    # librosa hands back a 0-d/1-element ndarray here; the API serializes the
+    # tempo to JSON, so beat_grid has to hand back a real float.
+    assert isinstance(tempo, float)
+    assert 100 < tempo < 140
+    assert len(beats) >= 2
+
+
+def test_find_loop_point_accepts_a_precomputed_beat_grid():
+    sr = 22050
+    bpm = 120
+    beat_sec = 60 / bpm
+    n_beats = 16
+    duration = beat_sec * n_beats
+    t = np.linspace(0, duration, int(sr * duration), endpoint=False)
+
+    mono = np.zeros_like(t)
+    for i in range(n_beats):
+        beat_start = i * beat_sec
+        click = (t >= beat_start) & (t < beat_start + 0.05)
+        mono[click] += np.sin(2 * np.pi * 440 * (t[click] - beat_start))
+
+    _, beats = beat_grid(mono, sr)
+
+    assert find_loop_point(mono, sr, min_loop_sec=1.0, beats=beats) == find_loop_point(
+        mono, sr, min_loop_sec=1.0
+    )
 
 
 def test_returns_none_with_no_beats():

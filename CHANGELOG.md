@@ -9,6 +9,23 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- The BGM Looper tool page is designed, in the same editorial system as the rest
+  of the site: its own masthead (the tool sits outside the `(site)` group, so it
+  renders the wordmark and its own `<CommandBar />` like the `/login` gate), a
+  drop zone that also accepts drag-and-drop, and distinct decoding / uploading /
+  processing / done / error states on one two-column layout.
+- The waveform now corresponds to the actual audio rather than being decorative.
+  The file you pick is decoded in the browser (`decodeAudioData` → 240 peak
+  buckets, `lib/peaks.ts`) and drawn before anything is uploaded; the DSP
+  pipeline computes the same 240 buckets for the processed result and returns
+  them with what it decided — loop bounds, tempo, the crossfade it actually
+  applied, and the target level — which `/api/looper/process` passes through as
+  a typed `LoopResult`. A browser that can't decode the format falls back to a
+  flat rest line and uploads anyway.
+- The result plays through a custom transport whose playhead follows
+  `audio.currentTime`, with click-to-seek, and the download link carries a
+  countdown derived from the presigned URL's server-side 300s TTL.
+
 - The ⌘K/Ctrl+K command bar now works on the `/login` gate, which renders its
   own `<CommandBar />` — it sits outside the `(site)` route group, so it didn't
   inherit one, and with no SiteHeader the shortcut is the only nav there besides
