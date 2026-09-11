@@ -14,7 +14,7 @@ Three independent sibling projects, no monorepo tooling (no workspaces/Turborepo
 - `content/` — repo root, sibling to `app/`: git-backed blog content managed by Keystatic (GitHub mode), separate from the hand-written `app/content/projects.ts`/`resume.ts` data files — see `docs/superpowers/specs/2026-08-01-portfolio-blog-design.md` for why.
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — the design specs and TDD implementation plans this project was built from (one pair per phase: the original bgm-looper build, the portfolio-site restructuring, the blog, etc.); check here for the "why" behind existing decisions before assuming something is undocumented.
 - `ARCHITECTURE.md` (repo root) — architecture + measured cost breakdown.
-- `.claude/worktrees/bgm-looper-impl/` and `.worktrees/portfolio-blog/` are stray leftover git worktrees (untracked, full duplicate checkouts, in-tree so `grep`/`find` from the repo root hits them). Ignore both — don't search or edit inside them. `git worktree list` also shows a prunable `C:/tmp2/stage-promote`.
+- No in-tree worktrees: the stray `.claude/worktrees/bgm-looper-impl/` and `.worktrees/portfolio-blog/` duplicate checkouts were removed 2026-09-11 (both branches were fully merged into `dev`), so `grep`/`find` from the repo root no longer hits duplicates. `.gitignore` still covers both paths — keep scratch worktrees out of the tree. `git worktree list` still shows a prunable `C:/tmp2/stage-promote`, whose `_tmp-promote-stage` branch has 7 commits not in `origin/dev`.
 
 ## Commands
 
