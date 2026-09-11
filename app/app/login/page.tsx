@@ -11,12 +11,23 @@ const FALLBACK = "/tools/bgm-looper";
 // Null rather than the fallback when `next` is missing or off-origin, so the
 // caller can tell "go here" from "we don't know where you were headed" — the
 // destination strip only renders for the former.
-function parseNext(v: string | null): string | null {
+//
+// `full` and `pathname` are both returned because they have different jobs:
+// the redirect has to carry any query and hash through, while toolNameFor()
+// matches prefixes on a "/" boundary, so `/keystatic?path=posts` would match
+// nothing if it were handed the composite string. Splitting here keeps
+// route-gate a pure-pathname helper, the way proxy.ts already calls it.
+function parseNext(
+  v: string | null,
+): { full: string; pathname: string } | null {
   if (!v) return null;
   try {
     const url = new URL(v, window.location.origin);
     if (url.origin !== window.location.origin) return null;
-    return url.pathname + url.search + url.hash;
+    return {
+      full: url.pathname + url.search + url.hash,
+      pathname: url.pathname,
+    };
   } catch {
     return null;
   }
@@ -29,7 +40,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
 
   const next = parseNext(searchParams.get("next"));
-  const destination = next ? toolNameFor(next) : null;
+  const destination = next ? toolNameFor(next.pathname) : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,7 +54,7 @@ function LoginForm() {
       setError("Invalid password");
       return;
     }
-    router.push(next ?? FALLBACK);
+    router.push(next?.full ?? FALLBACK);
   }
 
   return (

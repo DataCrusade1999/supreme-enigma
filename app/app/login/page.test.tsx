@@ -65,6 +65,22 @@ describe("LoginPage", () => {
     expect(screen.getByText("BGM Looper")).toBeInTheDocument();
   });
 
+  // The strip reads the pathname, the redirect keeps the whole thing — a
+  // query or hash after the prefix must not cost the visitor the strip.
+  it.each([
+    ["a query", "next=%2Fkeystatic%3Fpath%3Dposts", "/keystatic?path=posts", "Content editor"],
+    ["a hash", "next=%2Ftools%2Fbgm-looper%23top", "/tools/bgm-looper#top", "BGM Looper"],
+  ])(
+    "names the tool and keeps %s on the redirect",
+    async (_label, search, target, name) => {
+      mockSearch = search;
+      render(<LoginPage />);
+      expect(screen.getByText(name)).toBeInTheDocument();
+      await submit();
+      await waitFor(() => expect(pushMock).toHaveBeenCalledWith(target));
+    },
+  );
+
   it.each([
     ["next is missing", ""],
     ["next names no known tool", "next=%2Fsomewhere-else"],
