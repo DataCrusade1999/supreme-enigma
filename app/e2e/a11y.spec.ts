@@ -10,6 +10,7 @@ const PATHS = [
   "/contact",
   "/blog",
   "/blog/hello-world",
+  "/login",
 ];
 
 for (const path of PATHS) {

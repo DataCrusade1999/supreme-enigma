@@ -21,7 +21,7 @@
 - New Lambda function names: `bgm-looper-demucs-processor` (main), `-dev`, `-stage` (twins) — mirrors `bgm-looper-processor`'s existing per-branch naming.
 - New ECR repo: `bgm-looper-demucs-lambda`, lifecycle policy keeps only the **1** most recent image per branch tag prefix (not BGM Looper's 5) — this image is estimated at 3–5GB vs. BGM Looper's ~200MB, so a smaller retention count keeps ECR storage cost low (see the design spec §9 for the cost math). Trade-off: no rollback via ECR on a bad deploy (a fresh CI rebuild from git history is the recovery path) — acceptable for a personal, low-frequency-deploy tool.
 - No new S3 bucket, no new Lambda execution IAM role, no new Vercel project, no new CI-deploy/Vercel-SA IAM users — this tool extends BGM Looper's existing shared ones.
-- Auth: reuses the existing single shared-password cookie/gate exactly as-is. `/tools/bgm-extractor` and `/api/bgm-extractor` are added to `GATED_PREFIXES` in `app/lib/route-gate.ts`. No new login page (unauthenticated visits redirect to the existing `/tools/bgm-looper/login?next=...`, which already round-trips back to any `next` path on success).
+- Auth: reuses the existing single shared-password cookie/gate exactly as-is. `/tools/bgm-extractor` and `/api/bgm-extractor` are added to `GATED_PREFIXES` in `app/lib/route-gate.ts`, and `/tools/bgm-extractor` gets a display name in the same file's `TOOL_NAMES`. No new login page (unauthenticated visits redirect to the general gate at `/login?next=...`, which already round-trips back to any `next` path on success). *Updated 2026-09-11: the login page moved from `/tools/bgm-looper/login` to `/login` and became a general gate for all tools — see #82.*
 - Python package name: `extractor` (mirrors BGM Looper's `looper` package — the tool's short name, not `bgm-extractor` verbatim, since hyphens aren't valid in Python identifiers).
 - CI test job for `lambda-demucs/` installs only `boto3 pytest moto` — **not** the full `requirements.txt`. The Python code never `import`s `torch`/`torchaudio`/`demucs` (it shells out to the `demucs` CLI via `subprocess`, matching how `lambda/`'s pipeline shells out to `ffmpeg`), and every test mocks that `subprocess` call — so CI never needs to install multi-gigabyte ML wheels just to run these tests. The heavy `requirements.txt` is only installed inside the Docker image build (which does need the real `demucs` CLI at runtime).
 
@@ -621,7 +621,21 @@ const GATED_PREFIXES = [
 ];
 ```
 
-`ALWAYS_ALLOWED_PATHS` stays unchanged — BGM Extractor has no dedicated login page; unauthenticated visits redirect to the existing `/tools/bgm-looper/login?next=/tools/bgm-extractor`, which already round-trips back to any `next` path (`app/app/tools/bgm-looper/login/page.tsx`'s `safeNext` preserves it) — see the design spec §7.
+`ALWAYS_ALLOWED_PATHS` stays unchanged — BGM Extractor has no dedicated login page; unauthenticated visits redirect to the general gate at `/login?next=/tools/bgm-extractor`, which already round-trips back to any `next` path (`app/app/login/page.tsx`'s `parseNext` preserves it) — see the design spec §7.
+
+Also add the tool's display name to `TOOL_NAMES` in the same file, so the gate names it:
+
+```typescript
+const TOOL_NAMES: Record<string, string> = {
+  "/tools/bgm-looper": "BGM Looper",
+  "/tools/bgm-extractor": "BGM Extractor",
+  "/keystatic": "Content editor",
+};
+```
+
+Without it the login page falls back to showing no destination at all — not an error, but the visitor loses the "Continuing to → BGM Extractor" confirmation. Add a `toolNameFor("/tools/bgm-extractor") === "BGM Extractor"` case to that file's second `it.each` table.
+
+*Updated 2026-09-11: this task was written when the login page lived at `/tools/bgm-looper/login`. It moved to `/login` and became a general gate for all tools (#82); `toolNameFor`/`TOOL_NAMES` did not exist when this plan was drafted.*
 
 - [ ] **Step 4: Run test to verify it passes**
 

@@ -9,6 +9,16 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- The login page moved from `/tools/bgm-looper/login` to `/login` and is now a
+  general gate for every tool on the site rather than the looper's own. It is
+  designed in the portfolio's editorial system (Instrument Serif masthead over
+  a 2px rule, the twelve-column hairline backdrop, the LoopRing as the site's
+  mark) instead of being unstyled, and names the tool the visitor was heading
+  to — resolved from `?next` through a new `toolNameFor()` in
+  `app/lib/route-gate.ts`, which renders nothing for a destination it doesn't
+  recognise rather than printing a raw path back. Stale links to the old path
+  now redirect through the gate and land on the tool after signing in.
+
 - CI `test` job now runs `npm run lint` alongside the Vitest and Playwright
   suites, and fails the job if lint fails. Lint was previously outside the CI
   gate entirely, so a dependency bump that broke the lint toolchain showed all
