@@ -8,6 +8,11 @@ import { GridBackdrop } from "../../components/site/GridBackdrop";
 // /tools/bgm-looper section has its own layout (app/layout.tsx only, no
 // SiteHeader) and isn't meant to inherit this secondary nav path. See
 // docs/superpowers/specs/2026-08-04-portfolio-terminal-layer-design.md §7.
+//
+// /login is the one exception and renders its own <CommandBar /> directly: it
+// sits outside this group but is a public page, and with no SiteHeader the
+// shortcut is the only way off it besides the wordmark. The gated pages behind
+// it still don't get one.
 export default function SiteLayout({
   children,
 }: {
