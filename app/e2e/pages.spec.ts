@@ -29,8 +29,15 @@ test("the command bar opens on the gate, even from the password field", async ({
   await page.goto("/login");
   const dialog = page.getByRole("dialog", { name: "Command bar" });
 
-  await page.keyboard.press("ControlOrMeta+k");
-  await expect(dialog).toBeVisible();
+  // goto can resolve before the ⌘K listener exists — it's attached in a useEffect
+  // after hydration, and the keydown lands on <body>, outside React's root, so
+  // a press in that gap isn't replayed the way a click on the tree would be.
+  // It's simply lost, and a single press then waits out the full timeout on a
+  // dialog that can never open. Retry until the listener is there.
+  await expect(async () => {
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(dialog).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 10_000 });
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 
