@@ -7,6 +7,16 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- The ⌘K/Ctrl+K command bar now works on the `/login` gate, which renders its
+  own `<CommandBar />` — it sits outside the `(site)` route group, so it didn't
+  inherit one, and with no SiteHeader the shortcut is the only nav there besides
+  the wordmark. The global handler's "don't hijack a focused form field" guard
+  now exempts password inputs, so the shortcut works from the gate's password
+  box too; every other field type still suppresses it. Gated pages behind the
+  login still get no command bar.
+
 ### Fixed
 
 - The login page's "Continuing to → X" strip no longer disappears when `?next`

@@ -137,6 +137,25 @@ describe("CommandBar", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  // The gate's password box is the first thing a visitor clicks there, and it
+  // has no SiteHeader, so leaving it guarded would make Ctrl+K look broken on
+  // the one page where it's the only nav. Ctrl+K is never a text-editing key
+  // in a password field.
+  it("still opens on Ctrl+K from a password field", () => {
+    render(
+      <>
+        <input type="password" aria-label="site-password" />
+        <CommandBar />
+      </>,
+    );
+    const field = screen.getByLabelText("site-password");
+    field.focus();
+
+    fireEvent.keyDown(field, { key: "k", ctrlKey: true });
+
+    expect(screen.getByRole("dialog", { name: "Command bar" })).toBeInTheDocument();
+  });
+
   it("ignores Ctrl+K when focus is on a descendant of a contentEditable region", () => {
     render(
       <>

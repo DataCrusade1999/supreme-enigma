@@ -2,6 +2,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { CommandBar } from "../../components/site/CommandBar";
 import { GridBackdrop } from "../../components/site/GridBackdrop";
 import { LoopRing } from "../../components/site/LoopRing";
 import { toolNameFor } from "../../lib/route-gate";
@@ -204,6 +205,11 @@ export default function LoginPage() {
           </div>
         </div>
       </main>
+
+      {/* The gate has no SiteHeader, so ⌘K is the only nav here beyond the
+        * wordmark — which is exactly why it's worth having. Rendered directly
+        * rather than inherited, since /login is outside the (site) group. */}
+      <CommandBar />
     </div>
   );
 }

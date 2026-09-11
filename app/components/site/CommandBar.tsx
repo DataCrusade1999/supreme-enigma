@@ -81,11 +81,17 @@ export function CommandBar() {
       // Ctrl+K search-bar shortcut for that case either. closest(), not
       // matches(), so a descendant of a contentEditable region (event.target
       // would be the inner node, not the editable root) is still caught.
+      //
+      // Password fields are the one exception: Ctrl+K means nothing while
+      // typing a password, and /login's box is both the first thing a visitor
+      // clicks and the page's only nav besides the wordmark, so guarding it
+      // would make the shortcut look broken exactly where it matters most.
       const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        target.closest('input, textarea, select, [contenteditable="true"]')
-      ) {
+      const field =
+        target instanceof HTMLElement
+          ? target.closest('input, textarea, select, [contenteditable="true"]')
+          : null;
+      if (field && !(field instanceof HTMLInputElement && field.type === "password")) {
         return;
       }
       event.preventDefault();

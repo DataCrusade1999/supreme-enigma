@@ -21,6 +21,24 @@ for (const { path, heading } of PAGES) {
   });
 }
 
+// The gate has no SiteHeader, so ⌘K is its only nav — including from the
+// password box, which is the first thing a visitor clicks there.
+test("the command bar opens on the gate, even from the password field", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  const dialog = page.getByRole("dialog", { name: "Command bar" });
+
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+
+  await page.getByLabel("Password").click();
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(dialog).toBeVisible();
+});
+
 // The login page moved out from under the looper. A stale link to the old path
 // has to end at the gate with ?next pointing at the tool — not at a 404, and
 // not at the tool itself.

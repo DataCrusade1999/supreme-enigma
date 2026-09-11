@@ -58,6 +58,13 @@ describe("LoginPage", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools/bgm-looper"));
   });
 
+  it("opens the command bar on Ctrl+K", () => {
+    render(<LoginPage />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(screen.getByRole("dialog", { name: "Command bar" })).toBeInTheDocument();
+  });
+
   it("names the tool the visitor was heading to", () => {
     mockSearch = "next=%2Ftools%2Fbgm-looper";
     render(<LoginPage />);
