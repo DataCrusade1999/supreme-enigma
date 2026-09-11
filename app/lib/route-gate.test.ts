@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isGatedPath } from "./route-gate";
+import { isGatedPath, toolNameFor } from "./route-gate";
 
 describe("isGatedPath", () => {
   it.each([
@@ -10,8 +10,11 @@ describe("isGatedPath", () => {
     ["/contact", false],
     ["/tools/bgm-looper", true],
     ["/tools/bgm-looper/", true],
-    ["/tools/bgm-looper/login", false],
+    ["/login", false],
     ["/api/login", false],
+    // The old login path moved to /login and is no longer carved out, so it
+    // now falls under the /tools/bgm-looper prefix like any other subpath.
+    ["/tools/bgm-looper/login", true],
     ["/api/looper/process", true],
     ["/api/looper/upload-url", true],
     ["/keystatic", true],
@@ -19,5 +22,22 @@ describe("isGatedPath", () => {
     ["/api/keystatic/github/oauth/callback", true],
   ])("isGatedPath(%s) === %s", (pathname, expected) => {
     expect(isGatedPath(pathname)).toBe(expected);
+  });
+});
+
+describe("toolNameFor", () => {
+  it.each([
+    ["/tools/bgm-looper", "BGM Looper"],
+    ["/tools/bgm-looper/", "BGM Looper"],
+    ["/keystatic", "Content editor"],
+    ["/keystatic/blog/hello-world", "Content editor"],
+    // Nothing to name: the login page drops the destination strip rather than
+    // printing a raw path back at the visitor.
+    ["/", null],
+    ["/about", null],
+    ["/tools/something-new", null],
+    ["/api/looper/process", null],
+  ])("toolNameFor(%s) === %s", (pathname, expected) => {
+    expect(toolNameFor(pathname)).toBe(expected);
   });
 });

@@ -10,7 +10,7 @@ describe("proxy", () => {
     expect(response.status).toBe(307);
     const location = response.headers.get("location");
     expect(location).toBeTruthy();
-    expect(new URL(location!).pathname).toBe("/tools/bgm-looper/login");
+    expect(new URL(location!).pathname).toBe("/login");
     expect(location).toMatch(/\?next=%2Fkeystatic$/);
   });
 });
