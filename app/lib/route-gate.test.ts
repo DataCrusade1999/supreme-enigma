@@ -33,6 +33,10 @@ describe("toolNameFor", () => {
     ["/keystatic/blog/hello-world", "Content editor"],
     // Nothing to name: the login page drops the destination strip rather than
     // printing a raw path back at the visitor.
+    // A query or hash straight after the prefix has no "/" separator, so the
+    // caller has to hand this a bare pathname — see app/login/page.tsx.
+    ["/keystatic?path=posts", null],
+    ["/tools/bgm-looper#top", null],
     ["/", null],
     ["/about", null],
     ["/tools/something-new", null],

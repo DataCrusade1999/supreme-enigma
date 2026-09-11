@@ -7,6 +7,18 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Fixed
+
+- The login page's "Continuing to → X" strip no longer disappears when `?next`
+  carries a query or hash directly after a tool prefix (`/keystatic?path=posts`,
+  `/tools/bgm-looper#top`). `parseNext` was handing the whole
+  `pathname + search + hash` string to `toolNameFor`, whose prefix match needs a
+  `/` boundary; it now returns the pathname and the full target separately, so
+  the strip matches on the former while the post-login redirect still carries
+  the latter. Display-only — the redirect itself was always correct, and
+  `proxy.ts` only ever sets `next` to a bare pathname, so it took a hand-written
+  URL to hit.
+
 ### Changed
 
 - The login page moved from `/tools/bgm-looper/login` to `/login` and is now a
