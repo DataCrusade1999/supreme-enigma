@@ -17,9 +17,14 @@ export type LoopResult = {
   loopEndSec: number | null;
   crossfadeMs: number;
   targetLufs: number;
+  /** False when the pipeline answered without describing the loop — a Lambda
+   * still on the pre-metadata image during a deploy. The loop itself is fine;
+   * the page hides the decisions panel rather than printing zeros for it. */
+  hasMetadata: boolean;
 };
 
 type LambdaResult = Partial<{
+  output_key: string;
   peaks: number[];
   duration_sec: number;
   sample_rate: number;
@@ -49,5 +54,19 @@ export function toLoopResult(
     loopEndSec: raw.loop_end_sec ?? null,
     crossfadeMs: raw.crossfade_ms ?? 0,
     targetLufs: raw.target_lufs ?? 0,
+    hasMetadata: raw.duration_sec !== undefined,
   };
+}
+
+/** Read a Lambda invoke payload, or null if it isn't the JSON we expect —
+ * the caller answers with the same error shape it uses for FunctionError
+ * rather than letting a parse throw out of the route as an opaque 500. */
+export function parseLambdaPayload(payload: Uint8Array | undefined): LambdaResult | null {
+  try {
+    if (!payload) return null;
+    const parsed = JSON.parse(Buffer.from(payload).toString());
+    return typeof parsed === "object" && parsed !== null ? parsed : null;
+  } catch {
+    return null;
+  }
 }

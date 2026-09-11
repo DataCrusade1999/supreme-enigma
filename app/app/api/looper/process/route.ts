@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { deriveOutputKey, presignDownload, DOWNLOAD_URL_TTL_SECONDS } from "@/lib/aws";
-import { toLoopResult } from "@/lib/looper";
+import { parseLambdaPayload, toLoopResult } from "@/lib/looper";
 
 export async function POST(request: NextRequest) {
   const { key } = await request.json();
@@ -27,7 +27,10 @@ export async function POST(request: NextRequest) {
 
   // The pipeline's own description of the loop rides back in the invoke
   // payload; the page draws the result waveform and the decisions panel from it.
-  const payload = JSON.parse(Buffer.from(response.Payload!).toString());
+  const payload = parseLambdaPayload(response.Payload);
+  if (!payload) {
+    return NextResponse.json({ error: "processing failed" }, { status: 500 });
+  }
 
   const downloadUrl = await presignDownload(outputKey);
   const expiresAt = new Date(Date.now() + DOWNLOAD_URL_TTL_SECONDS * 1000).toISOString();

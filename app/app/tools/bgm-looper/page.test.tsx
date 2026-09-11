@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import Home from "./page";
+import { toLoopResult } from "../../../lib/looper";
 
 // jsdom has no Web Audio, so the browser-side decode is stubbed. The peaks it
 // would produce are exercised directly in lib/peaks.test.ts.
@@ -25,6 +26,7 @@ const RESULT = {
   loopEndSec: 162.7,
   crossfadeMs: 50,
   targetLufs: -14,
+  hasMetadata: true,
 };
 
 function mockFetchSequence(result: unknown = RESULT) {
@@ -126,6 +128,61 @@ describe("BGM Looper page", () => {
     });
   });
 
+  it("drops the previous track's waveform as soon as a new file is chosen", async () => {
+    render(<Home />);
+    chooseFile();
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-bar]")).toHaveLength(RESULT.peaks.length);
+    });
+
+    // A large file can spend seconds in decodeAudioData; the bars must not keep
+    // showing the finished track under the new file's name.
+    vi.stubGlobal("fetch", mockFetchSequence());
+    decodePeaks.mockReturnValue(new Promise(() => {}));
+    const second = new File(["bytes"], "second.mp3", { type: "audio/mpeg" });
+    const input = screen.getByLabelText(/choose/i, { selector: "input" }) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [second] } });
+
+    await waitFor(() => expect(document.querySelectorAll("[data-bar]")).toHaveLength(0));
+  });
+
+  it("clears the file input so the same track can be run again", async () => {
+    render(<Home />);
+    chooseFile();
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /download/i })).toBeInTheDocument();
+    });
+    const input = screen.getByLabelText(/choose/i, { selector: "input" }) as HTMLInputElement;
+    expect(input.value).toBe("");
+  });
+
+  it("keeps working against a pipeline that reports no metadata", async () => {
+    // The deploy window where the app is new and the Lambda image is not: the
+    // route still answers, through the same mapper, from a bare output key.
+    vi.stubGlobal(
+      "fetch",
+      mockFetchSequence(
+        toLoopResult(
+          { output_key: "outputs/abc.wav" },
+          "https://s3/download",
+          "2026-09-11T10:05:00.000Z",
+        ),
+      ),
+    );
+
+    render(<Home />);
+    chooseFile();
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /download/i })).toBeInTheDocument();
+    });
+    // No fabricated zeros: the decisions panel is absent rather than claiming
+    // 0 BPM and −0 LUFS.
+    expect(screen.queryByText("Tempo used")).not.toBeInTheDocument();
+    expect(screen.queryByText("Output level")).not.toBeInTheDocument();
+  });
+
   it("shows an error message when processing fails", async () => {
     vi.stubGlobal(
       "fetch",
@@ -143,6 +200,9 @@ describe("BGM Looper page", () => {
     chooseFile();
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    // The upload succeeded before processing failed, so the file IS in the
+    // bucket — the copy has to say when it goes away, not that nothing was kept.
+    expect(screen.getByRole("alert")).toHaveTextContent(/deleted within 24 hours/i);
   });
 
   it("offers the failed file again after an error", async () => {

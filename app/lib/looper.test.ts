@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toLoopResult } from "./looper";
+import { parseLambdaPayload, toLoopResult } from "./looper";
 
 const lambdaPayload = {
   output_key: "outputs/abc.wav",
@@ -30,6 +30,7 @@ describe("toLoopResult", () => {
       loopEndSec: 162.7,
       crossfadeMs: 50,
       targetLufs: -14,
+      hasMetadata: true,
     });
   });
 
@@ -44,6 +45,25 @@ describe("toLoopResult", () => {
     expect(result.loopEndSec).toBeNull();
   });
 
+  it("reports metadata as unavailable when the pipeline predates it", () => {
+    // A Lambda still on the pre-metadata image (the window between the Vercel
+    // deploy and the function update) answers with only the output key.
+    const result = toLoopResult(
+      { output_key: "outputs/abc.wav" },
+      "https://s3/download",
+      "2026-09-11T10:05:00.000Z",
+    );
+
+    expect(result.hasMetadata).toBe(false);
+    expect(result.downloadUrl).toBe("https://s3/download");
+  });
+
+  it("reports metadata as available when the pipeline described the loop", () => {
+    expect(toLoopResult(lambdaPayload, "https://s3/d", "2026-09-11T10:05:00.000Z").hasMetadata).toBe(
+      true,
+    );
+  });
+
   it("falls back to an empty waveform when the pipeline sent no peaks", () => {
     const { peaks, ...withoutPeaks } = lambdaPayload;
     void peaks;
@@ -51,5 +71,25 @@ describe("toLoopResult", () => {
     const result = toLoopResult(withoutPeaks, "https://s3/download", "2026-09-11T10:05:00.000Z");
 
     expect(result.peaks).toEqual([]);
+  });
+});
+
+describe("parseLambdaPayload", () => {
+  it("reads the invoke payload", () => {
+    const payload = Buffer.from(JSON.stringify({ output_key: "outputs/abc.wav", tempo_bpm: 96 }));
+
+    expect(parseLambdaPayload(payload)).toEqual({
+      output_key: "outputs/abc.wav",
+      tempo_bpm: 96,
+    });
+  });
+
+  it.each([
+    ["a missing payload", undefined],
+    ["an empty payload", Buffer.from("")],
+    ["a non-JSON payload", Buffer.from("Not JSON at all")],
+    ["NaN in the payload", Buffer.from('{"peaks":[NaN,1.0]}')],
+  ])("returns null for %s rather than throwing", (_label, payload) => {
+    expect(parseLambdaPayload(payload as Uint8Array | undefined)).toBeNull();
   });
 });

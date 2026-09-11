@@ -75,6 +75,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [expiresIn, setExpiresIn] = useState<number | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +88,11 @@ export default function Home() {
     setExpiresIn(null);
     setPlaying(false);
     setProgress(0);
+
+    // Cleared before the await, not after: decoding a large file takes long
+    // enough that the previous track's bars would otherwise sit under the new
+    // file's name, presented as if they were it.
+    setPeaks([]);
 
     setStatus("decoding");
     const localPeaks = await decodePeaks(picked);
@@ -151,6 +157,8 @@ export default function Home() {
 
   const busy = status === "decoding" || status === "uploading" || status === "processing";
   const stepIndex = STEP_ORDER.indexOf(status);
+  // The pipeline's figure when it sent one, the element's own otherwise.
+  const playerDuration = result?.durationSec || duration;
 
   function togglePlay() {
     const audio = audioRef.current;
@@ -215,7 +223,7 @@ export default function Home() {
           {file && status !== "idle" && (
             <div className="mt-7 flex items-baseline justify-between gap-6">
               <p className="text-[1.0625rem] font-semibold tracking-tight">{file.name}</p>
-              {result && (
+              {result?.hasMetadata && (
                 <p className="text-[0.8125rem] text-muted">
                   {formatTime(result.durationSec)} · {(result.sampleRate / 1000).toFixed(1)} kHz
                   {result.channels === 2 ? " stereo" : " mono"}
@@ -265,7 +273,13 @@ export default function Home() {
             <>
               {/* Hidden native element: it is the actual player, driven by the
                 * transport below so the controls match the rest of the page. */}
-              <audio ref={audioRef} src={result.downloadUrl} loop className="hidden" />
+              <audio
+                ref={audioRef}
+                src={result.downloadUrl}
+                loop
+                className="hidden"
+                onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+              />
               <div className="mt-[18px] flex items-center gap-[18px]">
                 <button
                   type="button"
@@ -284,7 +298,7 @@ export default function Home() {
                   )}
                 </button>
                 <p className="font-mono text-[0.8125rem] text-muted">
-                  {formatTime(progress * result.durationSec)} / {formatTime(result.durationSec)}
+                  {formatTime(progress * playerDuration)} / {formatTime(playerDuration)}
                 </p>
                 <span className="inline-flex items-center gap-[7px] border border-accent px-2.5 py-[5px] text-[0.6875rem] uppercase tracking-[0.16em] text-accent">
                   <svg
@@ -374,8 +388,9 @@ export default function Home() {
                   <p className="text-[0.9375rem] font-semibold tracking-tight">{error}</p>
                 </div>
                 <p className="max-w-[52ch] text-sm leading-relaxed text-muted">
-                  Nothing was saved. The file is still on this page — try it again, or pick
-                  a different one.
+                  No loop came back. Your file is still on this page — try it again, or pick
+                  a different one. Anything that reached the bucket is deleted within 24
+                  hours either way.
                 </p>
               </div>
 
@@ -451,7 +466,14 @@ export default function Home() {
             accept="audio/*"
             disabled={busy}
             className="sr-only"
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            onChange={(e) => {
+              const picked = e.target.files?.[0];
+              // Cleared so picking the SAME track again still fires change —
+              // otherwise "Loop another track" is dead for the one file you
+              // most want to re-run once its download link has expired.
+              e.target.value = "";
+              if (picked) handleFile(picked);
+            }}
           />
 
           {status === "idle" && (
@@ -479,7 +501,7 @@ export default function Home() {
         </div>
 
         <div className="col-span-12 lg:col-span-5 lg:pl-10">
-          {status === "done" && result ? (
+          {status === "done" && result?.hasMetadata ? (
             <>
               <p className="text-[0.6875rem] uppercase tracking-[0.16em] text-muted">
                 What the pipeline decided
