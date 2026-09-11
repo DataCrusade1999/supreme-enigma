@@ -72,7 +72,9 @@ def process(input_path: str, output_path: str, target_lufs: float = -14.0) -> di
         "duration_sec": round(len(y) / sr, 3),
         "sample_rate": int(sr),
         "channels": int(y.shape[1]),
-        "tempo_bpm": round(tempo, 1),
+        # Null on the no-beat-grid path for the same reason as the loop bounds:
+        # the tempo that failed to produce a grid is not a decision either.
+        "tempo_bpm": round(tempo, 1) if found else None,
         "loop_start_sec": round(loop_start / sr, 3) if found else None,
         "loop_end_sec": round(loop_end / sr, 3) if found else None,
         "crossfade_ms": round(fade_length(loop_end - loop_start, sr) / sr * 1000, 1),

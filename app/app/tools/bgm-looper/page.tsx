@@ -164,8 +164,12 @@ export default function Home() {
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
-      audio.play();
-      setPlaying(true);
+      // play() rejects on an expired presigned link, among other things — the
+      // transport must not flip to Pause over silence.
+      audio.play().then(
+        () => setPlaying(true),
+        () => setPlaying(false),
+      );
     } else {
       audio.pause();
       setPlaying(false);
@@ -512,10 +516,14 @@ export default function Home() {
                     label: "Cut from",
                     value:
                       result.loopStartSec === null || result.loopEndSec === null
-                        ? "no beat grid — whole track"
+                        ? "whole track"
                         : `${formatTime(result.loopStartSec)} → ${formatTime(result.loopEndSec)}`,
                   },
-                  { label: "Tempo used", value: `${result.tempoBpm} BPM` },
+                  {
+                    label: "Tempo used",
+                    value:
+                      result.tempoBpm === null ? "no beat grid found" : `${result.tempoBpm} BPM`,
+                  },
                   { label: "Crossfade", value: `${result.crossfadeMs} ms equal-power` },
                   { label: "Output level", value: `−${Math.abs(result.targetLufs)} LUFS` },
                 ].map((row, i, rows) => (

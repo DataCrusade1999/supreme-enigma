@@ -74,6 +74,9 @@ def test_process_reports_no_loop_point_as_null_metadata(tmp_path):
     json.dumps(meta)
     assert meta["loop_start_sec"] is None
     assert meta["loop_end_sec"] is None
+    # The tempo that produced no usable beat grid is not a decision either —
+    # reporting it would contradict the null loop bounds next to it.
+    assert meta["tempo_bpm"] is None
     assert len(meta["peaks"]) == PEAK_COUNT
 
 

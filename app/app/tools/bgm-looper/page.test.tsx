@@ -183,6 +183,38 @@ describe("BGM Looper page", () => {
     expect(screen.queryByText("Output level")).not.toBeInTheDocument();
   });
 
+  it("stays on Play when the browser refuses to play the track", async () => {
+    render(<Home />);
+    chooseFile();
+    await waitFor(() => expect(document.querySelector("audio")).toBeInTheDocument());
+
+    // An expired presigned link 403s, so play() rejects.
+    const audio = document.querySelector("audio")!;
+    vi.spyOn(audio, "play").mockRejectedValue(new DOMException("Failed to fetch"));
+
+    fireEvent.click(screen.getByRole("button", { name: /play/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /play/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /pause/i })).not.toBeInTheDocument();
+  });
+
+  it("says the tempo was never found rather than printing the fallback", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFetchSequence({ ...RESULT, loopStartSec: null, loopEndSec: null, tempoBpm: null }),
+    );
+
+    render(<Home />);
+    chooseFile();
+
+    await waitFor(() => expect(screen.getByText("Tempo used")).toBeInTheDocument());
+    expect(screen.getByText("no beat grid found")).toBeInTheDocument();
+    expect(screen.getByText("whole track")).toBeInTheDocument();
+    expect(screen.queryByText(/BPM/)).not.toBeInTheDocument();
+  });
+
   it("shows an error message when processing fails", async () => {
     vi.stubGlobal(
       "fetch",

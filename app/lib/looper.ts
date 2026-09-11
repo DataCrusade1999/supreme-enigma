@@ -10,7 +10,7 @@ export type LoopResult = {
   durationSec: number;
   sampleRate: number;
   channels: number;
-  tempoBpm: number;
+  tempoBpm: number | null;
   /** Where the loop was cut from in the trimmed source, or null when no beat
    * grid was found and the whole track became the loop. */
   loopStartSec: number | null;
@@ -29,7 +29,7 @@ type LambdaResult = Partial<{
   duration_sec: number;
   sample_rate: number;
   channels: number;
-  tempo_bpm: number;
+  tempo_bpm: number | null;
   loop_start_sec: number | null;
   loop_end_sec: number | null;
   crossfade_ms: number;
@@ -49,7 +49,7 @@ export function toLoopResult(
     durationSec: raw.duration_sec ?? 0,
     sampleRate: raw.sample_rate ?? 0,
     channels: raw.channels ?? 0,
-    tempoBpm: raw.tempo_bpm ?? 0,
+    tempoBpm: raw.tempo_bpm ?? null,
     loopStartSec: raw.loop_start_sec ?? null,
     loopEndSec: raw.loop_end_sec ?? null,
     crossfadeMs: raw.crossfade_ms ?? 0,
