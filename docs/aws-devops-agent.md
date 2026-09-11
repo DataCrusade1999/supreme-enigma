@@ -62,8 +62,10 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
 - **On a PR, the verdict and the findings live in two different places.** The
   approve/reject verdict is a **commit status** (`gh api
   repos/<owner>/<repo>/commits/<sha>/status`, not `.../check-runs`); the
-  findings are **inline review comments** (`gh api
-  repos/<owner>/<repo>/pulls/<N>/comments`). `gh pr view <N> --json
+  findings are **inline review comments** (`gh api --paginate
+  repos/<owner>/<repo>/pulls/<N>/comments` — `--paginate` matters, the REST
+  default is 30 per page and a truncated read hides later findings). `gh pr
+  view <N> --json
   reviews,comments` shows neither usefully — it returns the review summary body,
   which is routinely empty, plus issue-level comments. The two are independent:
   the agent approved #83 and filed a correctness bug on it in the same run, so
