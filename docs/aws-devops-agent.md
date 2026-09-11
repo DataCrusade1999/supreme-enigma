@@ -59,6 +59,16 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
 - **Poll `get_task` on a ~30s cadence** until `status` is one of `COMPLETED`,
   `FAILED`, `CANCELED`, `TIMED_OUT`, then call `get_release_readiness_report`
   with the `executionId` for the actual findings.
+- **On a PR, the verdict and the findings live in two different places.** The
+  approve/reject verdict is a **commit status** (`gh api
+  repos/<owner>/<repo>/commits/<sha>/status`, not `.../check-runs`); the
+  findings are **inline review comments** (`gh api
+  repos/<owner>/<repo>/pulls/<N>/comments`). `gh pr view <N> --json
+  reviews,comments` shows neither usefully — it returns the review summary body,
+  which is routinely empty, plus issue-level comments. The two are independent:
+  the agent approved #83 and filed a correctness bug on it in the same run, so
+  a green verdict never means "no findings". Check both before merging; missing
+  this is what let #83 merge with a known bug, fixed after the fact in #84.
 - **`list_recommendations` starts empty.** Proactive recommendations only
   populate after the agent has run investigations/reviews over time — an
   empty result on a freshly created space is expected, not a misconfiguration.
