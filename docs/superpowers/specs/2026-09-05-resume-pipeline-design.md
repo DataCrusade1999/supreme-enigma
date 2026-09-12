@@ -108,6 +108,27 @@ Verified 2026-09-05: the slug is `anthropic/claude-haiku-4.5` at **$1.00 / $5.00
 input/output tokens**, and it accepts PDF file input and enforces structured outputs via
 `response_format: {type: "json_schema"}`.
 
+**Measured end to end 2026-09-12** against the real resume PDF, with the exact request shape
+Phase 2's extract route will use — `plugins: [{id: "file-parser", pdf: {engine: "native"}}]`
+plus `response_format: {type: "json_schema", json_schema: {strict: true, …}}`:
+
+| | |
+|---|---|
+| Model | `anthropic/claude-haiku-4.5` — passed, no fallback to Sonnet needed |
+| Status | `200` |
+| Tokens | 4,456 prompt / 527 completion |
+| **Cost** | **$0.0071 per run** (vs. the ~$0.01 estimated) |
+| Accuracy | Confirmed correct by the author: roles, orgs, dates and bullets all match the document |
+
+The `native` PDF engine charges page content as ordinary prompt tokens — a 2-page resume costs
+about the same as pasting its text, so no page-parsing surcharge shows up. At a few publishes a
+month this is rounding error against the $0.11–$0.28/month baseline in §9.
+
+One caveat found while probing: the key has **no spend cap** (`limit: null` from
+`GET /api/v1/key`). Terraform cannot set one — it is a dashboard-side setting on the key — so
+capping it there is a manual backstop worth doing, independent of the $5 AWS budget in §9.1,
+which does not see OpenRouter spend at all.
+
 Both the model and the API base URL are Terraform-managed Vercel env vars (`OPENROUTER_MODEL`,
 `OPENROUTER_BASE_URL`), so switching model — or switching provider to any OpenAI-compatible
 endpoint, including a future Bedrock-backed one — is configuration, not code.
@@ -409,9 +430,11 @@ new skills section, About page headline and summary, and the `/resume.pdf` route
 
 ## 14. Open items
 
-- Claude Haiku 4.5's extraction quality on the real PDF is unmeasured. The review step exists
-  precisely so this is correctable rather than blocking; if it proves consistently poor,
-  `OPENROUTER_MODEL` moves to `anthropic/claude-sonnet-4.5` or similar with no code change.
+- ~~Claude Haiku 4.5's extraction quality on the real PDF is unmeasured.~~ **Closed 2026-09-12** —
+  measured against the real PDF and confirmed accurate; see §5.2. `OPENROUTER_MODEL` stays
+  `anthropic/claude-haiku-4.5`.
+- The OpenRouter key has no spend limit set (§5.2). Set one in the OpenRouter dashboard — it is
+  not a Terraform-managed setting, and the AWS budget does not cover it.
 - The AWS support case for the zero Bedrock quota (§5.1) is open. Nothing depends on it — it is
   tracked only so the option of moving back is not forgotten.
 - Education and certifications are deferred. Adding them later is a schema extension plus one render
