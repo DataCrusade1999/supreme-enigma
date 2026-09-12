@@ -130,6 +130,12 @@ resource "aws_iam_access_key" "vercel" {
   user = aws_iam_user.vercel.name
 }
 
+locals {
+  # Only main's bucket holds resume data — dev/stage read and write it too, via the
+  # env-agnostic RESUME_BUCKET_NAME. See the design spec §4.1.
+  resume_bucket_arn = aws_s3_bucket.audio.arn
+}
+
 resource "aws_iam_user_policy" "vercel" {
   name = "${var.project_name}-vercel-policy"
   user = aws_iam_user.vercel.name
@@ -138,11 +144,27 @@ resource "aws_iam_user_policy" "vercel" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = [for arn in local.all_audio_bucket_arns : "${arn}/*"]
+        Sid    = "AudioScratchObjects"
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:GetObject"]
+        Resource = flatten([
+          for arn in local.all_audio_bucket_arns : ["${arn}/uploads/*", "${arn}/outputs/*"]
+        ])
       },
       {
+        Sid      = "ResumeObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = ["${local.resume_bucket_arn}/resume/*"]
+      },
+      {
+        Sid      = "ResumeDraftCleanup"
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject"]
+        Resource = ["${local.resume_bucket_arn}/resume/drafts/*"]
+      },
+      {
+        Sid      = "InvokeProcessor"
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
         Resource = local.all_lambda_function_arns
