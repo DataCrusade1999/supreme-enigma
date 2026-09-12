@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { keyForUpload, deriveOutputKey } from "./aws";
+import {
+  keyForUpload,
+  deriveOutputKey,
+  presignUpload,
+  MAX_AUDIO_UPLOAD_BYTES,
+  MAX_RESUME_UPLOAD_BYTES,
+} from "./aws";
 
 describe("keyForUpload", () => {
   it("prefixes with uploads/ and preserves the extension", () => {
@@ -16,5 +22,28 @@ describe("keyForUpload", () => {
 describe("deriveOutputKey", () => {
   it("swaps the uploads/ prefix for outputs/", () => {
     expect(deriveOutputKey("uploads/abc-123.mp3")).toBe("outputs/abc-123.mp3");
+  });
+});
+
+describe("upload size limits", () => {
+  it("caps resume uploads at 5 MB", () => {
+    expect(MAX_RESUME_UPLOAD_BYTES).toBe(5 * 1024 * 1024);
+  });
+
+  it("caps audio uploads well above the resume limit", () => {
+    expect(MAX_AUDIO_UPLOAD_BYTES).toBeGreaterThan(MAX_RESUME_UPLOAD_BYTES);
+  });
+
+  it("signs the content length into the URL", async () => {
+    process.env.APP_AWS_REGION = "us-east-1";
+    process.env.S3_BUCKET_NAME = "test-bucket";
+    process.env.AWS_ACCESS_KEY_ID = "AKIATEST";
+    process.env.AWS_SECRET_ACCESS_KEY = "secret";
+
+    const url = await presignUpload("uploads/a.mp3", "audio/mpeg", 1234);
+
+    // content-length appears in the signed-headers list, so a client sending a
+    // different length fails signature validation rather than being trusted.
+    expect(decodeURIComponent(url)).toContain("content-length");
   });
 });

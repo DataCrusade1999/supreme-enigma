@@ -103,7 +103,11 @@ export default function Home() {
       const urlRes = await fetch("/api/looper/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: picked.name, contentType: picked.type }),
+        body: JSON.stringify({
+          filename: picked.name,
+          contentType: picked.type,
+          size: picked.size,
+        }),
       });
       const { key, uploadUrl } = await urlRes.json();
 

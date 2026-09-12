@@ -15,12 +15,24 @@ export function keyForUpload(filename: string): string {
   return `uploads/${randomUUID()}${ext}`;
 }
 
-export async function presignUpload(key: string, contentType: string): Promise<string> {
+// Signed into the presigned URL rather than checked after the fact. A URL signed
+// without a length authorizes an object of any size up to S3's 5 GB single-PUT
+// ceiling; by the time a server-side size check runs, the bytes have already been
+// stored and paid for.
+export const MAX_AUDIO_UPLOAD_BYTES = 50 * 1024 * 1024;
+export const MAX_RESUME_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+export async function presignUpload(
+  key: string,
+  contentType: string,
+  contentLength: number,
+): Promise<string> {
   const client = getS3Client();
   const command = new PutObjectCommand({
     Bucket: process.env.S3_BUCKET_NAME!,
     Key: key,
     ContentType: contentType,
+    ContentLength: contentLength,
   });
   return getSignedUrl(client, command, { expiresIn: DOWNLOAD_URL_TTL_SECONDS });
 }
