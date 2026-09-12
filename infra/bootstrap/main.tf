@@ -54,6 +54,19 @@ resource "aws_s3_bucket_public_access_block" "tf_state" {
   restrict_public_buckets = true
 }
 
+# Account-wide backstop, so a future bucket cannot be created publicly accessible
+# by accident. It lives here rather than in infra/main deliberately: `terraform
+# destroy` in infra/main is the documented kill switch, and an account-wide
+# guardrail must outlive it — otherwise tearing the app down would also remove the
+# protection for every bucket added afterwards. Per-bucket blocks already cover
+# every bucket that exists today, so this is a guard against future mistakes.
+resource "aws_s3_account_public_access_block" "account" {
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 output "state_bucket_name" {
   value = aws_s3_bucket.tf_state.bucket
 }

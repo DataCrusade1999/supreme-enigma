@@ -158,8 +158,11 @@ needs them.
 ## Infrastructure setup
 
 Requires Terraform ≥1.10, an AWS account, a Vercel account + API token, and
-a gitignored `infra/main/terraform.tfvars` holding `vercel_api_token`,
-`app_password`, and `github_repo`. The Lambda container image is built and
+a gitignored `infra/main/terraform.tfvars`. Copy
+`infra/main/terraform.tfvars.example` across and fill it in — all five inputs
+(`vercel_api_token`, `app_password`, `github_repo`, `alert_email`,
+`openrouter_api_key`) are required, so `terraform plan` fails with `No value for
+required variable` until each is set. The Lambda container image is built and
 pushed by GitHub Actions, never locally, so bootstrap order matters:
 
 1. **State bucket** (one-time, manual):

@@ -7,7 +7,7 @@ Per-area detail lives in `.claude/rules/` (`app.md`, `lambda.md`, `infra.md`), p
 ## Structure
 
 Three independent sibling projects, no monorepo tooling (no workspaces/Turborepo/Nx):
-- `app/` — Next.js 16 + React 19 + TypeScript frontend, deployed to Vercel (`root_directory = "app"` — only changes here trigger a Vercel deploy). Public portfolio pages (home/about/projects/resume/blog/contact) live in the `app/app/(site)/` route group; the BGM Looper tool itself lives at `app/app/tools/bgm-looper/` and is the only gated part of the site — see `app/lib/route-gate.ts`.
+- `app/` — Next.js 16 + React 19 + TypeScript frontend, deployed to Vercel (`root_directory = "app"` — only changes here trigger a Vercel deploy). Public portfolio pages (home/about/projects/resume/blog/contact) live in the `app/app/(site)/` route group and have no auth check at all. The gated areas are the BGM Looper tool (`app/app/tools/bgm-looper/`, `/api/looper/*`) and the Keystatic admin (`/keystatic`, `/api/keystatic/*`); `app/lib/route-gate.ts` is the single source of truth for what's gated.
 - `lambda/` — Python 3.12 DSP pipeline (audio loop processing), packaged as a Lambda container image.
 - `infra/bootstrap/` — Terraform, applied once manually, creates only the Terraform state S3 bucket. Never destroyed by the kill switch.
 - `infra/main/` — Terraform, remote state, creates the per-branch audio S3 buckets and Lambda functions (three of each — see Branching & releases), the shared ECR repo, IAM users/roles, and the Vercel project.
@@ -24,7 +24,7 @@ Three independent sibling projects, no monorepo tooling (no workspaces/Turborepo
 - App dev: `cd app && APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev`.
 - App build: `cd app && KEYSTATIC_GITHUB_CLIENT_ID=dummy KEYSTATIC_GITHUB_CLIENT_SECRET=dummy KEYSTATIC_SECRET=dummy npm run build` — see the Keystatic env var gotcha below; dummy values are fine for a local build, the real ones are only needed to actually authenticate against GitHub.
 - Lambda tests: `cd lambda && .venv/Scripts/python -m pytest -q` on Windows (`.venv/bin/python -m pytest -q` on macOS/Linux). `pytest.ini` sets `pythonpath = src`. Deps live in `lambda/.venv` (local Python 3.13, CI 3.12), deliberately not the global interpreter — setup and the version rationale are in `.claude/rules/lambda.md`; re-run its `pip install` after any Dependabot bump.
-- Terraform: run from `infra/main/` with `-var-file=terraform.tfvars` (gitignored, contains `vercel_api_token`, `app_password`, `github_repo`). Bootstrap order, `ignore_changes`, and the profile gotcha are in `.claude/rules/infra.md`.
+- Terraform: run from `infra/main/` with `-var-file=terraform.tfvars`. That file is gitignored (`*.tfvars`) and has **five required variables, none with a default** — `vercel_api_token`, `app_password`, `github_repo`, `alert_email`, `openrouter_api_key` — so a fresh clone fails with `No value for required variable` until all five are set. `infra/main/terraform.tfvars.example` is the committed template; copy it across and fill it in. Bootstrap order, `ignore_changes`, and the profile gotcha are in `.claude/rules/infra.md`.
 
 ## Branching & releases
 
@@ -62,6 +62,10 @@ Qualifiers that make the sequence actually safe:
 ## Project management
 
 Work is tracked as GitHub issues, labeled `area: *` (bgm-looper/bgm-extractor/portfolio/infra/testing) and `priority: high/medium/low`, and triaged on the [BGM Looper Roadmap](https://github.com/users/DataCrusade1999/projects/4) project board (`Status`: Todo/In Progress/Done — GitHub's built-in workflows auto-update it on item-added/closed/PR-merged, already enabled by default, nothing to configure). Multi-phase initiatives (e.g. the portfolio UI overhaul) get an `epic`-labeled tracking issue with a task list linking each phase's issue. New issues should use the templates under `.github/ISSUE_TEMPLATE/` (feature/bug/chore — blank issues are disabled); PRs should reference the issue they close (`Closes #N`, per `.github/pull_request_template.md`). A design-spec-and-plan pair existing under `docs/superpowers/` does not imply an issue exists yet or vice versa — check the project board for current status, not just the docs.
+
+## Writing
+
+Remove all mannered prose — in docs, specs, plans, commit messages, PR descriptions, and blog content. Say the thing plainly; no throat-clearing, no rhetorical flourishes, no summary paragraphs restating what was just said.
 
 ## AWS DevOps Agent
 

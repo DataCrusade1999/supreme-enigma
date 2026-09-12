@@ -130,6 +130,12 @@ resource "aws_iam_access_key" "vercel" {
   user = aws_iam_user.vercel.name
 }
 
+locals {
+  # Only main's bucket holds resume data — dev/stage read and write it too, via the
+  # env-agnostic RESUME_BUCKET_NAME. See the design spec §4.1.
+  resume_bucket_arn = aws_s3_bucket.audio.arn
+}
+
 resource "aws_iam_user_policy" "vercel" {
   name = "${var.project_name}-vercel-policy"
   user = aws_iam_user.vercel.name
@@ -138,11 +144,27 @@ resource "aws_iam_user_policy" "vercel" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = [for arn in local.all_audio_bucket_arns : "${arn}/*"]
+        Sid    = "AudioScratchObjects"
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:GetObject"]
+        Resource = flatten([
+          for arn in local.all_audio_bucket_arns : ["${arn}/uploads/*", "${arn}/outputs/*"]
+        ])
       },
       {
+        Sid      = "ResumeObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = ["${local.resume_bucket_arn}/resume/*"]
+      },
+      {
+        Sid      = "ResumeDraftCleanup"
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject"]
+        Resource = ["${local.resume_bucket_arn}/resume/drafts/*"]
+      },
+      {
+        Sid      = "InvokeProcessor"
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
         Resource = local.all_lambda_function_arns
@@ -267,10 +289,106 @@ resource "vercel_project_environment_variable" "aws_region" {
   sensitive  = false
 }
 
+# All three branches read and write the resume from main's bucket, so unlike
+# S3_BUCKET_NAME this is not overridden per branch. See the design spec §4.1.
+resource "vercel_project_environment_variable" "resume_bucket_name" {
+  project_id = vercel_project.looper.id
+  key        = "RESUME_BUCKET_NAME"
+  value      = aws_s3_bucket.audio.id
+  target     = local.env_targets
+  sensitive  = false
+}
+
+resource "vercel_project_environment_variable" "openrouter_api_key" {
+  project_id = vercel_project.looper.id
+  key        = "OPENROUTER_API_KEY"
+  value      = var.openrouter_api_key
+  target     = local.env_targets
+  sensitive  = true
+}
+
+resource "vercel_project_environment_variable" "openrouter_model" {
+  project_id = vercel_project.looper.id
+  key        = "OPENROUTER_MODEL"
+  value      = var.openrouter_model
+  target     = local.env_targets
+  sensitive  = false
+}
+
+# Kept as config so the extract route can be pointed at any OpenAI-compatible
+# endpoint without a code change — see the design spec §5.2.
+resource "vercel_project_environment_variable" "openrouter_base_url" {
+  project_id = vercel_project.looper.id
+  key        = "OPENROUTER_BASE_URL"
+  value      = "https://openrouter.ai/api/v1"
+  target     = local.env_targets
+  sensitive  = false
+}
+
 # Automation bypass token so the AWS DevOps Agent's release testing can reach the
 # stage preview URL without disabling Vercel Authentication for every preview.
 # Passed as the x-vercel-protection-bypass query param on the test profile URL.
 resource "vercel_project_protection_bypass" "automation" {
   project_id = vercel_project.looper.id
   note       = "AWS DevOps Agent release testing"
+}
+
+# --- Cost guardrails ---
+
+resource "aws_sns_topic" "budget_alerts" {
+  name = "${var.project_name}-budget-alerts"
+}
+
+resource "aws_sns_topic_subscription" "budget_alerts_email" {
+  topic_arn = aws_sns_topic.budget_alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+resource "aws_sns_topic_policy" "budget_alerts" {
+  arn = aws_sns_topic.budget_alerts.arn
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "budgets.amazonaws.com" }
+      Action    = "SNS:Publish"
+      Resource  = aws_sns_topic.budget_alerts.arn
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+      }
+    }]
+  })
+}
+
+# Measured baseline for this project is $0.11-$0.28/month (design spec §9). A $5 cap is
+# roughly 20x headroom — high enough not to cry wolf, low enough to catch a runaway.
+#
+# Deliberately NOT filtered by tag: the magma-learning budget uses a user:project tag
+# filter, but this project's resources are not consistently tagged, so a tag filter
+# would silently match nothing. An unfiltered account-scoped budget is the honest
+# version; tagging every resource is separate work.
+resource "aws_budgets_budget" "project" {
+  name         = "${var.project_name}-monthly-cap"
+  budget_type  = "COST"
+  limit_amount = "5.0"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  notification {
+    comparison_operator       = "GREATER_THAN"
+    threshold                 = 80
+    threshold_type            = "PERCENTAGE"
+    notification_type         = "ACTUAL"
+    subscriber_sns_topic_arns = [aws_sns_topic.budget_alerts.arn]
+  }
+
+  notification {
+    comparison_operator       = "GREATER_THAN"
+    threshold                 = 100
+    threshold_type            = "PERCENTAGE"
+    notification_type         = "ACTUAL"
+    subscriber_sns_topic_arns = [aws_sns_topic.budget_alerts.arn]
+  }
 }

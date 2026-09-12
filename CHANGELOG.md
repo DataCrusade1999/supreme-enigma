@@ -33,6 +33,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
   now exempts password inputs, so the shortcut works from the gate's password
   box too; every other field type still suppresses it. Gated pages behind the
   login still get no command bar.
+- Project-scoped AWS budget ($5/month) with SNS email alerts. Deliberately
+  unfiltered by tag rather than tag-filtered — this project's resources are not
+  consistently tagged, so a tag filter would silently match nothing.
+- Account-level S3 public access block, as a backstop so a future bucket cannot
+  be created publicly accessible by accident.
+- `RESUME_BUCKET_NAME`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and
+  `OPENROUTER_BASE_URL` environment variables, for the resume pipeline.
 
 ### Fixed
 
@@ -71,6 +78,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
   the token in the test profile's query string is never carried over, and plan
   generation truncates it when the agent tries to re-add it. `APP_PASSWORD` still
   gates `/tools/bgm-looper`, `/api/looper` and `/keystatic` independently.
+- S3 lifecycle rules are now prefix-scoped: audio scratch and resume drafts
+  expire after 1 day, resume archives after 365 days, and the live resume never
+  expires. The single blanket rule it replaces would have deleted a stored
+  resume the day after upload.
+- Bucket CORS is scoped to the app's own origins instead of `*`.
+- The Vercel IAM user's S3 access is scoped to specific prefixes rather than
+  whole buckets, and gains `DeleteObject` on resume drafts only.
 
 ### Added
 
