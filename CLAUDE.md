@@ -24,7 +24,7 @@ Three independent sibling projects, no monorepo tooling (no workspaces/Turborepo
 - App dev: `cd app && APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev`.
 - App build: `cd app && KEYSTATIC_GITHUB_CLIENT_ID=dummy KEYSTATIC_GITHUB_CLIENT_SECRET=dummy KEYSTATIC_SECRET=dummy npm run build` — see the Keystatic env var gotcha below; dummy values are fine for a local build, the real ones are only needed to actually authenticate against GitHub.
 - Lambda tests: `cd lambda && .venv/Scripts/python -m pytest -q` on Windows (`.venv/bin/python -m pytest -q` on macOS/Linux). `pytest.ini` sets `pythonpath = src`. Deps live in `lambda/.venv` (local Python 3.13, CI 3.12), deliberately not the global interpreter — setup and the version rationale are in `.claude/rules/lambda.md`; re-run its `pip install` after any Dependabot bump.
-- Terraform: run from `infra/main/` with `-var-file=terraform.tfvars` (gitignored, contains `vercel_api_token`, `app_password`, `github_repo`). Bootstrap order, `ignore_changes`, and the profile gotcha are in `.claude/rules/infra.md`.
+- Terraform: run from `infra/main/` with `-var-file=terraform.tfvars`. That file is gitignored (`*.tfvars`) and has **five required variables, none with a default** — `vercel_api_token`, `app_password`, `github_repo`, `alert_email`, `openrouter_api_key` — so a fresh clone fails with `No value for required variable` until all five are set. `infra/main/terraform.tfvars.example` is the committed template; copy it across and fill it in. Bootstrap order, `ignore_changes`, and the profile gotcha are in `.claude/rules/infra.md`.
 
 ## Branching & releases
 
