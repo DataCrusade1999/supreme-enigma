@@ -19,12 +19,24 @@ resource "aws_s3_bucket_public_access_block" "audio" {
   restrict_public_buckets = true
 }
 
+locals {
+  # The three deployment origins that issue presigned-URL uploads. Wildcard origins were
+  # not an authorization hole (the signature grants access, not CORS) but there is no
+  # reason for any other site's JS to be able to read these responses.
+  app_origins = [
+    "https://bgm-looper.vercel.app",
+    "https://bgm-looper-git-stage-ashutosh-pandeys-projects-77cb3a00.vercel.app",
+    "https://bgm-looper-git-dev-ashutosh-pandeys-projects-77cb3a00.vercel.app",
+    "http://localhost:3000",
+  ]
+}
+
 resource "aws_s3_bucket_cors_configuration" "audio" {
   bucket = aws_s3_bucket.audio.id
 
   cors_rule {
     allowed_methods = ["PUT", "GET"]
-    allowed_origins = ["*"]
+    allowed_origins = local.app_origins
     allowed_headers = ["*"]
   }
 }
@@ -85,7 +97,7 @@ resource "aws_s3_bucket_cors_configuration" "audio_env" {
 
   cors_rule {
     allowed_methods = ["PUT", "GET"]
-    allowed_origins = ["*"]
+    allowed_origins = local.app_origins
     allowed_headers = ["*"]
   }
 }

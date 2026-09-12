@@ -274,3 +274,12 @@ resource "vercel_project_protection_bypass" "automation" {
   project_id = vercel_project.looper.id
   note       = "AWS DevOps Agent release testing"
 }
+
+# Account-wide backstop. The per-bucket blocks already cover today's buckets; this
+# prevents a future bucket from being created publicly accessible by accident.
+resource "aws_s3_account_public_access_block" "account" {
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
