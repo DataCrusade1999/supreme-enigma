@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 
 export const COOKIE_NAME = "looper_session";
 
@@ -28,8 +28,10 @@ export function verifySessionCookieValue(
 }
 
 export function checkPassword(submitted: string, actual: string): boolean {
-  const a = Buffer.from(submitted);
-  const b = Buffer.from(actual);
-  if (a.length !== b.length) return false;
+  // Hash both sides to a fixed 32 bytes before comparing. Comparing the raw
+  // strings required an early length check, and that early return leaked the
+  // real password's length through response timing.
+  const a = createHash("sha256").update(submitted).digest();
+  const b = createHash("sha256").update(actual).digest();
   return timingSafeEqual(a, b);
 }

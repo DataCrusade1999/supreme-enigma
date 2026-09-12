@@ -29,11 +29,22 @@ describe("checkPassword", () => {
     expect(checkPassword("hunter2", "hunter2")).toBe(true);
   });
 
-  it("rejects an incorrect password", () => {
-    expect(checkPassword("wrong", "hunter2")).toBe(false);
+  it("rejects a wrong password of the same length", () => {
+    expect(checkPassword("hunter3", "hunter2")).toBe(false);
   });
 
-  it("rejects a different-length password without throwing", () => {
+  it("rejects a wrong password of a different length", () => {
     expect(checkPassword("short", "a-much-longer-password")).toBe(false);
+  });
+
+  it("rejects an empty submission", () => {
+    expect(checkPassword("", "hunter2")).toBe(false);
+  });
+
+  it("compares buffers of equal length regardless of input length", () => {
+    // timingSafeEqual throws RangeError on unequal-length buffers. If the
+    // implementation hashes first, both buffers are always 32 bytes and it
+    // never throws — which is the property we want.
+    expect(() => checkPassword("x", "yyyyyyyyyyyyyyyyyyyy")).not.toThrow();
   });
 });
