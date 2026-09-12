@@ -2,6 +2,10 @@ import { randomUUID } from "crypto";
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+/** Presigned URLs last five minutes. Exported so the process route can tell
+ * the page when its download link stops working. */
+export const DOWNLOAD_URL_TTL_SECONDS = 300;
+
 export function getS3Client(): S3Client {
   return new S3Client({ region: process.env.APP_AWS_REGION! });
 }
@@ -18,7 +22,7 @@ export async function presignUpload(key: string, contentType: string): Promise<s
     Key: key,
     ContentType: contentType,
   });
-  return getSignedUrl(client, command, { expiresIn: 300 });
+  return getSignedUrl(client, command, { expiresIn: DOWNLOAD_URL_TTL_SECONDS });
 }
 
 export async function presignDownload(key: string): Promise<string> {
@@ -27,7 +31,7 @@ export async function presignDownload(key: string): Promise<string> {
     Bucket: process.env.S3_BUCKET_NAME!,
     Key: key,
   });
-  return getSignedUrl(client, command, { expiresIn: 300 });
+  return getSignedUrl(client, command, { expiresIn: DOWNLOAD_URL_TTL_SECONDS });
 }
 
 export function deriveOutputKey(inputKey: string): string {
