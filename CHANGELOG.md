@@ -7,6 +7,36 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Security
+
+- The login endpoint is rate-limited to 5 attempts per IP per 15 minutes,
+  returning 429 with `Retry-After`. The limiter is a fixed window held in
+  module memory (`app/lib/rate-limit.ts`) — Vercel runs each serverless
+  instance separately, so this is a speed bump rather than a distributed
+  limit, deliberately traded against the cost of a shared store. The caller is
+  identified from `x-real-ip`, falling back to the **last** `x-forwarded-for`
+  entry: a caller can prepend entries to that header but not remove the one a
+  proxy appends, so reading the first entry would let anyone mint a fresh
+  bucket per request. The map of tracked windows is swept of expired entries
+  and capped, so it cannot grow for the life of an instance. A successful login
+  refunds that caller's window, so signing in legitimately — several devices
+  behind one NAT, a cookie expiring, a tab reloaded — never locks you out; the
+  check itself stays ahead of the password comparison, so the cap is on guesses
+  rather than on error responses.
+- Session cookies now carry a signed issued-at timestamp and expire
+  server-side after 7 days. The signed payload was previously the constant
+  `"authenticated"`, so every cookie was byte-identical and stayed valid
+  until `COOKIE_SECRET` rotated; the response's `maxAge` was only a
+  browser-side hint. **Existing sessions are invalidated — one re-login is
+  required after deploy.**
+- `checkPassword` no longer returns early on a length mismatch, which leaked
+  the password length through timing and defeated the `timingSafeEqual` that
+  followed it. Both sides are now hashed to a fixed 32 bytes first.
+- Presigned upload URLs are signed with an explicit content length, so a URL
+  can no longer be used to upload an arbitrarily large object (previously any
+  size up to S3's 5 GB single-PUT ceiling). The client declares the size, the
+  route rejects anything over 50 MB, and S3 enforces the signed value.
+
 ### Added
 
 - The BGM Looper tool page is designed, in the same editorial system as the rest
