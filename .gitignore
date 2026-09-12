@@ -13,3 +13,6 @@ __pycache__/
 
 # Downloaded AWS DevOps Agent webhook credential exports — never commit
 webhook-creds-*.csv
+
+# Source resume PDFs kept at the repo root as pipeline input — never commit
+*_Resume.pdf
