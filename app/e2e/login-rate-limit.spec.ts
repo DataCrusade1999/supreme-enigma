@@ -36,3 +36,20 @@ test("the login endpoint starts refusing after repeated bad passwords", async ({
   });
   expect(other.status()).toBe(401);
 });
+
+test("signing in correctly never spends the attempt budget", async ({ request }) => {
+  // The limiter is checked before the password, so the cap applies to guesses
+  // rather than to error responses. A correct password refunds the window —
+  // without that, six legitimate logins in 15 minutes (several devices behind
+  // one NAT, a cookie expiring, a tab reloaded) would lock the owner out of
+  // their own site with the right password in hand.
+  const attempt = () =>
+    request.post("/api/login", {
+      data: { password: "test123" },
+      headers: { "x-forwarded-for": "203.0.113.42" },
+    });
+
+  for (let i = 0; i < 8; i++) {
+    expect((await attempt()).status()).toBe(200);
+  }
+});

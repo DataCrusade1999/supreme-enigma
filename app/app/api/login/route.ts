@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkPassword, createSessionCookieValue, COOKIE_NAME } from "@/lib/auth";
-import { checkRateLimit, clientKey } from "@/lib/rate-limit";
+import { checkRateLimit, clearRateLimit, clientKey } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
-  const limit = checkRateLimit(clientKey(request.headers));
+  // Gated before the password is read, so the cap is on guesses rather than on
+  // error responses. A correct password refunds the window below.
+  const key = clientKey(request.headers);
+  const limit = checkRateLimit(key);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "too many attempts" },
@@ -16,6 +19,10 @@ export async function POST(request: NextRequest) {
   if (!checkPassword(password ?? "", process.env.APP_PASSWORD!)) {
     return NextResponse.json({ error: "invalid password" }, { status: 401 });
   }
+
+  // Right password: hand the budget back, so repeatedly signing in legitimately
+  // never locks the owner out of their own site.
+  clearRateLimit(key);
 
   const response = NextResponse.json({ ok: true });
   response.cookies.set(

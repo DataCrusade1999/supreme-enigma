@@ -27,6 +27,25 @@ export function rateLimitWindowCount(): number {
 }
 
 /**
+ * Give a caller their full budget back.
+ *
+ * Called on a *successful* login, so that genuinely signing in repeatedly —
+ * several devices behind one NAT, a cookie expiring, a tab reloaded after
+ * logout — never locks someone out with the right password in hand.
+ *
+ * Note the check itself deliberately stays *before* authentication in the
+ * route. Moving it after the password comparison would mean every request got
+ * its password checked no matter how many had come before, which caps the
+ * error responses rather than the guesses — not a rate limit at all. Gating up
+ * front and refunding on success keeps the brute-force cap intact while
+ * costing a legitimate user nothing, since an attacker cannot trigger a refund
+ * without already knowing the password.
+ */
+export function clearRateLimit(key: string): void {
+  windows.delete(key);
+}
+
+/**
  * Identify the caller for rate-limiting purposes.
  *
  * Vercel overwrites `x-forwarded-for` and does not forward externally supplied

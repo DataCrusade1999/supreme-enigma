@@ -18,7 +18,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
   entry: a caller can prepend entries to that header but not remove the one a
   proxy appends, so reading the first entry would let anyone mint a fresh
   bucket per request. The map of tracked windows is swept of expired entries
-  and capped, so it cannot grow for the life of an instance.
+  and capped, so it cannot grow for the life of an instance. A successful login
+  refunds that caller's window, so signing in legitimately — several devices
+  behind one NAT, a cookie expiring, a tab reloaded — never locks you out; the
+  check itself stays ahead of the password comparison, so the cap is on guesses
+  rather than on error responses.
 - Session cookies now carry a signed issued-at timestamp and expire
   server-side after 7 days. The signed payload was previously the constant
   `"authenticated"`, so every cookie was byte-identical and stayed valid

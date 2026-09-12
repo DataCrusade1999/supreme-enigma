@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   checkRateLimit,
+  clearRateLimit,
   clientKey,
   resetRateLimits,
   rateLimitWindowCount,
@@ -54,6 +55,27 @@ describe("checkRateLimit", () => {
     const early = checkRateLimit("1.2.3.4", T0).retryAfterSeconds;
     const later = checkRateLimit("1.2.3.4", T0 + LOGIN_WINDOW_MS / 2).retryAfterSeconds;
     expect(later).toBeLessThan(early);
+  });
+
+  it("frees the caller's budget once clearRateLimit is called", () => {
+    // A successful login clears the window, so someone who genuinely signs in
+    // repeatedly (several devices behind one NAT, repeated cookie expiries) is
+    // never locked out by their own successful logins.
+    for (let i = 0; i < LOGIN_MAX_ATTEMPTS; i++) {
+      expect(checkRateLimit("1.2.3.4", T0).allowed).toBe(true);
+    }
+    expect(checkRateLimit("1.2.3.4", T0).allowed).toBe(false);
+
+    clearRateLimit("1.2.3.4");
+    expect(checkRateLimit("1.2.3.4", T0).allowed).toBe(true);
+  });
+
+  it("clearing one caller's budget leaves others untouched", () => {
+    for (let i = 0; i < LOGIN_MAX_ATTEMPTS; i++) {
+      checkRateLimit("5.6.7.8", T0);
+    }
+    clearRateLimit("1.2.3.4");
+    expect(checkRateLimit("5.6.7.8", T0).allowed).toBe(false);
   });
 
   it("does not grow its tracking map without bound", () => {
