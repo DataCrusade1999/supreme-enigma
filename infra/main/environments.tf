@@ -29,16 +29,39 @@ resource "aws_s3_bucket_cors_configuration" "audio" {
   }
 }
 
+# Prefix-scoped rather than a blanket filter: audio is scratch and expires in a day,
+# but resume/current.* must persist indefinitely. Bucket versioning is deliberately NOT
+# enabled — with versioning on, these expiration rules would only write delete markers
+# and every audio object would linger as a noncurrent version. See the design spec §4.2.
 resource "aws_s3_bucket_lifecycle_configuration" "audio" {
   bucket = aws_s3_bucket.audio.id
 
   rule {
-    id     = "expire-1-day"
+    id     = "expire-audio-uploads"
     status = "Enabled"
-    filter {}
-    expiration {
-      days = 1
-    }
+    filter { prefix = "uploads/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-audio-outputs"
+    status = "Enabled"
+    filter { prefix = "outputs/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-resume-drafts"
+    status = "Enabled"
+    filter { prefix = "resume/drafts/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-resume-archive"
+    status = "Enabled"
+    filter { prefix = "resume/archive/" }
+    expiration { days = 365 }
   }
 }
 
@@ -67,17 +90,38 @@ resource "aws_s3_bucket_cors_configuration" "audio_env" {
   }
 }
 
+# Kept identical to main's rules above. Only main's bucket holds resume data, but a
+# matching configuration avoids a confusing diff between environments.
 resource "aws_s3_bucket_lifecycle_configuration" "audio_env" {
   for_each = aws_s3_bucket.audio_env
   bucket   = each.value.id
 
   rule {
-    id     = "expire-1-day"
+    id     = "expire-audio-uploads"
     status = "Enabled"
-    filter {}
-    expiration {
-      days = 1
-    }
+    filter { prefix = "uploads/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-audio-outputs"
+    status = "Enabled"
+    filter { prefix = "outputs/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-resume-drafts"
+    status = "Enabled"
+    filter { prefix = "resume/drafts/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-resume-archive"
+    status = "Enabled"
+    filter { prefix = "resume/archive/" }
+    expiration { days = 365 }
   }
 }
 
