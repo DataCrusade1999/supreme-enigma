@@ -180,6 +180,20 @@ describe("getPublishedResume", () => {
     expect(published).toBe(false);
   });
 
+  it("falls back when the bucket is not configured at all", async () => {
+    // The state during a local build and in CI: RESUME_BUCKET_NAME is unset,
+    // so objectExists rejects with a serializer/credentials error rather than
+    // returning false. If this is not caught, /resume and /about fail the
+    // build on the exact path the fallback exists to cover.
+    delete process.env.RESUME_BUCKET_NAME;
+    vi.mocked(objectExists).mockRejectedValue(new Error("Bucket is required"));
+
+    const { resume, published } = await getPublishedResume();
+
+    expect(published).toBe(false);
+    expect(resume).toEqual(placeholderResume);
+  });
+
   it("reads from the resume bucket, not the audio bucket", async () => {
     vi.mocked(objectExists).mockResolvedValue(true);
     vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(PUBLISHED)));
@@ -227,13 +241,19 @@ export const RESUME_CACHE_TAG = "resume";
 // repo-wide rendering change well beyond this feature. See the design spec §8.
 const readCurrent = unstable_cache(
   async (): Promise<{ resume: Resume; published: boolean }> => {
-    const bucket = resumeBucket();
-
-    if (!(await objectExists(bucket, CURRENT_JSON_KEY))) {
-      return { resume: placeholderResume, published: false };
-    }
-
+    // EVERYTHING is inside the try, including the existence probe. With
+    // RESUME_BUCKET_NAME unset — which is the case during a local build and in
+    // CI — resumeBucket() returns undefined and objectExists rejects with a
+    // serializer or credentials error, not a NotFound. Probing outside the try
+    // would let that propagate and fail the build on the very path this
+    // fallback exists to cover.
     try {
+      const bucket = resumeBucket();
+
+      if (!(await objectExists(bucket, CURRENT_JSON_KEY))) {
+        return { resume: placeholderResume, published: false };
+      }
+
       const bytes = await getObjectBytes(bucket, CURRENT_JSON_KEY);
       const parsed = resumeSchema.safeParse(JSON.parse(bytes.toString("utf8")));
       if (!parsed.success) {
@@ -241,9 +261,9 @@ const readCurrent = unstable_cache(
       }
       return { resume: parsed.data, published: true };
     } catch {
-      // A corrupt or unreadable object falls back rather than throwing: the
-      // resume is one section of a portfolio, and a bad read should not take
-      // the whole page down.
+      // A corrupt object, an unset bucket, or missing credentials all fall
+      // back rather than throwing: the resume is one section of a portfolio,
+      // and a bad read must not take the whole page down.
       return { resume: placeholderResume, published: false };
     }
   },
@@ -656,6 +676,18 @@ describe("GET /resume.pdf", () => {
     expect(presignDownloadFrom).not.toHaveBeenCalled();
   });
 
+  it("404s rather than 500ing when the bucket is not configured", async () => {
+    // CI runs with RESUME_BUCKET_NAME unset, and the Playwright spec asserts
+    // this route answers 307 or 404. An uncaught probe error would make it a
+    // 500 and fail that assertion.
+    delete process.env.RESUME_BUCKET_NAME;
+    vi.mocked(objectExists).mockRejectedValue(new Error("Bucket is required"));
+
+    const res = await GET();
+
+    expect(res.status).toBe(404);
+  });
+
   it("is not cached, because the presigned URL expires", async () => {
     // A cached 307 would hand out a stale signed URL long after its 300s TTL,
     // producing an opaque S3 AccessDenied for the visitor.
@@ -692,17 +724,25 @@ import { CURRENT_PDF_KEY, resumeBucket } from "@/lib/resume-keys";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const bucket = resumeBucket();
+  // "Nothing to download" and "S3 is not configured here" are the same answer
+  // to a visitor: a 404. Letting the probe throw instead would surface as a
+  // 500 wherever RESUME_BUCKET_NAME is unset — which includes CI, where the
+  // e2e spec asserts this route answers 307 or 404.
+  try {
+    const bucket = resumeBucket();
 
-  if (!(await objectExists(bucket, CURRENT_PDF_KEY))) {
+    if (!(await objectExists(bucket, CURRENT_PDF_KEY))) {
+      return new NextResponse("No resume has been published yet.", { status: 404 });
+    }
+
+    const url = await presignDownloadFrom(bucket, CURRENT_PDF_KEY);
+    return NextResponse.redirect(url, {
+      status: 307,
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch {
     return new NextResponse("No resume has been published yet.", { status: 404 });
   }
-
-  const url = await presignDownloadFrom(bucket, CURRENT_PDF_KEY);
-  return NextResponse.redirect(url, {
-    status: 307,
-    headers: { "Cache-Control": "no-store" },
-  });
 }
 ```
 

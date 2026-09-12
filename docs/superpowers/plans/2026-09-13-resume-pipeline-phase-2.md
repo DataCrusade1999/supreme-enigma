@@ -1824,6 +1824,10 @@ export default function ResumeAdminPage() {
         );
       }
       const { draftId: id, uploadUrl } = await urlRes.json();
+      // Recorded as soon as it exists, not after extraction succeeds. The PDF
+      // is in S3 from the PUT below onward; losing its id would mean
+      // re-uploading and paying for another extraction just to retry.
+      setDraftId(id);
 
       const put = await fetch(uploadUrl, {
         method: "PUT",
@@ -1839,11 +1843,21 @@ export default function ResumeAdminPage() {
         body: JSON.stringify({ draftId: id }),
       });
       const extracted = await extractRes.json();
+
       if (!extractRes.ok) {
+        // A 422 means the model replied but the result failed the schema. The
+        // route returns what it actually got as `raw`; putting that in the
+        // editor lets the owner fix it by hand instead of re-extracting.
+        if (extractRes.status === 422 && extracted.raw) {
+          setJson(JSON.stringify(extracted.raw, null, 2));
+          onJsonChange(JSON.stringify(extracted.raw, null, 2));
+          setError("The extraction did not match the schema — correct it below.");
+          setStatus("review");
+          return;
+        }
         throw new Error(extracted.error ?? "Extraction failed.");
       }
 
-      setDraftId(id);
       setJson(JSON.stringify(extracted.resume, null, 2));
       setSchemaError(null);
       setStatus("review");
@@ -1853,7 +1867,11 @@ export default function ResumeAdminPage() {
     }
   }
 
-  async function save() {
+  // Returns whether the save landed. Publish depends on this answer: if the
+  // draft PUT fails and publish runs anyway, the publish route promotes
+  // whatever JSON is already in S3 — the pre-correction extraction — while the
+  // UI reports success, silently discarding the owner's edits.
+  async function save(): Promise<boolean> {
     const res = await fetch("/api/resume/draft", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -1862,12 +1880,16 @@ export default function ResumeAdminPage() {
     if (!res.ok) {
       setError("The server rejected those corrections.");
       setStatus("error");
+      return false;
     }
+    return true;
   }
 
   async function publish() {
     setStatus("publishing");
-    await save();
+    // Stop here on a failed save — save() has already set the error state.
+    if (!(await save())) return;
+
     const res = await fetch("/api/resume/publish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1927,7 +1949,15 @@ export default function ResumeAdminPage() {
             {status === "idle" && "Waiting for a file"}
             {status === "uploading" && "Uploading…"}
             {status === "extracting" && "Reading the PDF…"}
-            {status === "review" && "Check the extraction"}
+            {status === "review" &&
+              (error ? (
+                // A 422 lands here: the editor is usable and prefilled with
+                // what the model actually returned, so this is a warning
+                // rather than a dead end.
+                <span className="text-peak">{error}</span>
+              ) : (
+                "Check the extraction"
+              ))}
             {status === "publishing" && "Publishing…"}
             {status === "done" && <span className="text-accent">Published</span>}
             {status === "error" && <span className="text-peak">{error}</span>}
