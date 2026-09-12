@@ -29,6 +29,11 @@ variable "github_repo" {
   type        = string
 }
 
+variable "alert_email" {
+  description = "Address that receives budget threshold notifications. The SNS email subscription must be confirmed manually from the inbox after the first apply."
+  type        = string
+}
+
 # Used only for each Lambda function's initial `image_uri` at creation time — every
 # aws_lambda_function.looper/looper_env has `lifecycle.ignore_changes = [image_uri]`,
 # so CI's `update-function-code` is what actually keeps the deployed image current, and

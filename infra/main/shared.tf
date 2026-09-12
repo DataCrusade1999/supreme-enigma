@@ -305,3 +305,63 @@ resource "aws_s3_account_public_access_block" "account" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+
+# --- Cost guardrails ---
+
+resource "aws_sns_topic" "budget_alerts" {
+  name = "${var.project_name}-budget-alerts"
+}
+
+resource "aws_sns_topic_subscription" "budget_alerts_email" {
+  topic_arn = aws_sns_topic.budget_alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+resource "aws_sns_topic_policy" "budget_alerts" {
+  arn = aws_sns_topic.budget_alerts.arn
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "budgets.amazonaws.com" }
+      Action    = "SNS:Publish"
+      Resource  = aws_sns_topic.budget_alerts.arn
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+      }
+    }]
+  })
+}
+
+# Measured baseline for this project is $0.11-$0.28/month (design spec §9). A $5 cap is
+# roughly 20x headroom — high enough not to cry wolf, low enough to catch a runaway.
+#
+# Deliberately NOT filtered by tag: the magma-learning budget uses a user:project tag
+# filter, but this project's resources are not consistently tagged, so a tag filter
+# would silently match nothing. An unfiltered account-scoped budget is the honest
+# version; tagging every resource is separate work.
+resource "aws_budgets_budget" "project" {
+  name         = "${var.project_name}-monthly-cap"
+  budget_type  = "COST"
+  limit_amount = "5.0"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  notification {
+    comparison_operator       = "GREATER_THAN"
+    threshold                 = 80
+    threshold_type            = "PERCENTAGE"
+    notification_type         = "ACTUAL"
+    subscriber_sns_topic_arns = [aws_sns_topic.budget_alerts.arn]
+  }
+
+  notification {
+    comparison_operator       = "GREATER_THAN"
+    threshold                 = 100
+    threshold_type            = "PERCENTAGE"
+    notification_type         = "ACTUAL"
+    subscriber_sns_topic_arns = [aws_sns_topic.budget_alerts.arn]
+  }
+}
