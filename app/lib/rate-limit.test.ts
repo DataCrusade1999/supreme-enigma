@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   checkRateLimit,
+  clientKey,
   resetRateLimits,
+  rateLimitWindowCount,
   LOGIN_MAX_ATTEMPTS,
   LOGIN_WINDOW_MS,
+  MAX_TRACKED_WINDOWS,
 } from "./rate-limit";
 
 describe("checkRateLimit", () => {
@@ -51,5 +54,60 @@ describe("checkRateLimit", () => {
     const early = checkRateLimit("1.2.3.4", T0).retryAfterSeconds;
     const later = checkRateLimit("1.2.3.4", T0 + LOGIN_WINDOW_MS / 2).retryAfterSeconds;
     expect(later).toBeLessThan(early);
+  });
+
+  it("does not grow its tracking map without bound", () => {
+    for (let i = 0; i < MAX_TRACKED_WINDOWS + 500; i++) {
+      checkRateLimit(`key-${i}`, T0);
+    }
+    expect(rateLimitWindowCount()).toBeLessThanOrEqual(MAX_TRACKED_WINDOWS);
+  });
+
+  it("drops windows that have already expired rather than keeping them forever", () => {
+    checkRateLimit("old-key", T0);
+    // A later request for a different key sweeps windows that can no longer
+    // block anything, so an idle instance does not accumulate dead entries.
+    checkRateLimit("new-key", T0 + LOGIN_WINDOW_MS + 1);
+    expect(rateLimitWindowCount()).toBe(1);
+  });
+});
+
+describe("clientKey", () => {
+  // Vercel overwrites x-forwarded-for and does not forward externally supplied
+  // values (https://vercel.com/docs/headers/request-headers), so in production
+  // the header is trustworthy. These tests pin the behaviour anyway: the code
+  // must not depend on that guarantee holding, and locally it does not hold.
+  const h = (init: Record<string, string>) => new Headers(init);
+
+  it("prefers x-real-ip, which the platform sets", () => {
+    expect(clientKey(h({ "x-real-ip": "203.0.113.7" }))).toBe("203.0.113.7");
+  });
+
+  it("ignores a client-supplied x-forwarded-for when x-real-ip is present", () => {
+    expect(
+      clientKey(h({ "x-real-ip": "203.0.113.7", "x-forwarded-for": "10.0.0.1" })),
+    ).toBe("203.0.113.7");
+  });
+
+  it("takes the LAST x-forwarded-for entry, not the first", () => {
+    // A caller can prepend entries but cannot remove the one the proxy appends,
+    // so the last entry is the closest thing to a trustworthy value.
+    expect(clientKey(h({ "x-forwarded-for": "10.0.0.1, 10.0.0.2, 203.0.113.7" }))).toBe(
+      "203.0.113.7",
+    );
+  });
+
+  it("gives a spoofing caller the same bucket every time", () => {
+    const a = clientKey(h({ "x-forwarded-for": "10.0.0.1, 203.0.113.7" }));
+    const b = clientKey(h({ "x-forwarded-for": "10.0.0.99, 203.0.113.7" }));
+    expect(a).toBe(b);
+  });
+
+  it("falls back to one shared bucket when no header identifies the caller", () => {
+    // Deliberately not a per-request unique value: failing closed into one
+    // shared bucket keeps the limiter biting, where a unique key would
+    // silently disable it.
+    expect(clientKey(h({}))).toBe("unknown");
+    expect(clientKey(h({ "x-forwarded-for": "   " }))).toBe("unknown");
   });
 });

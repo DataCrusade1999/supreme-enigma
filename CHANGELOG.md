@@ -13,7 +13,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
   returning 429 with `Retry-After`. The limiter is a fixed window held in
   module memory (`app/lib/rate-limit.ts`) — Vercel runs each serverless
   instance separately, so this is a speed bump rather than a distributed
-  limit, deliberately traded against the cost of a shared store.
+  limit, deliberately traded against the cost of a shared store. The caller is
+  identified from `x-real-ip`, falling back to the **last** `x-forwarded-for`
+  entry: a caller can prepend entries to that header but not remove the one a
+  proxy appends, so reading the first entry would let anyone mint a fresh
+  bucket per request. The map of tracked windows is swept of expired entries
+  and capped, so it cannot grow for the life of an instance.
 - Session cookies now carry a signed issued-at timestamp and expire
   server-side after 7 days. The signed payload was previously the constant
   `"authenticated"`, so every cookie was byte-identical and stayed valid

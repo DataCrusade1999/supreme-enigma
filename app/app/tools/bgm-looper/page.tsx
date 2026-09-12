@@ -109,6 +109,17 @@ export default function Home() {
           size: picked.size,
         }),
       });
+      // The route rejects an oversized or malformed request with 413/400 and no
+      // uploadUrl. Without this check that surfaces as a generic failure later,
+      // or a PUT to undefined, instead of the reason the file was refused.
+      if (!urlRes.ok) {
+        const { error } = await urlRes.json().catch(() => ({ error: null }));
+        throw new Error(
+          urlRes.status === 413
+            ? "That file is over the 50 MB limit."
+            : (error ?? "Could not start the upload."),
+        );
+      }
       const { key, uploadUrl } = await urlRes.json();
 
       await fetch(uploadUrl, {
