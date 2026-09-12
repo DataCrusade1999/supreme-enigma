@@ -34,6 +34,18 @@ variable "alert_email" {
   type        = string
 }
 
+variable "openrouter_api_key" {
+  description = "OpenRouter key used for resume extraction. Its blast radius is OpenRouter credit only — cap the key's spend limit in the OpenRouter dashboard as a backstop the app cannot override."
+  type        = string
+  sensitive   = true
+}
+
+variable "openrouter_model" {
+  description = "Model slug for resume extraction. A variable so switching model is config, not code — see the design spec §5.2."
+  type        = string
+  default     = "anthropic/claude-haiku-4.5"
+}
+
 # Used only for each Lambda function's initial `image_uri` at creation time — every
 # aws_lambda_function.looper/looper_env has `lifecycle.ignore_changes = [image_uri]`,
 # so CI's `update-function-code` is what actually keeps the deployed image current, and

@@ -289,6 +289,42 @@ resource "vercel_project_environment_variable" "aws_region" {
   sensitive  = false
 }
 
+# All three branches read and write the resume from main's bucket, so unlike
+# S3_BUCKET_NAME this is not overridden per branch. See the design spec §4.1.
+resource "vercel_project_environment_variable" "resume_bucket_name" {
+  project_id = vercel_project.looper.id
+  key        = "RESUME_BUCKET_NAME"
+  value      = aws_s3_bucket.audio.id
+  target     = local.env_targets
+  sensitive  = false
+}
+
+resource "vercel_project_environment_variable" "openrouter_api_key" {
+  project_id = vercel_project.looper.id
+  key        = "OPENROUTER_API_KEY"
+  value      = var.openrouter_api_key
+  target     = local.env_targets
+  sensitive  = true
+}
+
+resource "vercel_project_environment_variable" "openrouter_model" {
+  project_id = vercel_project.looper.id
+  key        = "OPENROUTER_MODEL"
+  value      = var.openrouter_model
+  target     = local.env_targets
+  sensitive  = false
+}
+
+# Kept as config so the extract route can be pointed at any OpenAI-compatible
+# endpoint without a code change — see the design spec §5.2.
+resource "vercel_project_environment_variable" "openrouter_base_url" {
+  project_id = vercel_project.looper.id
+  key        = "OPENROUTER_BASE_URL"
+  value      = "https://openrouter.ai/api/v1"
+  target     = local.env_targets
+  sensitive  = false
+}
+
 # Automation bypass token so the AWS DevOps Agent's release testing can reach the
 # stage preview URL without disabling Vercel Authentication for every preview.
 # Passed as the x-vercel-protection-bypass query param on the test profile URL.
