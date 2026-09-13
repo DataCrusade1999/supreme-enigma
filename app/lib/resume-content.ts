@@ -1,0 +1,51 @@
+import { unstable_cache } from "next/cache";
+import { getObjectBytes, objectExists } from "./aws";
+import { CURRENT_JSON_KEY, resumeBucket } from "./resume-keys";
+import { resumeSchema, type Resume } from "./resume-schema";
+import { placeholderResume } from "../content/resume";
+
+// Phase 2's publish route calls revalidateTag("resume"). Both sides must agree
+// on this string or publishing stops updating the public pages.
+export const RESUME_CACHE_TAG = "resume";
+
+// unstable_cache rather than the "use cache" directive: cacheComponents is off
+// in next.config.mjs, so the directive is unavailable, and enabling it is a
+// repo-wide rendering change well beyond this feature. See the design spec §8.
+const readCurrent = unstable_cache(
+  async (): Promise<{ resume: Resume; published: boolean }> => {
+    // EVERYTHING is inside the try, including the existence probe. With
+    // RESUME_BUCKET_NAME unset — which is the case during a local build and in
+    // CI — resumeBucket() returns undefined and objectExists rejects with a
+    // serializer or credentials error, not a NotFound. Probing outside the try
+    // would let that propagate and fail the build on the very path this
+    // fallback exists to cover.
+    try {
+      const bucket = resumeBucket();
+
+      if (!(await objectExists(bucket, CURRENT_JSON_KEY))) {
+        return { resume: placeholderResume, published: false };
+      }
+
+      const bytes = await getObjectBytes(bucket, CURRENT_JSON_KEY);
+      const parsed = resumeSchema.safeParse(JSON.parse(bytes.toString("utf8")));
+      if (!parsed.success) {
+        return { resume: placeholderResume, published: false };
+      }
+      return { resume: parsed.data, published: true };
+    } catch {
+      // A corrupt object, an unset bucket, or missing credentials all fall
+      // back rather than throwing: the resume is one section of a portfolio,
+      // and a bad read must not take the whole page down.
+      return { resume: placeholderResume, published: false };
+    }
+  },
+  ["resume-current"],
+  { tags: [RESUME_CACHE_TAG] },
+);
+
+export async function getPublishedResume(): Promise<{
+  resume: Resume;
+  published: boolean;
+}> {
+  return readCurrent();
+}

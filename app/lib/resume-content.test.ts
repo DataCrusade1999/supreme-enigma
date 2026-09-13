@@ -1,0 +1,102 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/aws", () => ({ getObjectBytes: vi.fn(), objectExists: vi.fn() }));
+// unstable_cache memoises across calls, which would make these assertions
+// depend on test order. The identity wrapper keeps the cache-key contract
+// (asserted separately below) without the memoisation.
+vi.mock("next/cache", () => ({
+  unstable_cache: (fn: unknown) => fn,
+}));
+
+import { getPublishedResume, RESUME_CACHE_TAG } from "./resume-content";
+import { getObjectBytes, objectExists } from "@/lib/aws";
+import { placeholderResume } from "@/content/resume";
+
+const PUBLISHED = {
+  headline: { name: "Real Name", title: "Real Title", summary: "Real summary." },
+  work: [
+    { role: "R", org: "O", start: "2025", end: "Present", bullets: ["shipped a thing"] },
+  ],
+  skills: [{ group: "Languages", items: ["TypeScript"] }],
+};
+
+describe("getPublishedResume", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.RESUME_BUCKET_NAME = "resume-bucket";
+  });
+
+  it("returns the published resume when one exists", async () => {
+    vi.mocked(objectExists).mockResolvedValue(true);
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(PUBLISHED)));
+
+    const { resume, published } = await getPublishedResume();
+
+    expect(published).toBe(true);
+    expect(resume).toEqual(PUBLISHED);
+  });
+
+  it("falls back to the placeholder before the first publish", async () => {
+    // This is the state of production on the day this ships, not a
+    // theoretical edge case.
+    vi.mocked(objectExists).mockResolvedValue(false);
+
+    const { resume, published } = await getPublishedResume();
+
+    expect(published).toBe(false);
+    expect(resume).toEqual(placeholderResume);
+    expect(getObjectBytes).not.toHaveBeenCalled();
+  });
+
+  it("falls back rather than throwing when the stored JSON is corrupt", async () => {
+    // A broken object must not take the whole portfolio down.
+    vi.mocked(objectExists).mockResolvedValue(true);
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from("not json"));
+
+    const { resume, published } = await getPublishedResume();
+
+    expect(published).toBe(false);
+    expect(resume).toEqual(placeholderResume);
+  });
+
+  it("falls back when the stored JSON does not match the schema", async () => {
+    vi.mocked(objectExists).mockResolvedValue(true);
+    vi.mocked(getObjectBytes).mockResolvedValue(
+      Buffer.from(JSON.stringify({ headline: { name: "only" } })),
+    );
+
+    const { published } = await getPublishedResume();
+    expect(published).toBe(false);
+  });
+
+  it("falls back when the bucket is not configured at all", async () => {
+    // The state during a local build and in CI: RESUME_BUCKET_NAME is unset,
+    // so objectExists rejects with a serializer/credentials error rather than
+    // returning false. If this is not caught, /resume and /about fail the
+    // build on the exact path the fallback exists to cover.
+    delete process.env.RESUME_BUCKET_NAME;
+    vi.mocked(objectExists).mockRejectedValue(new Error("Bucket is required"));
+
+    const { resume, published } = await getPublishedResume();
+
+    expect(published).toBe(false);
+    expect(resume).toEqual(placeholderResume);
+  });
+
+  it("reads from the resume bucket, not the audio bucket", async () => {
+    vi.mocked(objectExists).mockResolvedValue(true);
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(PUBLISHED)));
+    process.env.S3_BUCKET_NAME = "audio-bucket";
+
+    await getPublishedResume();
+
+    expect(vi.mocked(getObjectBytes).mock.calls[0][0]).toBe("resume-bucket");
+    expect(vi.mocked(getObjectBytes).mock.calls[0][1]).toBe("resume/current.json");
+  });
+
+  it("uses the tag the publish route revalidates", () => {
+    // Phase 2's publish route calls revalidateTag("resume"). If these two
+    // strings drift, publishing silently stops updating the public pages.
+    expect(RESUME_CACHE_TAG).toBe("resume");
+  });
+});
