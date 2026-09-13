@@ -1,4 +1,11 @@
-const GATED_PREFIXES = ["/tools/bgm-looper", "/api/looper", "/keystatic", "/api/keystatic"];
+const GATED_PREFIXES = [
+  "/tools/bgm-looper",
+  "/api/looper",
+  "/tools/resume-admin",
+  "/api/resume",
+  "/keystatic",
+  "/api/keystatic",
+];
 const ALWAYS_ALLOWED_PATHS = ["/login", "/api/login"];
 
 // What the login page calls each destination. Keyed by the same prefixes
@@ -6,6 +13,7 @@ const ALWAYS_ALLOWED_PATHS = ["/login", "/api/login"];
 // prefix with no entry here just means the login page shows no destination.
 const TOOL_NAMES: Record<string, string> = {
   "/tools/bgm-looper": "BGM Looper",
+  "/tools/resume-admin": "Resume admin",
   "/keystatic": "Content editor",
 };
 

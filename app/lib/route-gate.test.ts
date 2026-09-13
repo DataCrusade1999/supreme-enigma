@@ -45,3 +45,27 @@ describe("toolNameFor", () => {
     expect(toolNameFor(pathname)).toBe(expected);
   });
 });
+
+describe("resume admin gating", () => {
+  it("gates the admin page and its sub-paths", () => {
+    expect(isGatedPath("/tools/resume-admin")).toBe(true);
+    expect(isGatedPath("/tools/resume-admin/preview/abc")).toBe(true);
+  });
+
+  it("gates the resume API", () => {
+    expect(isGatedPath("/api/resume/upload-url")).toBe(true);
+    expect(isGatedPath("/api/resume/extract")).toBe(true);
+    expect(isGatedPath("/api/resume/publish")).toBe(true);
+  });
+
+  it("leaves the public resume page and PDF ungated", () => {
+    // These are the visitor-facing pages Phase 3 builds. Gating them by an
+    // over-broad prefix match would hide the portfolio behind the password.
+    expect(isGatedPath("/resume")).toBe(false);
+    expect(isGatedPath("/resume.pdf")).toBe(false);
+  });
+
+  it("names the destination on the login gate", () => {
+    expect(toolNameFor("/tools/resume-admin")).toBe("Resume admin");
+  });
+});
