@@ -34,7 +34,7 @@ describe("POST /api/resume/extract", () => {
     vi.mocked(objectExists).mockImplementation(async (_bucket, key) =>
       key.endsWith("resume.pdf"),
     );
-    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from("%PDF"));
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from("%PDF-1.7 minimal header"));
     vi.mocked(extractResumeFromPdf).mockResolvedValue(VALID);
   });
 
@@ -116,6 +116,31 @@ describe("POST /api/resume/extract", () => {
     const res = await POST(post({ draftId: "../current" }));
     expect(res.status).toBe(400);
     expect(getObjectBytes).not.toHaveBeenCalled();
+  });
+
+  it("rejects bytes that are not a PDF before spending a model call", async () => {
+    // upload-url only checks the caller-declared contentType, which is just a
+    // string in the request body — nothing proves the bytes that landed are a
+    // PDF. Without this check any authenticated caller can burn OpenRouter
+    // tokens on arbitrary content that will never parse as a resume.
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from("GIF89a not a pdf"));
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(415);
+    expect(extractResumeFromPdf).not.toHaveBeenCalled();
+    expect(putObjectJson).not.toHaveBeenCalled();
+  });
+
+  it("rejects bytes too short to carry a PDF header", async () => {
+    // subarray() on a short buffer returns a short buffer rather than throwing,
+    // so a truncated upload must fail the comparison, not slip past it.
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from("%PD"));
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(415);
+    expect(extractResumeFromPdf).not.toHaveBeenCalled();
   });
 
   it("404s for a well-formed draft id whose PDF was never uploaded", async () => {
