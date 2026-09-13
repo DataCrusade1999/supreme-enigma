@@ -45,38 +45,32 @@ const readCurrent = unstable_cache(
     // above rules out — it just separates "no bucket configured here", which
     // is the normal state of CI and of a local build, from a genuine read
     // failure. Without it every such request would log an error.
+    // Nothing configured here. A stable fact about the environment, not a
+    // failure, so it is cached like any other answer — and reading the env var
+    // cannot throw, so this does not reintroduce a build-time crash.
     if (!process.env.RESUME_BUCKET_NAME) {
       return { resume: placeholderResume, published: false, pdfPublished: false };
     }
 
-    try {
-      const bucket = resumeBucket();
+    const bucket = resumeBucket();
 
-      if (!(await objectExists(bucket, CURRENT_JSON_KEY))) {
-        return { resume: placeholderResume, published: false, pdfPublished: false };
-      }
-
-      const bytes = await getObjectBytes(bucket, CURRENT_JSON_KEY);
-      const parsed = resumeSchema.safeParse(JSON.parse(bytes.toString("utf8")));
-      if (!parsed.success) {
-        console.error("resume-content: published JSON failed validation", parsed.error);
-        return { resume: placeholderResume, published: false, pdfPublished: false };
-      }
-      return {
-        resume: parsed.data,
-        published: true,
-        pdfPublished: await publishedPdfExists(bucket),
-      };
-    } catch (err) {
-      // A corrupt object or missing credentials still falls back rather than
-      // throwing: the resume is one section of a portfolio, and a bad read
-      // must not take the whole page down. It is logged, though — otherwise
-      // an expired credential or an IAM change is indistinguishable in the
-      // logs from the legitimate nothing-published-yet state, and the only
-      // symptom is a human noticing placeholder copy in production.
-      console.error("resume-content: falling back to placeholder", err);
+    // Legitimately nothing published yet — also a real answer worth caching.
+    // A publish revalidates the tag, so this does not go stale.
+    if (!(await objectExists(bucket, CURRENT_JSON_KEY))) {
       return { resume: placeholderResume, published: false, pdfPublished: false };
     }
+
+    const bytes = await getObjectBytes(bucket, CURRENT_JSON_KEY);
+    const parsed = resumeSchema.safeParse(JSON.parse(bytes.toString("utf8")));
+    if (!parsed.success) {
+      console.error("resume-content: published JSON failed validation", parsed.error);
+      return { resume: placeholderResume, published: false, pdfPublished: false };
+    }
+    return {
+      resume: parsed.data,
+      published: true,
+      pdfPublished: await publishedPdfExists(bucket),
+    };
   },
   ["resume-current"],
   // The tag is the fast path: publishing revalidates it and the page updates
@@ -87,5 +81,17 @@ const readCurrent = unstable_cache(
 );
 
 export async function getPublishedResume(): Promise<PublishedResume> {
-  return readCurrent();
+  try {
+    return await readCurrent();
+  } catch (err) {
+    // Deliberately outside the cache. unstable_cache does not persist a
+    // rejected promise, so letting a genuine failure throw means no entry is
+    // written and the next request retries — where catching it inside would
+    // have pinned the placeholder for the rest of the TTL. The page still
+    // falls back rather than going down; the resume is one section of a
+    // portfolio. It is logged, because an expired credential or an IAM change
+    // is otherwise indistinguishable from the nothing-published-yet state.
+    console.error("resume-content: falling back to placeholder", err);
+    return { resume: placeholderResume, published: false, pdfPublished: false };
+  }
 }

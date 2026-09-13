@@ -4,11 +4,16 @@ vi.mock("@/lib/aws", () => ({ getObjectBytes: vi.fn(), objectExists: vi.fn() }))
 // unstable_cache memoises across calls, which would make these assertions
 // depend on test order. The identity wrapper keeps the cache-key contract
 // (asserted separately below) without the memoisation.
-const cacheCall = vi.hoisted(() => ({ keys: undefined as unknown, options: undefined as unknown }));
+const cacheCall = vi.hoisted(() => ({
+  keys: undefined as unknown,
+  options: undefined as unknown,
+  fn: undefined as undefined | (() => Promise<unknown>),
+}));
 vi.mock("next/cache", () => ({
-  unstable_cache: (fn: unknown, keys: unknown, options: unknown) => {
+  unstable_cache: (fn: () => Promise<unknown>, keys: unknown, options: unknown) => {
     cacheCall.keys = keys;
     cacheCall.options = options;
+    cacheCall.fn = fn;
     return fn;
   },
 }));
@@ -93,6 +98,15 @@ describe("getPublishedResume", () => {
     // both S3 and the logs.
     expect(objectExists).not.toHaveBeenCalled();
     expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it("lets a read failure escape the cached function rather than caching it", async () => {
+    // unstable_cache does not persist a rejected promise. Catching inside it
+    // would store the placeholder and serve it for the rest of the TTL; letting
+    // the error out means no entry is written and the next request retries.
+    vi.mocked(objectExists).mockRejectedValue(new Error("ExpiredToken"));
+
+    await expect(cacheCall.fn!()).rejects.toThrow("ExpiredToken");
   });
 
   it("logs when a configured bucket fails to read", async () => {
