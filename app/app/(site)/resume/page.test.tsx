@@ -1,47 +1,74 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+
+vi.mock("@/lib/resume-content", () => ({ getPublishedResume: vi.fn() }));
+
 import ResumePage from "./page";
-import { resume } from "../../../content/resume";
+import { getPublishedResume } from "@/lib/resume-content";
+
+const PUBLISHED = {
+  headline: { name: "Real Name", title: "Real Title", summary: "Real summary." },
+  work: [
+    {
+      role: "QA Engineer",
+      org: "Creowis",
+      start: "July 2025",
+      end: "Present",
+      bullets: ["Built Playwright suites across a multi-tenant ERP."],
+    },
+  ],
+  skills: [
+    { group: "Languages", items: ["TypeScript", "Python"] },
+    { group: "DevOps", items: ["Docker", "Terraform"] },
+  ],
+};
 
 describe("ResumePage", () => {
-  it("renders a timeline entry for every resume item and a PDF download link", () => {
-    render(<ResumePage />);
-    expect(screen.getAllByRole("listitem").length).toBeGreaterThanOrEqual(resume.length);
+  it("renders the published roles, dates, and bullets", async () => {
+    vi.mocked(getPublishedResume).mockResolvedValue({ resume: PUBLISHED, published: true, pdfPublished: true });
+
+    render(await ResumePage());
+
+    expect(screen.getByText("QA Engineer")).toBeInTheDocument();
+    expect(screen.getByText("Creowis")).toBeInTheDocument();
+    expect(screen.getByText(/July 2025/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Built Playwright suites across a multi-tenant ERP."),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the skills section", async () => {
+    vi.mocked(getPublishedResume).mockResolvedValue({ resume: PUBLISHED, published: true, pdfPublished: true });
+
+    render(await ResumePage());
+
+    expect(screen.getByText("Languages")).toBeInTheDocument();
+    expect(screen.getByText(/TypeScript/)).toBeInTheDocument();
+    expect(screen.getByText("DevOps")).toBeInTheDocument();
+  });
+
+  it("shows the download link once a resume is published", async () => {
+    vi.mocked(getPublishedResume).mockResolvedValue({ resume: PUBLISHED, published: true, pdfPublished: true });
+
+    render(await ResumePage());
+
     expect(screen.getByRole("link", { name: /download pdf/i })).toHaveAttribute(
       "href",
       "/resume.pdf",
     );
   });
 
-  it("opens with the masthead and carries the download bar in its right slot", () => {
-    render(<ResumePage />);
-    expect(
-      screen.getByRole("heading", { level: 1, name: "Resume" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Timeline")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /download pdf/i })).toHaveClass(
-      "bg-fg",
-      "hover:bg-accent",
-      "motion-reduce:transition-none",
-    );
-  });
+  it("hides the download link before the first publish", async () => {
+    // /resume.pdf 404s with nothing published. Offering a link to a 404 is
+    // exactly the bug this closes (#76), so the link is conditional.
+    vi.mocked(getPublishedResume).mockResolvedValue({
+      resume: PUBLISHED,
+      published: false,
+      pdfPublished: false,
+    });
 
-  it("lays each entry out on the shared grid: dates 1-2, role 3-8, bullets 9-12", () => {
-    render(<ResumePage />);
-    const entry = resume[0];
-    const dates = screen.getByText(`${entry.start} — ${entry.end}`);
-    expect(dates).toHaveClass("tabular-nums", "text-accent", "md:col-span-2");
+    render(await ResumePage());
 
-    const row = dates.parentElement as HTMLElement;
-    expect(row).toHaveClass("grid", "grid-cols-12", "gap-6", "border-b", "border-line");
-
-    expect(screen.getByText(entry.role).parentElement).toHaveClass(
-      "md:col-span-6",
-      "md:col-start-3",
-    );
-    expect(screen.getByText(entry.bullets[0]).parentElement).toHaveClass(
-      "md:col-span-4",
-      "md:col-start-9",
-    );
+    expect(screen.queryByRole("link", { name: /download pdf/i })).toBeNull();
   });
 });

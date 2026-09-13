@@ -28,11 +28,27 @@ export const COMMANDS: Command[] = [
     hint: "Get in touch",
     run: (ctx) => ctx.push("/contact"),
   },
+  { id: "cd-tools", label: "cd tools", hint: "Every tool behind the gate", run: (ctx) => ctx.push("/tools") },
   {
     id: "open-bgm-looper",
     label: "open bgm-looper",
     hint: "Launch the BGM Looper tool",
     run: (ctx) => ctx.push("/tools/bgm-looper"),
+  },
+  // The gated tools with no link on the public site. Spelled out here rather
+  // than generated from TOOLS: the label is the command a person types, which
+  // isn't derivable from a route (`/keystatic` → `open content-editor`).
+  {
+    id: "open-resume-admin",
+    label: "open resume-admin",
+    hint: "Publish a resume",
+    run: (ctx) => ctx.push("/tools/resume-admin"),
+  },
+  {
+    id: "open-content-editor",
+    label: "open content-editor",
+    hint: "Write a blog post",
+    run: (ctx) => ctx.push("/keystatic"),
   },
   {
     id: "theme-dark",

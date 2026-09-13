@@ -11,6 +11,185 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Security
 
+- Resume extraction now checks the uploaded object's `%PDF-` header before
+  calling the model. `/api/resume/upload-url` only validates the content type
+  the caller declares in the request body, which says nothing about the bytes
+  that actually land in S3, so any authenticated caller could spend OpenRouter
+  tokens on arbitrary content that would never parse as a resume. A buffer too
+  short to hold the header fails the comparison rather than slipping past it.
+- The login endpoint is rate-limited to 5 attempts per IP per 15 minutes,
+  returning 429 with `Retry-After`. The limiter is a fixed window held in
+  module memory (`app/lib/rate-limit.ts`) — Vercel runs each serverless
+  instance separately, so this is a speed bump rather than a distributed
+  limit, deliberately traded against the cost of a shared store. The caller is
+  identified from `x-real-ip`, falling back to the **last** `x-forwarded-for`
+  entry: a caller can prepend entries to that header but not remove the one a
+  proxy appends, so reading the first entry would let anyone mint a fresh
+  bucket per request. The map of tracked windows is swept of expired entries
+  and capped, so it cannot grow for the life of an instance. A successful login
+  refunds that caller's window, so signing in legitimately — several devices
+  behind one NAT, a cookie expiring, a tab reloaded — never locks you out; the
+  check itself stays ahead of the password comparison, so the cap is on guesses
+  rather than on error responses.
+- Session cookies now carry a signed issued-at timestamp and expire
+  server-side after 7 days. The signed payload was previously the constant
+  `"authenticated"`, so every cookie was byte-identical and stayed valid
+  until `COOKIE_SECRET` rotated; the response's `maxAge` was only a
+  browser-side hint. **Existing sessions are invalidated — one re-login is
+  required after deploy.**
+- `checkPassword` no longer returns early on a length mismatch, which leaked
+  the password length through timing and defeated the `timingSafeEqual` that
+  followed it. Both sides are now hashed to a fixed 32 bytes first.
+- Presigned upload URLs are signed with an explicit content length, so a URL
+  can no longer be used to upload an arbitrarily large object (previously any
+  size up to S3's 5 GB single-PUT ceiling). The client declares the size, the
+  route rejects anything over 50 MB, and S3 enforces the signed value.
+
+### Added
+
+- The BGM Looper tool page is designed, in the same editorial system as the rest
+  of the site: its own masthead (the tool sits outside the `(site)` group, so it
+  renders the wordmark and its own `<CommandBar />` like the `/login` gate), a
+  drop zone that also accepts drag-and-drop, and distinct decoding / uploading /
+  processing / done / error states on one two-column layout.
+- The waveform now corresponds to the actual audio rather than being decorative.
+  The file you pick is decoded in the browser (`decodeAudioData` → 240 peak
+  buckets, `lib/peaks.ts`) and drawn before anything is uploaded; the DSP
+  pipeline computes the same 240 buckets for the processed result and returns
+  them with what it decided — loop bounds, tempo, the crossfade it actually
+  applied, and the target level — which `/api/looper/process` passes through as
+  a typed `LoopResult`. A browser that can't decode the format falls back to a
+  flat rest line and uploads anyway.
+- The result plays through a custom transport whose playhead follows
+  `audio.currentTime`, with click-to-seek, and the download link carries a
+  countdown derived from the presigned URL's server-side 300s TTL.
+
+- The ⌘K/Ctrl+K command bar now works on the `/login` gate, which renders its
+  own `<CommandBar />` — it sits outside the `(site)` route group, so it didn't
+  inherit one, and with no SiteHeader the shortcut is the only nav there besides
+  the wordmark. The global handler's "don't hijack a focused form field" guard
+  now exempts password inputs, so the shortcut works from the gate's password
+  box too; every other field type still suppresses it. Gated pages behind the
+  login still get no command bar.
+- Project-scoped AWS budget ($5/month) with SNS email alerts. Deliberately
+  unfiltered by tag rather than tag-filtered — this project's resources are not
+  consistently tagged, so a tag filter would silently match nothing.
+- Account-level S3 public access block, as a backstop so a future bucket cannot
+  be created publicly accessible by accident.
+- `RESUME_BUCKET_NAME`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and
+  `OPENROUTER_BASE_URL` environment variables, for the resume pipeline.
+- Resume admin pipeline at `/tools/resume-admin` (password-gated): upload a
+  resume PDF, have it read by `anthropic/claude-haiku-4.5` via OpenRouter into
+  a schema-validated JSON structure, correct anything that came out wrong in a
+  live-validated editor, preview it, and publish. Publishing archives the
+  previous `resume/current.{pdf,json}` under `resume/archive/<timestamp>` before
+  promoting the draft, and revalidates the `resume` cache tag. Extraction is
+  idempotent per draft so a page reload cannot spend another model call, and
+  publishing is refused outside the production deployment — drafts stay
+  writable on every branch so one reviewed on `dev` can be published from
+  production unchanged.
+- Two infrastructure changes the pipeline depends on, both applied: the Vercel
+  service account now holds `s3:ListBucket` on the resume bucket, without which
+  S3 answers `403` rather than `404` for a key that does not exist and every
+  first extraction and first publish fails; and the Vercel project now exposes
+  system environment variables, without which `VERCEL_ENV` is unset at runtime
+  and the production-only publish gate refuses everywhere, including production.
+- A tools hub at `/tools`, behind the same password, listing every gated tool
+  with what it does. Before this, the resume admin and the Keystatic content
+  editor had no link anywhere on the site — typing the URL was the only way in.
+  A password-first login (one with no `?next`) now lands here rather than on the
+  BGM Looper, and the command bar carries `cd tools`, `open resume-admin` and
+  `open content-editor` alongside the existing `open bgm-looper`.
+- `/resume` and `/about` now render the resume published through the admin
+  pipeline, read from `resume/current.json` in S3 behind a cached, tagged read
+  that the publish route revalidates. Both fall back to the placeholder content
+  when nothing has been published, which is a tested path rather than a
+  defensive one. The resume page gains a skills section.
+- `.github/workflows/release-tests.yml` — manual-dispatch workflow that runs the
+  AWS DevOps Agent's UI release testing against the `stage` deployment and
+  reports the verdict as a GitHub Check Run. Needs the `DEVOPS_AGENT_WEBHOOK_URL`
+  / `DEVOPS_AGENT_WEBHOOK_SECRET` repo secrets and the
+  `DEVOPS_AGENT_TEST_PROFILE_ID` repo variable; setup and gotchas are in
+  `docs/aws-devops-agent.md`.
+- Vercel automation bypass token (`vercel_project_protection_bypass.automation`
+  in `infra/main/shared.tf`) so the AWS DevOps Agent's release testing can reach
+  the `stage` preview URL. Preview deployments stay behind Vercel
+  Authentication; the agent's test profile URL carries
+  `?x-vercel-protection-bypass=<secret>&x-vercel-set-bypass-cookie=true`
+  instead. Read the secret with `terraform output -raw
+  protection_bypass_secret`.
+
+### Fixed
+
+- The `/resume` page's Download PDF link no longer 404s. `/resume.pdf` is a
+  route handler that redirects to a 300-second presigned GET of the published
+  PDF, and the link is hidden entirely until a resume exists to download.
+- The login page's "Continuing to → X" strip no longer disappears when `?next`
+  carries a query or hash directly after a tool prefix (`/keystatic?path=posts`,
+  `/tools/bgm-looper#top`). `parseNext` was handing the whole
+  `pathname + search + hash` string to `toolNameFor`, whose prefix match needs a
+  `/` boundary; it now returns the pathname and the full target separately, so
+  the strip matches on the former while the post-login redirect still carries
+  the latter. Display-only — the redirect itself was always correct, and
+  `proxy.ts` only ever sets `next` to a bare pathname, so it took a hand-written
+  URL to hit.
+- `lambda/Dockerfile` now fetches ffmpeg with `curl -fL` instead of `curl -L`.
+  Without `-f`, curl exits 0 on an HTTP error and writes the error page to
+  `ffmpeg.tar.xz`, so the build failed a layer later with a misleading
+  `xz: (stdin): File format not recognized` — as it did on the v1.2.0
+  promotion. `-f` fails at the fetch with curl exit 22 and the real status
+  code instead. The same fetch now also retries with `--retry 3
+  --retry-delay 5`, so a transient `johnvansickle.com` blip (connection
+  timeout or 5xx — the failure mode that has broken `deploy` twice) is
+  ridden out in-build rather than needing a `workflow_dispatch` rerun. A
+  permanent error such as a 404 still fails on the first attempt.
+
+### Changed
+
+- The header no longer shows a `⌘K` / `Ctrl K` button. The command bar is
+  unchanged and the shortcut still works everywhere, including on the login
+  gate — it is simply no longer advertised.
+
+- The login page moved from `/tools/bgm-looper/login` to `/login` and is now a
+  general gate for every tool on the site rather than the looper's own. It is
+  designed in the portfolio's editorial system (Instrument Serif masthead over
+  a 2px rule, the twelve-column hairline backdrop, the LoopRing as the site's
+  mark) instead of being unstyled, and names the tool the visitor was heading
+  to — resolved from `?next` through a new `toolNameFor()` in
+  `app/lib/route-gate.ts`, which renders nothing for a destination it doesn't
+  recognise rather than printing a raw path back. Stale links to the old path
+  now redirect through the gate and land on the tool after signing in.
+
+- CI `test` job now runs `npm run lint` alongside the Vitest and Playwright
+  suites, and fails the job if lint fails. Lint was previously outside the CI
+  gate entirely, so a dependency bump that broke the lint toolchain showed all
+  checks green — as the ESLint 10 bump did (#68, tracked in #79). Lint runs
+  before the test suites but only reports its exit code, so a lint error no
+  longer hides the test results.
+- Vercel Authentication is now disabled for preview deployments
+  (`vercel_authentication = { deployment_type = "none" }`), making the `dev` and
+  `stage` URLs publicly reachable. The AWS DevOps Agent's UI release testing
+  cannot use a protection bypass token — it navigates to sub-paths directly, so
+  the token in the test profile's query string is never carried over, and plan
+  generation truncates it when the agent tries to re-add it. `APP_PASSWORD` still
+  gates `/tools/bgm-looper`, `/api/looper` and `/keystatic` independently.
+- S3 lifecycle rules are now prefix-scoped: audio scratch and resume drafts
+  expire after 1 day, resume archives after 365 days, and the live resume never
+  expires. The single blanket rule it replaces would have deleted a stored
+  resume the day after upload.
+- Bucket CORS is scoped to the app's own origins instead of `*`.
+- The Vercel IAM user's S3 access is scoped to specific prefixes rather than
+  whole buckets, and gains `DeleteObject` on resume drafts only.
+- The password now gates the whole `/tools` namespace rather than one prefix per
+  tool, so the hub itself is behind it and a page added under `/tools` is gated
+  before anyone remembers to list it. `app/lib/route-gate.ts` also gained
+  `TOOLS`, one list of the gated tools that the hub, the login page's
+  "Continuing to → X" strip and the command bar all read.
+
+## [1.2.0] - 2026-09-04
+
+### Security
+
 - Bumped the transitive `nanoid` (3.3.16 → 3.3.18, GHSA-2v37-7h3g-55p8) and
   `js-yaml` (4.3.0 → 4.3.2, GHSA-5p4m-2wfm-xmqj) in `app/package-lock.json`,
   clearing both open Dependabot alerts. Lockfile-only; neither was reachable

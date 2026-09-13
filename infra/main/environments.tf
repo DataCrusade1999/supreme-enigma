@@ -19,27 +19,84 @@ resource "aws_s3_bucket_public_access_block" "audio" {
   restrict_public_buckets = true
 }
 
+locals {
+  # The three deployment origins that issue presigned-URL uploads. Wildcard origins were
+  # not an authorization hole (the signature grants access, not CORS) but there is no
+  # reason for any other site's JS to be able to read these responses.
+  #
+  # This list is exhaustive and deliberately has no wildcard: these four origins are the
+  # only places a browser upload works. A one-off feature-branch preview
+  # (bgm-looper-git-<branch>-….vercel.app), a team alias, or a dev server on a port other
+  # than 3000 will fail the PUT with an opaque browser CORS error — that is accepted, not
+  # an oversight. S3 permits one `*` per entry, so `https://bgm-looper-*.vercel.app` is
+  # the one-line change if branch previews ever need to upload.
+  app_origins = [
+    "https://bgm-looper.vercel.app",
+    "https://bgm-looper-git-stage-ashutosh-pandeys-projects-77cb3a00.vercel.app",
+    "https://bgm-looper-git-dev-ashutosh-pandeys-projects-77cb3a00.vercel.app",
+    "http://localhost:3000",
+  ]
+}
+
 resource "aws_s3_bucket_cors_configuration" "audio" {
   bucket = aws_s3_bucket.audio.id
 
   cors_rule {
     allowed_methods = ["PUT", "GET"]
-    allowed_origins = ["*"]
+    allowed_origins = local.app_origins
     allowed_headers = ["*"]
   }
 }
 
+# Prefix-scoped rather than a blanket filter: audio is scratch and expires in a day,
+# but resume/current.* must persist indefinitely. Bucket versioning is deliberately NOT
+# enabled — with versioning on, these expiration rules would only write delete markers
+# and every audio object would linger as a noncurrent version. See the design spec §4.2.
 resource "aws_s3_bucket_lifecycle_configuration" "audio" {
   bucket = aws_s3_bucket.audio.id
 
   rule {
-    id     = "expire-1-day"
+    id     = "expire-audio-uploads"
     status = "Enabled"
-    filter {}
-    expiration {
-      days = 1
-    }
+    filter { prefix = "uploads/" }
+    expiration { days = 1 }
   }
+
+  rule {
+    id     = "expire-audio-outputs"
+    status = "Enabled"
+    filter { prefix = "outputs/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-resume-drafts"
+    status = "Enabled"
+    filter { prefix = "resume/drafts/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-resume-archive"
+    status = "Enabled"
+    filter { prefix = "resume/archive/" }
+    expiration { days = 365 }
+  }
+
+  # There is deliberately NO catch-all rule for keys outside these prefixes,
+  # even though the blanket rule this replaced would have expired them. A
+  # `filter {}` expiration rule does not yield to the prefix rules — per AWS's
+  # own conflict docs, an empty-filter expiration applies to every object in the
+  # bucket, including ones a prefix rule already matches. Adding one at any
+  # number of days would therefore delete resume/current.*, which is the single
+  # thing this configuration exists to keep.
+  # https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-conflicts.html
+  #
+  # Stray keys are prevented at the IAM layer instead: the Vercel user is scoped
+  # to these prefixes in shared.tf, so it cannot write elsewhere. Verified empty
+  # on 2026-09-12 — zero objects outside these prefixes across all three buckets.
+  # The remaining writer with bucket-wide access is the Lambda exec role; scoping
+  # that too is the natural follow-up if a stray ever appears.
 }
 
 resource "aws_s3_bucket" "audio_env" {
@@ -62,22 +119,43 @@ resource "aws_s3_bucket_cors_configuration" "audio_env" {
 
   cors_rule {
     allowed_methods = ["PUT", "GET"]
-    allowed_origins = ["*"]
+    allowed_origins = local.app_origins
     allowed_headers = ["*"]
   }
 }
 
+# Kept identical to main's rules above. Only main's bucket holds resume data, but a
+# matching configuration avoids a confusing diff between environments.
 resource "aws_s3_bucket_lifecycle_configuration" "audio_env" {
   for_each = aws_s3_bucket.audio_env
   bucket   = each.value.id
 
   rule {
-    id     = "expire-1-day"
+    id     = "expire-audio-uploads"
     status = "Enabled"
-    filter {}
-    expiration {
-      days = 1
-    }
+    filter { prefix = "uploads/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-audio-outputs"
+    status = "Enabled"
+    filter { prefix = "outputs/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-resume-drafts"
+    status = "Enabled"
+    filter { prefix = "resume/drafts/" }
+    expiration { days = 1 }
+  }
+
+  rule {
+    id     = "expire-resume-archive"
+    status = "Enabled"
+    filter { prefix = "resume/archive/" }
+    expiration { days = 365 }
   }
 }
 

@@ -28,3 +28,8 @@ output "lambda_function_name" {
 output "vercel_project_id" {
   value = vercel_project.looper.id
 }
+
+output "protection_bypass_secret" {
+  value     = vercel_project_protection_bypass.automation.secret
+  sensitive = true
+}

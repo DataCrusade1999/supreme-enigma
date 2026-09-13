@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 
 export const COOKIE_NAME = "looper_session";
 
@@ -6,30 +6,47 @@ function sign(value: string, secret: string): string {
   return createHmac("sha256", secret).update(value).digest("hex");
 }
 
-export function createSessionCookieValue(secret: string): string {
-  const payload = "authenticated";
-  const sig = sign(payload, secret);
-  return `${payload}.${sig}`;
+export const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// The cookie carries its own issue time, signed alongside the rest. Previously the
+// signed payload was the constant "authenticated", so every session produced a
+// byte-identical cookie that stayed valid until COOKIE_SECRET was rotated — the
+// maxAge set on the response was only a browser-side hint.
+export function createSessionCookieValue(secret: string, now = Date.now()): string {
+  const issuedAt = String(now);
+  return `${issuedAt}.${sign(issuedAt, secret)}`;
 }
 
 export function verifySessionCookieValue(
   cookieValue: string | undefined,
   secret: string,
+  now = Date.now(),
 ): boolean {
   if (!cookieValue) return false;
-  const [payload, sig] = cookieValue.split(".");
-  if (!payload || !sig) return false;
 
-  const expected = sign(payload, secret);
+  const [issuedAt, sig] = cookieValue.split(".");
+  if (!issuedAt || !sig) return false;
+
+  const expected = sign(issuedAt, secret);
   const a = Buffer.from(sig);
   const b = Buffer.from(expected);
+  // Both sides are hex digests of a fixed width, so this length check only fires
+  // on a malformed cookie and leaks nothing about the secret.
   if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  if (!timingSafeEqual(a, b)) return false;
+
+  const issuedAtMs = Number(issuedAt);
+  if (!Number.isFinite(issuedAtMs)) return false;
+
+  const age = now - issuedAtMs;
+  return age >= 0 && age < SESSION_MAX_AGE_MS;
 }
 
 export function checkPassword(submitted: string, actual: string): boolean {
-  const a = Buffer.from(submitted);
-  const b = Buffer.from(actual);
-  if (a.length !== b.length) return false;
+  // Hash both sides to a fixed 32 bytes before comparing. Comparing the raw
+  // strings required an early length check, and that early return leaked the
+  // real password's length through response timing.
+  const a = createHash("sha256").update(submitted).digest();
+  const b = createHash("sha256").update(actual).digest();
   return timingSafeEqual(a, b);
 }

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
-import { CommandBarTrigger } from "./CommandBarTrigger";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -45,7 +44,6 @@ export function SiteHeader() {
 
           <span aria-hidden="true" className="hidden h-4 w-px bg-line sm:block" />
 
-          <CommandBarTrigger />
           <ThemeToggle />
 
           <Link

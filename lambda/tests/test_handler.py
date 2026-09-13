@@ -17,6 +17,7 @@ def test_handler_downloads_processes_and_uploads(monkeypatch, tmp_path):
             data = f.read()
         with open(output_path, "wb") as f:
             f.write(data + b"-processed")
+        return {"peaks": [0.5, 1.0], "tempo_bpm": 96.0}
 
     monkeypatch.setattr(handler_module, "process", fake_process)
 
@@ -25,6 +26,12 @@ def test_handler_downloads_processes_and_uploads(monkeypatch, tmp_path):
         None,
     )
 
-    assert result == {"output_key": "outputs/song.wav"}
+    # The pipeline's metadata rides back out with the key — it is what the page
+    # draws the result waveform and the decisions panel from.
+    assert result == {
+        "output_key": "outputs/song.wav",
+        "peaks": [0.5, 1.0],
+        "tempo_bpm": 96.0,
+    }
     body = s3.get_object(Bucket=bucket, Key="outputs/song.wav")["Body"].read()
     assert body == b"fake-audio-bytes-processed"

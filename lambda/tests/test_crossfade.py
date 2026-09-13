@@ -1,5 +1,15 @@
 import numpy as np
-from looper.crossfade import crossfade_loop
+from looper.crossfade import crossfade_loop, fade_length
+
+
+def test_fade_length_is_clipped_to_half_the_loop():
+    sr = 44100
+
+    # A loop long enough for the full 50 ms fade gets it...
+    assert fade_length(sr, sr, fade_sec=0.05) == int(0.05 * sr)
+    # ...and a loop shorter than two fades gets half its own length, which is
+    # what the API has to report rather than the nominal 50 ms.
+    assert fade_length(1000, sr, fade_sec=0.05) == 500
 
 
 def test_crossfade_output_length_mono():

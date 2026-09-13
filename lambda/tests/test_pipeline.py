@@ -1,7 +1,8 @@
+import json
 import os
 import numpy as np
 import soundfile as sf
-from looper.pipeline import process
+from looper.pipeline import PEAK_COUNT, process
 
 
 def _write_fixture(path: str, sr: int = 22050, bpm: int = 120, n_beats: int = 16):
@@ -40,6 +41,43 @@ def _write_noise_fixture(path: str, sr: int = 22050, duration: float = 0.6):
     mono = 0.05 * rng.standard_normal(int(sr * duration))
     stereo = np.stack([mono, mono], axis=1)
     sf.write(path, stereo, sr, subtype="PCM_16")
+
+
+def test_process_returns_json_serializable_metadata(tmp_path):
+    input_path = str(tmp_path / "input.wav")
+    output_path = str(tmp_path / "output.wav")
+    _write_fixture(input_path)
+
+    meta = process(input_path, output_path)
+
+    # The page draws the result waveform from these, so they have to survive
+    # Lambda's JSON encoder — no numpy scalars, no ndarrays.
+    json.dumps(meta)
+
+    assert len(meta["peaks"]) == PEAK_COUNT
+    assert all(0.0 <= p <= 1.0 for p in meta["peaks"])
+    assert meta["duration_sec"] > 0
+    assert meta["sample_rate"] == sf.info(output_path).samplerate
+    assert meta["crossfade_ms"] > 0
+    assert meta["target_lufs"] == -14.0
+    assert meta["tempo_bpm"] > 0
+    assert 0 <= meta["loop_start_sec"] < meta["loop_end_sec"]
+
+
+def test_process_reports_no_loop_point_as_null_metadata(tmp_path):
+    input_path = str(tmp_path / "input.wav")
+    output_path = str(tmp_path / "output.wav")
+    _write_noise_fixture(input_path)
+
+    meta = process(input_path, output_path)
+
+    json.dumps(meta)
+    assert meta["loop_start_sec"] is None
+    assert meta["loop_end_sec"] is None
+    # The tempo that produced no usable beat grid is not a decision either —
+    # reporting it would contradict the null loop bounds next to it.
+    assert meta["tempo_bpm"] is None
+    assert len(meta["peaks"]) == PEAK_COUNT
 
 
 def test_process_handles_no_loop_point_found(tmp_path):
