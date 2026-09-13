@@ -1,11 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
 import { SiteHeader } from "./SiteHeader";
-import { openCommandBar } from "./CommandBar";
-
-vi.mock("./CommandBar", () => ({
-  openCommandBar: vi.fn(),
-}));
 
 describe("SiteHeader", () => {
   it("renders nav links and the BGM Looper CTA", () => {
@@ -22,10 +17,13 @@ describe("SiteHeader", () => {
     );
   });
 
-  it("opens the command bar when the trigger is clicked", () => {
+  // The command bar itself stays — Ctrl/Cmd+K still opens it everywhere. Only
+  // the header's visible affordance is gone, so the shortcut is unadvertised
+  // rather than removed.
+  it("advertises no command bar shortcut", () => {
     render(<SiteHeader />);
-    fireEvent.click(screen.getByRole("button", { name: "Open command bar" }));
-    expect(openCommandBar).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Open command bar" })).toBeNull();
+    expect(screen.queryByText(/⌘K|Ctrl K/)).toBeNull();
   });
 
   it("gives every nav link a 44px hit target", () => {

@@ -115,6 +115,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- The header no longer shows a `⌘K` / `Ctrl K` button. The command bar is
+  unchanged and the shortcut still works everywhere, including on the login
+  gate — it is simply no longer advertised.
+
 - The login page moved from `/tools/bgm-looper/login` to `/login` and is now a
   general gate for every tool on the site rather than the looper's own. It is
   designed in the portfolio's editorial system (Instrument Serif masthead over
