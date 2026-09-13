@@ -103,6 +103,19 @@ git tags / GitHub Releases cut automatically by the `release` job in
   that the publish route revalidates. Both fall back to the placeholder content
   when nothing has been published, which is a tested path rather than a
   defensive one. The resume page gains a skills section.
+- `.github/workflows/release-tests.yml` — manual-dispatch workflow that runs the
+  AWS DevOps Agent's UI release testing against the `stage` deployment and
+  reports the verdict as a GitHub Check Run. Needs the `DEVOPS_AGENT_WEBHOOK_URL`
+  / `DEVOPS_AGENT_WEBHOOK_SECRET` repo secrets and the
+  `DEVOPS_AGENT_TEST_PROFILE_ID` repo variable; setup and gotchas are in
+  `docs/aws-devops-agent.md`.
+- Vercel automation bypass token (`vercel_project_protection_bypass.automation`
+  in `infra/main/shared.tf`) so the AWS DevOps Agent's release testing can reach
+  the `stage` preview URL. Preview deployments stay behind Vercel
+  Authentication; the agent's test profile URL carries
+  `?x-vercel-protection-bypass=<secret>&x-vercel-set-bypass-cookie=true`
+  instead. Read the secret with `terraform output -raw
+  protection_bypass_secret`.
 
 ### Fixed
 
@@ -118,6 +131,16 @@ git tags / GitHub Releases cut automatically by the `release` job in
   the latter. Display-only — the redirect itself was always correct, and
   `proxy.ts` only ever sets `next` to a bare pathname, so it took a hand-written
   URL to hit.
+- `lambda/Dockerfile` now fetches ffmpeg with `curl -fL` instead of `curl -L`.
+  Without `-f`, curl exits 0 on an HTTP error and writes the error page to
+  `ffmpeg.tar.xz`, so the build failed a layer later with a misleading
+  `xz: (stdin): File format not recognized` — as it did on the v1.2.0
+  promotion. `-f` fails at the fetch with curl exit 22 and the real status
+  code instead. The same fetch now also retries with `--retry 3
+  --retry-delay 5`, so a transient `johnvansickle.com` blip (connection
+  timeout or 5xx — the failure mode that has broken `deploy` twice) is
+  ridden out in-build rather than needing a `workflow_dispatch` rerun. A
+  permanent error such as a 404 still fails on the first attempt.
 
 ### Changed
 
@@ -160,35 +183,6 @@ git tags / GitHub Releases cut automatically by the `release` job in
   before anyone remembers to list it. `app/lib/route-gate.ts` also gained
   `TOOLS`, one list of the gated tools that the hub, the login page's
   "Continuing to → X" strip and the command bar all read.
-
-### Added
-
-- `.github/workflows/release-tests.yml` — manual-dispatch workflow that runs the
-  AWS DevOps Agent's UI release testing against the `stage` deployment and
-  reports the verdict as a GitHub Check Run. Needs the `DEVOPS_AGENT_WEBHOOK_URL`
-  / `DEVOPS_AGENT_WEBHOOK_SECRET` repo secrets and the
-  `DEVOPS_AGENT_TEST_PROFILE_ID` repo variable; setup and gotchas are in
-  `docs/aws-devops-agent.md`.
-- Vercel automation bypass token (`vercel_project_protection_bypass.automation`
-  in `infra/main/shared.tf`) so the AWS DevOps Agent's release testing can reach
-  the `stage` preview URL. Preview deployments stay behind Vercel
-  Authentication; the agent's test profile URL carries
-  `?x-vercel-protection-bypass=<secret>&x-vercel-set-bypass-cookie=true`
-  instead. Read the secret with `terraform output -raw
-  protection_bypass_secret`.
-
-### Fixed
-
-- `lambda/Dockerfile` now fetches ffmpeg with `curl -fL` instead of `curl -L`.
-  Without `-f`, curl exits 0 on an HTTP error and writes the error page to
-  `ffmpeg.tar.xz`, so the build failed a layer later with a misleading
-  `xz: (stdin): File format not recognized` — as it did on the v1.2.0
-  promotion. `-f` fails at the fetch with curl exit 22 and the real status
-  code instead. The same fetch now also retries with `--retry 3
-  --retry-delay 5`, so a transient `johnvansickle.com` blip (connection
-  timeout or 5xx — the failure mode that has broken `deploy` twice) is
-  ridden out in-build rather than needing a `workflow_dispatch` rerun. A
-  permanent error such as a 404 still fails on the first attempt.
 
 ## [1.2.0] - 2026-09-04
 
