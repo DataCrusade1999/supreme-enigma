@@ -9,8 +9,6 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [1.3.0] - 2026-09-13
 
-## [1.2.0] - 2026-09-04
-
 ### Security
 
 - Resume extraction now checks the uploaded object's `%PDF-` header before
