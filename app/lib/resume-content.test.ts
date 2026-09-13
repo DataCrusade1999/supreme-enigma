@@ -4,8 +4,13 @@ vi.mock("@/lib/aws", () => ({ getObjectBytes: vi.fn(), objectExists: vi.fn() }))
 // unstable_cache memoises across calls, which would make these assertions
 // depend on test order. The identity wrapper keeps the cache-key contract
 // (asserted separately below) without the memoisation.
+const cacheCall = vi.hoisted(() => ({ keys: undefined as unknown, options: undefined as unknown }));
 vi.mock("next/cache", () => ({
-  unstable_cache: (fn: unknown) => fn,
+  unstable_cache: (fn: unknown, keys: unknown, options: unknown) => {
+    cacheCall.keys = keys;
+    cacheCall.options = options;
+    return fn;
+  },
 }));
 
 import { getPublishedResume, RESUME_CACHE_TAG } from "./resume-content";
@@ -127,6 +132,10 @@ describe("getPublishedResume", () => {
   it("uses the tag the publish route revalidates", () => {
     // Phase 2's publish route calls revalidateTag("resume"). If these two
     // strings drift, publishing silently stops updating the public pages.
+    // Asserting the constant alone would not catch that: the options literal
+    // is what the cache actually receives, so pin it too.
     expect(RESUME_CACHE_TAG).toBe("resume");
+    expect(cacheCall.keys).toEqual(["resume-current"]);
+    expect(cacheCall.options).toEqual({ tags: ["resume"], revalidate: 60 });
   });
 });

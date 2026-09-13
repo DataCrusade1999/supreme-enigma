@@ -53,7 +53,11 @@ const readCurrent = unstable_cache(
     }
   },
   ["resume-current"],
-  { tags: [RESUME_CACHE_TAG] },
+  // The tag is the fast path: publishing revalidates it and the page updates
+  // without a redeploy. The TTL is the floor under a failed read — without it
+  // a single transient S3 error caches the placeholder until the next publish,
+  // which may be days away, with no way to recover but to publish again.
+  { tags: [RESUME_CACHE_TAG], revalidate: 60 },
 );
 
 export async function getPublishedResume(): Promise<{
