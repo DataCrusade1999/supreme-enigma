@@ -55,8 +55,21 @@ Standing sequence for every PR into `dev` — do not merge on a partial signal, 
    - **`chatgpt-codex-connector[bot]`** — inline comments only, tagged with P1/P2 severity badges. **No commit status, no check-run**, so nothing in `gh pr checks` or the status API reflects it. A green release-readiness verdict says nothing about whether this bot found something.
 
    On #99 the Codex bot filed all four findings (two P1s) while the devops agent filed none and approved. Filter the comments endpoint by `.user.login` to tell them apart, and triage every finding regardless of author.
-5. **Merge only after all four.** `gh pr merge <N> --squash --delete-branch`, once `mergeable/mergeStateStatus` reads `MERGEABLE / CLEAN` (`UNSTABLE` just means checks are still running).
-6. **Then pull.** `git checkout dev && git pull --ff-only origin dev`. Local `dev` drifts fast when several PRs land in a row; a stale local tree is how the wrong base gets used for the next branch.
+5. **Resolve every thread you actually addressed.** Resolving is GraphQL-only — REST cannot do it, and `gh pr resolve` does not exist. List the threads, then resolve by id:
+
+   ```bash
+   gh api graphql -f query='{ repository(owner:"DataCrusade1999",name:"supreme-enigma"){
+     pullRequest(number:<N>){ reviewThreads(first:20){ nodes{ id isResolved path line
+       comments(first:1){ nodes{ body } } } } } } }'
+
+   gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){
+     thread{ isResolved path } } }' -f id=<PRRT_...>
+   ```
+
+   Reply saying what you did *before* resolving — a resolved thread with no reply loses the reason, and the next person cannot tell a fix from a dismissal. Resolve only what is genuinely handled: fixed, or answered with evidence. Never resolve a finding you are deferring or disagree with — leave those open so they stay visible in the merge box, and say why in the thread. Findings posted as issue-level comments (the agent's "Additional findings on related files" block) are not review threads and have no resolve action; answer them with a reply.
+
+6. **Merge only after all four.** `gh pr merge <N> --squash --delete-branch`, once `mergeable/mergeStateStatus` reads `MERGEABLE / CLEAN` (`UNSTABLE` just means checks are still running).
+7. **Then pull.** `git checkout dev && git pull --ff-only origin dev`. Local `dev` drifts fast when several PRs land in a row; a stale local tree is how the wrong base gets used for the next branch.
 
 Qualifiers that make the sequence actually safe:
 
