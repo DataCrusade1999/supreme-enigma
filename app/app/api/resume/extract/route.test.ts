@@ -49,6 +49,32 @@ describe("POST /api/resume/extract", () => {
     expect(body).toEqual(VALID);
   });
 
+  it("validates the cached JSON rather than trusting what is in S3", async () => {
+    // Both writers validate before storing, so this only fires once the schema
+    // has been tightened under a draft written by the old one. Returning `raw`
+    // puts it in the editor to correct, as the non-cached 422 does — falling
+    // through to re-extract would silently spend another model call (§9.1).
+    vi.mocked(objectExists).mockResolvedValue(true);
+    const stale = { headline: VALID.headline };
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(stale)));
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ raw: stale });
+    expect(extractResumeFromPdf).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 for unparseable cached JSON instead of throwing", async () => {
+    vi.mocked(objectExists).mockResolvedValue(true);
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from("{ not json"));
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(422);
+    expect(extractResumeFromPdf).not.toHaveBeenCalled();
+  });
+
   it("is idempotent — an existing draft JSON short-circuits the model call", async () => {
     // A refresh loop must not be able to generate repeated paid model calls.
     // See the design spec §9.1.

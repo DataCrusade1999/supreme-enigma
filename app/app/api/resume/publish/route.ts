@@ -59,9 +59,24 @@ export async function POST(request: Request) {
 
   // JSON first: it is what the public page renders. If the second copy fails the
   // site shows the new resume with a stale download, which beats the reverse.
-  await copyObject(bucket, jsonKey, CURRENT_JSON_KEY);
-  await copyObject(bucket, pdfKey, CURRENT_PDF_KEY);
+  //
+  // Two copies, not one transaction. A rollback here would be another copy that
+  // can fail the same way, and on a first publish there is no archived pair to
+  // restore from — so this reports the half-finished state instead. Retrying the
+  // same draft re-runs both copies and repairs it.
+  try {
+    await copyObject(bucket, jsonKey, CURRENT_JSON_KEY);
+    await copyObject(bucket, pdfKey, CURRENT_PDF_KEY);
+  } catch {
+    return NextResponse.json(
+      { error: "the publish landed only partway — publish the same draft again" },
+      { status: 500 },
+    );
+  }
 
+  // Deliberately not reached on the partial path above: leaving the tag alone
+  // keeps the public page serving the old pair from cache, which is at least
+  // self-consistent, until a retry lands both halves.
   revalidateTag("resume", { expire: 0 });
   return NextResponse.json({ ok: true, archived });
 }

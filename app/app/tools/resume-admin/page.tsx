@@ -127,6 +127,10 @@ export default function ResumeAdminPage() {
     setStatus("done");
   }
 
+  // Anything in flight that makes the draftId and the editor's contents
+  // disagree, or that a second write would race.
+  const busy = status === "uploading" || status === "extracting" || status === "publishing";
+
   return (
     <div className="flex min-h-screen flex-col font-ui">
       <header className="flex items-center justify-between border-b-2 border-rule-heavy px-5 py-5 sm:px-10">
@@ -213,11 +217,16 @@ export default function ResumeAdminPage() {
                   editor and no schemaError yet. Gating on the editor's contents
                   too keeps both actions off until there is something to act on;
                   without it, save() reaches JSON.parse("") inside an async
-                  onClick and the page sticks on "Publishing…" forever. */}
+                  onClick and the page sticks on "Publishing…" forever.
+
+                  `busy` covers the other half: uploading a second PDF sets
+                  draftId to the new draft immediately, while the editor still
+                  holds the previous one's JSON until extraction returns. Acting
+                  in that window would write the old content under the new id. */}
               <button
                 type="button"
                 onClick={save}
-                disabled={Boolean(schemaError) || json.trim().length === 0}
+                disabled={Boolean(schemaError) || json.trim().length === 0 || busy}
                 className="min-h-11 border border-line px-4 text-[0.6875rem] font-semibold uppercase tracking-[0.16em] disabled:opacity-40"
               >
                 Save draft
@@ -225,11 +234,7 @@ export default function ResumeAdminPage() {
               <button
                 type="button"
                 onClick={publish}
-                disabled={
-                  Boolean(schemaError) ||
-                  json.trim().length === 0 ||
-                  status === "publishing"
-                }
+                disabled={Boolean(schemaError) || json.trim().length === 0 || busy}
                 className="min-h-11 bg-fg px-4 text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-bg disabled:opacity-40"
               >
                 Publish

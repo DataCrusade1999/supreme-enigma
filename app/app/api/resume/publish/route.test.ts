@@ -22,6 +22,9 @@ describe("POST /api/resume/publish", () => {
     process.env.RESUME_BUCKET_NAME = "resume-bucket";
     process.env.VERCEL_ENV = "production";
     vi.mocked(objectExists).mockResolvedValue(true);
+    // clearAllMocks resets calls but keeps implementations, so a test that makes
+    // a copy throw would leak that into every test after it.
+    vi.mocked(copyObject).mockReset();
   });
 
   // The draft keys are checked before anything is overwritten, so a test that
@@ -113,6 +116,23 @@ describe("POST /api/resume/publish", () => {
 
     expect(res.status).toBe(404);
     expect(copyObject).not.toHaveBeenCalled();
+  });
+
+  it("reports a half-finished publish rather than failing silently", async () => {
+    // The two promotes are not one transaction. A rollback would be another
+    // copy that can fail the same way, so the route reports the state instead —
+    // retrying the same draft re-runs both copies and repairs it.
+    vi.mocked(copyObject).mockImplementation(async (_bucket, from) => {
+      if (from === "resume/drafts/abc/resume.pdf") throw new Error("s3 503");
+    });
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toMatch(/partway/);
+    // Leaving the tag alone keeps the public page on the old pair from cache,
+    // which is self-consistent; revalidating would expose the mismatch.
+    expect(revalidateTag).not.toHaveBeenCalled();
   });
 
   it("revalidates the resume cache tag so the public pages update", async () => {

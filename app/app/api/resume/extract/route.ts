@@ -26,11 +26,36 @@ export async function POST(request: Request) {
   // model call. Re-extraction is an explicit choice. See the design spec §9.1.
   if (!force && (await objectExists(bucket, jsonKey))) {
     const existing = await getObjectBytes(bucket, jsonKey);
-    return NextResponse.json({
-      draftId,
-      resume: JSON.parse(existing.toString("utf8")),
-      cached: true,
-    });
+
+    let cached: unknown;
+    try {
+      cached = JSON.parse(existing.toString("utf8"));
+    } catch {
+      return NextResponse.json(
+        { error: "stored draft was not valid JSON" },
+        { status: 422 },
+      );
+    }
+
+    // The cached bytes get the same check as a fresh extraction. Both writers
+    // validate before storing, so this only fires once the schema has been
+    // tightened under a draft written by the old one — and then returning `raw`
+    // puts it in the editor to correct, exactly as the non-cached 422 below
+    // does. Falling through to re-extract instead would silently spend another
+    // model call on what the caller asked for as a cache hit (spec §9.1).
+    const cachedParsed = resumeSchema.safeParse(cached);
+    if (!cachedParsed.success) {
+      return NextResponse.json(
+        {
+          error: "stored draft did not match the schema",
+          issues: cachedParsed.error.issues,
+          raw: cached,
+        },
+        { status: 422 },
+      );
+    }
+
+    return NextResponse.json({ draftId, resume: cachedParsed.data, cached: true });
   }
 
   // Spec §5.3 step 1 — confirm the PDF is there before spending anything.
