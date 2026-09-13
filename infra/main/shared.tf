@@ -164,6 +164,20 @@ resource "aws_iam_user_policy" "vercel" {
         Resource = ["${local.resume_bucket_arn}/resume/drafts/*"]
       },
       {
+        # HeadObject on a key that does not exist returns 403, not 404, unless the
+        # caller holds s3:ListBucket on the bucket — so without this the app's
+        # objectExists() rethrows on every absent key and the first extraction and
+        # the first publish both 500. Deliberately unconditioned: S3 evaluates this
+        # for its 404-vs-403 decision with no s3:prefix in context, so an
+        # s3:prefix-scoped grant does not restore the 404. Bucket ARN only, so this
+        # grants listing key names in main's bucket and nothing else — GetObject
+        # stays scoped to uploads/, outputs/ and resume/ above.
+        Sid      = "ResumeHeadObjectNotFound"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [local.resume_bucket_arn]
+      },
+      {
         Sid      = "InvokeProcessor"
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
