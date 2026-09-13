@@ -199,7 +199,16 @@ jobs:
     # explicitly too: deploy.result == 'skipped' is ambiguous on its own
     # between "no lambda changes" (fine, release should run) and "test
     # failed so deploy's own condition never ran" (must not release).
-    if: always() && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled' && needs.changes.outputs.releasable != 'false'
+    #
+    # The changes half is split by event_name the same way deploy's is, and
+    # for the same reason: `changes` only runs on push, so on
+    # workflow_dispatch its result is 'skipped' and its outputs are empty.
+    # Testing `releasable != 'false'` would be fail-OPEN — a job-level
+    # failure of `changes` leaves the output empty, and '' != 'false', so a
+    # runner or checkout failure would cut a release. Testing
+    # `== 'true'` alone would be fail-CLOSED but would also kill the
+    # workflow_dispatch escape hatch. Branching on the event does both.
+    if: always() && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.releasable == 'true'))
     permissions:
       contents: write
       pull-requests: write
