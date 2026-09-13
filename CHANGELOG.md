@@ -92,9 +92,17 @@ git tags / GitHub Releases cut automatically by the `release` job in
   A password-first login (one with no `?next`) now lands here rather than on the
   BGM Looper, and the command bar carries `cd tools`, `open resume-admin` and
   `open content-editor` alongside the existing `open bgm-looper`.
+- `/resume` and `/about` now render the resume published through the admin
+  pipeline, read from `resume/current.json` in S3 behind a cached, tagged read
+  that the publish route revalidates. Both fall back to the placeholder content
+  when nothing has been published, which is a tested path rather than a
+  defensive one. The resume page gains a skills section.
 
 ### Fixed
 
+- The `/resume` page's Download PDF link no longer 404s. `/resume.pdf` is a
+  route handler that redirects to a 300-second presigned GET of the published
+  PDF, and the link is hidden entirely until a resume exists to download.
 - The login page's "Continuing to → X" strip no longer disappears when `?next`
   carries a query or hash directly after a tool prefix (`/keystatic?path=posts`,
   `/tools/bgm-looper#top`). `parseNext` was handing the whole
