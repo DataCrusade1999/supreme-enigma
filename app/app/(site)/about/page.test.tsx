@@ -1,31 +1,43 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+
+vi.mock("@/lib/resume-content", () => ({ getPublishedResume: vi.fn() }));
+
 import AboutPage from "./page";
-import { WAVE } from "../../../content/wave-envelope";
+import { getPublishedResume } from "@/lib/resume-content";
+
+const RESUME = {
+  headline: {
+    name: "Real Name",
+    title: "QA Engineer & DevOps Operator",
+    summary: "Builds reliable systems and removes manual toil.",
+  },
+  work: [{ role: "R", org: "O", start: "2025", end: "Present", bullets: ["b"] }],
+  skills: [{ group: "Languages", items: ["TypeScript"] }],
+};
 
 describe("AboutPage", () => {
-  it("renders an About heading", () => {
-    render(<AboutPage />);
-    expect(screen.getByRole("heading", { level: 1, name: "About" })).toBeInTheDocument();
-  });
+  it("renders the published title and summary", async () => {
+    vi.mocked(getPublishedResume).mockResolvedValue({ resume: RESUME, published: true });
 
-  it("keeps the placeholder copy visible and unchanged", () => {
-    render(<AboutPage />);
+    render(await AboutPage());
+
+    expect(screen.getByText("QA Engineer & DevOps Operator")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Replace this paragraph with your real background, skills, and interests.",
-      ),
+      screen.getByText("Builds reliable systems and removes manual toil."),
     ).toBeInTheDocument();
   });
 
-  it("draws the LoopRing beside the copy", () => {
-    const { container } = render(<AboutPage />);
-    expect(container.querySelectorAll("[data-ring-bar]")).toHaveLength(WAVE.length);
-  });
+  it("still renders before the first publish", async () => {
+    // The page must not error or go blank when nothing is published — it is
+    // the live state of production until the first publish.
+    vi.mocked(getPublishedResume).mockResolvedValue({
+      resume: RESUME,
+      published: false,
+    });
 
-  it("lists the metadata beneath the ring", () => {
-    render(<AboutPage />);
-    expect(screen.getByText("Based in")).toBeInTheDocument();
-    expect(screen.getByText("Currently")).toBeInTheDocument();
+    render(await AboutPage());
+
+    expect(screen.getByText("About")).toBeInTheDocument();
   });
 });
