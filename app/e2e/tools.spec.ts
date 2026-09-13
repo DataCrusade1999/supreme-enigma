@@ -49,8 +49,15 @@ test("the command bar reaches the gated tools that have no link", async ({ page 
   await page.getByRole("button", { name: /log in/i }).click();
   await expect(page).toHaveURL(/\/tools$/);
 
-  await page.keyboard.press("Control+k");
-  await page.getByRole("dialog", { name: "Command bar" }).waitFor();
+  // The ⌘K listener is attached in a useEffect after hydration, and a keydown
+  // in that gap lands on <body> outside React's root, so it's lost rather than
+  // replayed — a single press then waits out the full timeout. Same retry as
+  // the gate's command bar test in pages.spec.ts.
+  const dialog = page.getByRole("dialog", { name: "Command bar" });
+  await expect(async () => {
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(dialog).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 10_000 });
   await page.getByRole("textbox", { name: "Command" }).fill("open resume-admin");
   await page.keyboard.press("Enter");
 
