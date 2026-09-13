@@ -73,6 +73,19 @@ describe("/api/resume/draft", () => {
     expect(await res.json()).toEqual({ error: "no draft for that id" });
   });
 
+  it("does not disguise a credentials or bucket failure as a missing draft", async () => {
+    // A 404 is what a caller treats as routine. Reporting an outage as one
+    // hides it — the same reason objectExists() rethrows anything that is not
+    // NotFound instead of answering false.
+    vi.mocked(getObjectBytes).mockRejectedValue(
+      Object.assign(new Error("AccessDenied"), { name: "AccessDenied" }),
+    );
+
+    await expect(
+      GET(new Request("http://localhost/api/resume/draft?draftId=abc")),
+    ).rejects.toThrow("AccessDenied");
+  });
+
   it("returns 422 when the stored draft is not valid JSON", async () => {
     vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from("not json"));
 

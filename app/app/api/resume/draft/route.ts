@@ -44,7 +44,14 @@ export async function GET(request: Request) {
   let bytes: Buffer;
   try {
     bytes = await getObjectBytes(resumeBucket(), key);
-  } catch {
+  } catch (err) {
+    // Only a genuinely absent object is a 404. Catching everything would report
+    // an expired credential or a misnamed bucket as "no draft for that id",
+    // hiding a real outage behind the one response a caller treats as routine —
+    // the blind spot objectExists() is deliberately written to avoid, which
+    // leaves this route the odd one out.
+    const name = (err as { name?: string }).name;
+    if (name !== "NoSuchKey" && name !== "NotFound") throw err;
     return NextResponse.json({ error: "no draft for that id" }, { status: 404 });
   }
 

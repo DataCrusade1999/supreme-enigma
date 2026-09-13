@@ -25,6 +25,7 @@ describe("POST /api/resume/publish", () => {
     // clearAllMocks resets calls but keeps implementations, so a test that makes
     // a copy throw would leak that into every test after it.
     vi.mocked(copyObject).mockReset();
+    vi.mocked(revalidateTag).mockReset();
   });
 
   // The draft keys are checked before anything is overwritten, so a test that
@@ -138,6 +139,22 @@ describe("POST /api/resume/publish", () => {
   it("revalidates the resume cache tag so the public pages update", async () => {
     await POST(post({ draftId: "abc" }));
     expect(revalidateTag).toHaveBeenCalledWith("resume", { expire: 0 });
+  });
+
+  it("still reports success when only the cache revalidation fails", async () => {
+    // Both copies have landed by that point, so the publish is done. A 500 here
+    // would send the operator into a retry that re-archives the pair it just
+    // promoted, for a cache any later request re-primes anyway.
+    vi.mocked(revalidateTag).mockImplementation(() => {
+      throw new Error("cache backend down");
+    });
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, archived: true });
+    const calls = vi.mocked(copyObject).mock.calls.map(([, from, to]) => [from, to]);
+    expect(calls).toContainEqual(["resume/drafts/abc/resume.pdf", "resume/current.pdf"]);
   });
 
   it("rejects an unsafe draft id", async () => {

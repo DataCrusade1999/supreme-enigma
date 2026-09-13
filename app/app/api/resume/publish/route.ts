@@ -77,6 +77,15 @@ export async function POST(request: Request) {
   // Deliberately not reached on the partial path above: leaving the tag alone
   // keeps the public page serving the old pair from cache, which is at least
   // self-consistent, until a retry lands both halves.
-  revalidateTag("resume", { expire: 0 });
+  //
+  // Both copies have landed by here, so the publish is done and saying
+  // otherwise would be wrong. A 500 would send the operator into a retry that
+  // re-archives the pair it just promoted, for a cache that any later request
+  // re-primes anyway.
+  try {
+    revalidateTag("resume", { expire: 0 });
+  } catch {
+    // Swallowed on purpose — see above.
+  }
   return NextResponse.json({ ok: true, archived });
 }
