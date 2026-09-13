@@ -19,6 +19,14 @@ const readCurrent = unstable_cache(
     // serializer or credentials error, not a NotFound. Probing outside the try
     // would let that propagate and fail the build on the very path this
     // fallback exists to cover.
+    // Reading the env var cannot throw, so this is not the probe the comment
+    // above rules out — it just separates "no bucket configured here", which
+    // is the normal state of CI and of a local build, from a genuine read
+    // failure. Without it every such request would log an error.
+    if (!process.env.RESUME_BUCKET_NAME) {
+      return { resume: placeholderResume, published: false };
+    }
+
     try {
       const bucket = resumeBucket();
 
@@ -29,13 +37,18 @@ const readCurrent = unstable_cache(
       const bytes = await getObjectBytes(bucket, CURRENT_JSON_KEY);
       const parsed = resumeSchema.safeParse(JSON.parse(bytes.toString("utf8")));
       if (!parsed.success) {
+        console.error("resume-content: published JSON failed validation", parsed.error);
         return { resume: placeholderResume, published: false };
       }
       return { resume: parsed.data, published: true };
-    } catch {
-      // A corrupt object, an unset bucket, or missing credentials all fall
-      // back rather than throwing: the resume is one section of a portfolio,
-      // and a bad read must not take the whole page down.
+    } catch (err) {
+      // A corrupt object or missing credentials still falls back rather than
+      // throwing: the resume is one section of a portfolio, and a bad read
+      // must not take the whole page down. It is logged, though — otherwise
+      // an expired credential or an IAM change is indistinguishable in the
+      // logs from the legitimate nothing-published-yet state, and the only
+      // symptom is a human noticing placeholder copy in production.
+      console.error("resume-content: falling back to placeholder", err);
       return { resume: placeholderResume, published: false };
     }
   },

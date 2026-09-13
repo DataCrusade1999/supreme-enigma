@@ -24,6 +24,9 @@ describe("getPublishedResume", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.RESUME_BUCKET_NAME = "resume-bucket";
+    // Spied rather than left alone: the failure paths below assert it fired,
+    // and an unspied console.error dumps stack traces into the test output.
+    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   it("returns the published resume when one exists", async () => {
@@ -81,6 +84,33 @@ describe("getPublishedResume", () => {
 
     expect(published).toBe(false);
     expect(resume).toEqual(placeholderResume);
+    // Short-circuits before the probe, so this ordinary state stays out of
+    // both S3 and the logs.
+    expect(objectExists).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it("logs when a configured bucket fails to read", async () => {
+    // Expired credentials, an IAM change or an S3 outage must not look the
+    // same in the logs as the nothing-published-yet state.
+    vi.mocked(objectExists).mockRejectedValue(new Error("ExpiredToken"));
+
+    const { published } = await getPublishedResume();
+
+    expect(published).toBe(false);
+    expect(console.error).toHaveBeenCalledOnce();
+    expect(vi.mocked(console.error).mock.calls[0][0]).toMatch(/falling back to placeholder/);
+  });
+
+  it("logs when the published JSON fails validation", async () => {
+    vi.mocked(objectExists).mockResolvedValue(true);
+    vi.mocked(getObjectBytes).mockResolvedValue(
+      Buffer.from(JSON.stringify({ headline: { name: "only" } })),
+    );
+
+    await getPublishedResume();
+
+    expect(vi.mocked(console.error).mock.calls[0][0]).toMatch(/failed validation/);
   });
 
   it("reads from the resume bucket, not the audio bucket", async () => {
