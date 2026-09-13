@@ -241,6 +241,14 @@ resource "vercel_project" "looper" {
   framework      = "nextjs"
   root_directory = "app"
 
+  # The resume publish route refuses to run unless VERCEL_ENV is "production"
+  # (spec §7.3), and VERCEL_ENV is a Vercel system variable. The provider
+  # defaults this to false, which leaves system variables unexposed at runtime —
+  # the gate would then read undefined and refuse on production too, so the
+  # resume could never be published. Explicit here rather than left to the
+  # default, because the route's behaviour depends on it.
+  automatically_expose_system_environment_variables = true
+
   git_repository = {
     type              = "github"
     repo              = var.github_repo
