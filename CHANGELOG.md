@@ -70,6 +70,16 @@ git tags / GitHub Releases cut automatically by the `release` job in
   be created publicly accessible by accident.
 - `RESUME_BUCKET_NAME`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and
   `OPENROUTER_BASE_URL` environment variables, for the resume pipeline.
+- Resume admin pipeline at `/tools/resume-admin` (password-gated): upload a
+  resume PDF, have it read by `anthropic/claude-haiku-4.5` via OpenRouter into
+  a schema-validated JSON structure, correct anything that came out wrong in a
+  live-validated editor, preview it, and publish. Publishing archives the
+  previous `resume/current.{pdf,json}` under `resume/archive/<timestamp>` before
+  promoting the draft, and revalidates the `resume` cache tag. Extraction is
+  idempotent per draft so a page reload cannot spend another model call, and
+  publishing is refused outside the production deployment — drafts stay
+  writable on every branch so one reviewed on `dev` can be published from
+  production unchanged.
 
 ### Fixed
 
