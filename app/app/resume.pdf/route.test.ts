@@ -25,6 +25,7 @@ describe("GET /resume.pdf", () => {
     expect(vi.mocked(presignDownloadFrom).mock.calls[0]).toEqual([
       "resume-bucket",
       "resume/current.pdf",
+      'attachment; filename="ashutosh-pandey-resume.pdf"',
     ]);
   });
 

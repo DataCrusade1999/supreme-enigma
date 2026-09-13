@@ -47,8 +47,20 @@ export async function presignUploadTo(
   return getSignedUrl(getS3Client(), command, { expiresIn: DOWNLOAD_URL_TTL_SECONDS });
 }
 
-export async function presignDownloadFrom(bucket: string, key: string): Promise<string> {
-  const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+// contentDisposition is signed into the URL as response-content-disposition.
+// A browser ignores an <a download> attribute when the href redirects to
+// another origin, so for a cross-origin download this header is the only way
+// to force a save and name the file.
+export async function presignDownloadFrom(
+  bucket: string,
+  key: string,
+  contentDisposition?: string,
+): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ResponseContentDisposition: contentDisposition,
+  });
   return getSignedUrl(getS3Client(), command, { expiresIn: DOWNLOAD_URL_TTL_SECONDS });
 }
 

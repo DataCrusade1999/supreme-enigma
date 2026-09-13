@@ -19,7 +19,14 @@ export async function GET() {
       return new NextResponse("No resume has been published yet.", { status: 404 });
     }
 
-    const url = await presignDownloadFrom(bucket, CURRENT_PDF_KEY);
+    // Without this the tab navigates to S3 and either renders the PDF inline
+    // or offers to save it as "current.pdf" — the <a download> on /resume
+    // cannot name a file across origins.
+    const url = await presignDownloadFrom(
+      bucket,
+      CURRENT_PDF_KEY,
+      'attachment; filename="ashutosh-pandey-resume.pdf"',
+    );
     return NextResponse.redirect(url, {
       status: 307,
       headers: { "Cache-Control": "no-store" },
