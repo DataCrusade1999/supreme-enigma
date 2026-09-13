@@ -9,6 +9,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Security
 
+- Resume extraction now checks the uploaded object's `%PDF-` header before
+  calling the model. `/api/resume/upload-url` only validates the content type
+  the caller declares in the request body, which says nothing about the bytes
+  that actually land in S3, so any authenticated caller could spend OpenRouter
+  tokens on arbitrary content that would never parse as a resume. A buffer too
+  short to hold the header fails the comparison rather than slipping past it.
 - The login endpoint is rate-limited to 5 attempts per IP per 15 minutes,
   returning 429 with `Retry-After`. The limiter is a fixed window held in
   module memory (`app/lib/rate-limit.ts`) — Vercel runs each serverless

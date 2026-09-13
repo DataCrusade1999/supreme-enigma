@@ -67,6 +67,18 @@ export async function POST(request: Request) {
 
   const pdf = await getObjectBytes(bucket, pdfKey);
 
+  // `upload-url` only checks the content type the caller declared in the
+  // request body, which proves nothing about the bytes that actually landed.
+  // Checking the header here is what stops arbitrary content reaching a paid
+  // model call. A short buffer yields a short subarray, so a truncated upload
+  // fails the comparison rather than slipping past it.
+  if (!pdf.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
+    return NextResponse.json(
+      { error: "uploaded file is not a PDF" },
+      { status: 415 },
+    );
+  }
+
   let raw: unknown;
   try {
     raw = await extractResumeFromPdf(pdf);
