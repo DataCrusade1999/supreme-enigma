@@ -24,6 +24,14 @@ describe("POST /api/resume/publish", () => {
     vi.mocked(objectExists).mockResolvedValue(true);
   });
 
+  // The draft keys are checked before anything is overwritten, so a test that
+  // wants "nothing to archive" has to answer per key rather than blanket-false.
+  function existsExcept(...absent: string[]) {
+    vi.mocked(objectExists).mockImplementation(async (_bucket, key) =>
+      !absent.includes(key),
+    );
+  }
+
   afterEach(() => {
     process.env.VERCEL_ENV = originalEnv;
   });
@@ -50,14 +58,30 @@ describe("POST /api/resume/publish", () => {
     expect(calls[0][1]).toMatch(/^resume\/archive\/.*\.pdf$/);
     expect(calls[1][0]).toBe("resume/current.json");
     expect(calls[1][1]).toMatch(/^resume\/archive\/.*\.json$/);
-    expect(calls[2]).toEqual(["resume/drafts/abc/resume.pdf", "resume/current.pdf"]);
-    expect(calls[3]).toEqual(["resume/drafts/abc/resume.json", "resume/current.json"]);
+    expect(calls[2]).toEqual(["resume/drafts/abc/resume.json", "resume/current.json"]);
+    expect(calls[3]).toEqual(["resume/drafts/abc/resume.pdf", "resume/current.pdf"]);
+  });
+
+  it("writes every object into the resume bucket, not the audio bucket", async () => {
+    // This is the only route that overwrites the live resume. Without this the
+    // suite stays green if resumeBucket() is ever swapped for S3_BUCKET_NAME,
+    // which would publish into the per-branch audio bucket.
+    process.env.S3_BUCKET_NAME = "audio-bucket";
+
+    await POST(post({ draftId: "abc" }));
+
+    const buckets = vi.mocked(copyObject).mock.calls.map(([bucket]) => bucket);
+    expect(buckets.length).toBeGreaterThan(0);
+    expect(new Set(buckets)).toEqual(new Set(["resume-bucket"]));
+    for (const [bucket] of vi.mocked(objectExists).mock.calls) {
+      expect(bucket).toBe("resume-bucket");
+    }
   });
 
   it("publishes with nothing to archive on the first publish", async () => {
     // This is a normal path, not an error — it is the state of production on
     // the day this ships.
-    vi.mocked(objectExists).mockResolvedValue(false);
+    existsExcept("resume/current.json");
 
     const res = await POST(post({ draftId: "abc" }));
 
@@ -65,9 +89,30 @@ describe("POST /api/resume/publish", () => {
     expect(await res.json()).toEqual({ ok: true, archived: false });
     const calls = vi.mocked(copyObject).mock.calls.map(([, from, to]) => [from, to]);
     expect(calls).toEqual([
-      ["resume/drafts/abc/resume.pdf", "resume/current.pdf"],
       ["resume/drafts/abc/resume.json", "resume/current.json"],
+      ["resume/drafts/abc/resume.pdf", "resume/current.pdf"],
     ]);
+  });
+
+  it("refuses a draft whose JSON has expired rather than promoting half of it", async () => {
+    // `resume/drafts/` expires after a day and the two objects do not go at the
+    // same instant, so a day-old draft can still have its PDF. Promoting it
+    // would leave current.pdf and current.json describing different resumes.
+    existsExcept("resume/drafts/abc/resume.json");
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(404);
+    expect(copyObject).not.toHaveBeenCalled();
+  });
+
+  it("refuses a draft that was never extracted", async () => {
+    existsExcept("resume/drafts/abc/resume.pdf");
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(404);
+    expect(copyObject).not.toHaveBeenCalled();
   });
 
   it("revalidates the resume cache tag so the public pages update", async () => {

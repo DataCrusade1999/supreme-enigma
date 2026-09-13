@@ -57,6 +57,25 @@ describe("extractResumeFromPdf", () => {
     await expect(extractResumeFromPdf(PDF)).rejects.not.toThrow(/sk-or-test/);
   });
 
+  it("reports the status when the error body is not JSON", async () => {
+    // A 429 or 5xx from the edge in front of the API arrives as HTML. Parsing
+    // before checking the status turned that into a SyntaxError, which the admin
+    // page then showed instead of the real status.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("<html><title>429 Too Many Requests</title></html>", {
+            status: 429,
+          }),
+      ),
+    );
+
+    await expect(extractResumeFromPdf(PDF)).rejects.toThrow(
+      "OpenRouter request failed: status 429",
+    );
+  });
+
   it("throws when the response carries no content", async () => {
     vi.stubGlobal("fetch", mockFetchOnce(200, { choices: [] }));
     await expect(extractResumeFromPdf(PDF)).rejects.toThrow(/no content/i);

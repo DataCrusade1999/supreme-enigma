@@ -35,6 +35,19 @@ export async function POST(request: Request) {
 
   const bucket = resumeBucket();
 
+  // Both halves must be there before anything is overwritten. `resume/drafts/`
+  // expires after a day and the two objects are not deleted atomically, so a
+  // day-old draft can still have its PDF while its JSON is already gone — and a
+  // draft whose extraction 502'd never had a JSON at all. Without this check the
+  // first copy lands and the second throws, leaving current.pdf and current.json
+  // describing different resumes.
+  if (!(await objectExists(bucket, pdfKey)) || !(await objectExists(bucket, jsonKey))) {
+    return NextResponse.json(
+      { error: "that draft is incomplete or has expired" },
+      { status: 404 },
+    );
+  }
+
   // Archive before promoting. The reverse order would overwrite the live pair
   // before it had been copied anywhere.
   const archived = await objectExists(bucket, CURRENT_JSON_KEY);
@@ -44,8 +57,10 @@ export async function POST(request: Request) {
     await copyObject(bucket, CURRENT_JSON_KEY, target.json);
   }
 
-  await copyObject(bucket, pdfKey, CURRENT_PDF_KEY);
+  // JSON first: it is what the public page renders. If the second copy fails the
+  // site shows the new resume with a stale download, which beats the reverse.
   await copyObject(bucket, jsonKey, CURRENT_JSON_KEY);
+  await copyObject(bucket, pdfKey, CURRENT_PDF_KEY);
 
   revalidateTag("resume", { expire: 0 });
   return NextResponse.json({ ok: true, archived });

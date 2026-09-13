@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { S3Client } from "@aws-sdk/client-s3";
 import {
   keyForUpload,
   deriveOutputKey,
   presignUpload,
   presignUploadTo,
   presignDownloadFrom,
+  objectExists,
   MAX_AUDIO_UPLOAD_BYTES,
   MAX_RESUME_UPLOAD_BYTES,
 } from "./aws";
@@ -79,5 +81,36 @@ describe("bucket-aware helpers", () => {
 
     expect(url).toContain("resume-bucket");
     expect(url).not.toContain("audio-bucket");
+  });
+});
+
+describe("objectExists", () => {
+  // Phase 1's IAM policy granted only object-level Get/Put/Delete. AWS returns
+  // 403, not 404, for HeadObject on an absent key when the caller lacks
+  // s3:ListBucket — so on that policy every absent-key check threw and the first
+  // extraction and the first publish both 500'd. Every route test mocks
+  // objectExists, so nothing else in the suite can catch a regression here.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function sendRejects(name: string) {
+    vi.spyOn(S3Client.prototype, "send").mockRejectedValue(
+      Object.assign(new Error(name), { name }),
+    );
+  }
+
+  it("reports a missing object as absent", async () => {
+    sendRejects("NotFound");
+    await expect(objectExists("bucket", "resume/current.json")).resolves.toBe(false);
+  });
+
+  it("rethrows a 403 instead of reporting the object as absent", async () => {
+    // Treating 403 as "absent" would mask a credential failure as a normal
+    // first publish, and publish would then archive nothing before overwriting.
+    sendRejects("Forbidden");
+    await expect(objectExists("bucket", "resume/current.json")).rejects.toThrow(
+      "Forbidden",
+    );
   });
 });

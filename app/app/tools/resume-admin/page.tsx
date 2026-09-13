@@ -208,10 +208,16 @@ export default function ResumeAdminPage() {
             {schemaError && <p className="mt-2 text-xs text-peak">{schemaError}</p>}
 
             <div className="mt-4 flex gap-3">
+              {/* draftId is set as soon as the presign returns, so this panel also
+                  renders after a failed upload or extraction — with an empty
+                  editor and no schemaError yet. Gating on the editor's contents
+                  too keeps both actions off until there is something to act on;
+                  without it, save() reaches JSON.parse("") inside an async
+                  onClick and the page sticks on "Publishing…" forever. */}
               <button
                 type="button"
                 onClick={save}
-                disabled={Boolean(schemaError)}
+                disabled={Boolean(schemaError) || json.trim().length === 0}
                 className="min-h-11 border border-line px-4 text-[0.6875rem] font-semibold uppercase tracking-[0.16em] disabled:opacity-40"
               >
                 Save draft
@@ -219,7 +225,11 @@ export default function ResumeAdminPage() {
               <button
                 type="button"
                 onClick={publish}
-                disabled={Boolean(schemaError) || status === "publishing"}
+                disabled={
+                  Boolean(schemaError) ||
+                  json.trim().length === 0 ||
+                  status === "publishing"
+                }
                 className="min-h-11 bg-fg px-4 text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-bg disabled:opacity-40"
               >
                 Publish

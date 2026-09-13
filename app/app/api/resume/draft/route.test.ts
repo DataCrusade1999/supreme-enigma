@@ -58,6 +58,31 @@ describe("/api/resume/draft", () => {
     expect(await res.json()).toEqual({ resume: VALID });
   });
 
+  it("returns 404 for a draft that has expired rather than a bare 500", async () => {
+    // `resume/drafts/` expires after a day, and the admin page can be
+    // bookmarked, so a well-formed id whose object is gone is a normal request.
+    vi.mocked(getObjectBytes).mockRejectedValue(
+      Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" }),
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/resume/draft?draftId=abc"),
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "no draft for that id" });
+  });
+
+  it("returns 422 when the stored draft is not valid JSON", async () => {
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from("not json"));
+
+    const res = await GET(
+      new Request("http://localhost/api/resume/draft?draftId=abc"),
+    );
+
+    expect(res.status).toBe(422);
+  });
+
   it("rejects an unsafe draft id on both verbs", async () => {
     const put = await PUT(
       new Request("http://localhost/api/resume/draft", {

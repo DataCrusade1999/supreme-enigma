@@ -53,14 +53,23 @@ export async function extractResumeFromPdf(pdf: Buffer): Promise<unknown> {
     }),
   });
 
-  const json = await res.json();
-
+  // Status before body: a 429 or 5xx from the edge in front of the API arrives as
+  // HTML or plain text, so parsing first would throw a SyntaxError and hide the
+  // status the caller actually needs.
   if (!res.ok) {
     // Only the provider's own message is surfaced. The request carried the API
     // key in a header and must never be echoed into an error.
-    const message = json?.error?.message ?? `status ${res.status}`;
+    let message = `status ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body?.error?.message ?? message;
+    } catch {
+      // Non-JSON error body — the status is all there is to report.
+    }
     throw new Error(`OpenRouter request failed: ${message}`);
   }
+
+  const json = await res.json();
 
   const content = json?.choices?.[0]?.message?.content;
   if (typeof content !== "string" || content.length === 0) {
