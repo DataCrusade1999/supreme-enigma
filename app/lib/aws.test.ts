@@ -82,6 +82,23 @@ describe("bucket-aware helpers", () => {
     expect(url).toContain("resume-bucket");
     expect(url).not.toContain("audio-bucket");
   });
+
+  it("signs a content disposition into the URL when one is given", async () => {
+    // The parameter has to be part of the signature, not a header the caller
+    // adds later — S3 rejects anything not covered by it.
+    process.env.APP_AWS_REGION = "us-east-1";
+    process.env.AWS_ACCESS_KEY_ID = "AKIATEST";
+    process.env.AWS_SECRET_ACCESS_KEY = "secret";
+
+    const url = await presignDownloadFrom(
+      "resume-bucket",
+      "resume/current.pdf",
+      'attachment; filename="ashutosh-pandey-resume.pdf"',
+    );
+
+    const disposition = new URL(url).searchParams.get("response-content-disposition");
+    expect(disposition).toBe('attachment; filename="ashutosh-pandey-resume.pdf"');
+  });
 });
 
 describe("objectExists", () => {
