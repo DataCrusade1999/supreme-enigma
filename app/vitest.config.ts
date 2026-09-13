@@ -1,8 +1,18 @@
 import { defineConfig, configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
+  // tsconfig maps @/* to ./*, and the route handlers import "@/lib/…".
+  // Vitest does not read tsconfig paths, so without this every vi.mock("@/…")
+  // fails to resolve — and vi.mock must match the specifier the module under
+  // test actually imports.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./", import.meta.url)),
+    },
+  },
   test: {
     environment: "jsdom",
     globals: true,

@@ -70,6 +70,22 @@ git tags / GitHub Releases cut automatically by the `release` job in
   be created publicly accessible by accident.
 - `RESUME_BUCKET_NAME`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and
   `OPENROUTER_BASE_URL` environment variables, for the resume pipeline.
+- Resume admin pipeline at `/tools/resume-admin` (password-gated): upload a
+  resume PDF, have it read by `anthropic/claude-haiku-4.5` via OpenRouter into
+  a schema-validated JSON structure, correct anything that came out wrong in a
+  live-validated editor, preview it, and publish. Publishing archives the
+  previous `resume/current.{pdf,json}` under `resume/archive/<timestamp>` before
+  promoting the draft, and revalidates the `resume` cache tag. Extraction is
+  idempotent per draft so a page reload cannot spend another model call, and
+  publishing is refused outside the production deployment — drafts stay
+  writable on every branch so one reviewed on `dev` can be published from
+  production unchanged.
+- Two infrastructure changes the pipeline depends on, both applied: the Vercel
+  service account now holds `s3:ListBucket` on the resume bucket, without which
+  S3 answers `403` rather than `404` for a key that does not exist and every
+  first extraction and first publish fails; and the Vercel project now exposes
+  system environment variables, without which `VERCEL_ENV` is unset at runtime
+  and the production-only publish gate refuses everywhere, including production.
 
 ### Fixed
 
