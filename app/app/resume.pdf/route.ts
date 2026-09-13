@@ -7,16 +7,23 @@ import { CURRENT_PDF_KEY, resumeBucket } from "@/lib/resume-keys";
 // see an opaque S3 AccessDenied instead of a download.
 export const dynamic = "force-dynamic";
 
+const NOT_PUBLISHED = "No resume has been published yet.";
+
 export async function GET() {
   // "Nothing to download" and "S3 is not configured here" are the same answer
-  // to a visitor: a 404. Letting the probe throw instead would surface as a
-  // 500 wherever RESUME_BUCKET_NAME is unset — which includes CI, where the
-  // e2e spec asserts this route answers 307 or 404.
+  // to a visitor: a 404. Reading the env var cannot throw, so checking it here
+  // keeps that answer without the blanket catch below having to cover it —
+  // which matters because CI and local builds run with RESUME_BUCKET_NAME
+  // unset and the e2e spec asserts this route answers 307 or 404 there.
+  if (!process.env.RESUME_BUCKET_NAME) {
+    return new NextResponse(NOT_PUBLISHED, { status: 404 });
+  }
+
   try {
     const bucket = resumeBucket();
 
     if (!(await objectExists(bucket, CURRENT_PDF_KEY))) {
-      return new NextResponse("No resume has been published yet.", { status: 404 });
+      return new NextResponse(NOT_PUBLISHED, { status: 404 });
     }
 
     // Without this the tab navigates to S3 and either renders the PDF inline
@@ -31,7 +38,12 @@ export async function GET() {
       status: 307,
       headers: { "Cache-Control": "no-store" },
     });
-  } catch {
-    return new NextResponse("No resume has been published yet.", { status: 404 });
+  } catch (err) {
+    // Everything reaching here is a real failure against a configured bucket —
+    // a broken presign, revoked credentials, S3 unreachable. Reporting those as
+    // 404 "nothing published yet" told an on-call engineer the opposite of the
+    // truth, and logged nothing to correct it.
+    console.error("resume.pdf: failed to produce a signed URL", err);
+    return new NextResponse("Resume download is temporarily unavailable.", { status: 500 });
   }
 }
