@@ -85,7 +85,7 @@ describe("POST /api/resume/publish", () => {
   it("publishes with nothing to archive on the first publish", async () => {
     // This is a normal path, not an error — it is the state of production on
     // the day this ships.
-    existsExcept("resume/current.json");
+    existsExcept("resume/current.json", "resume/current.pdf");
 
     const res = await POST(post({ draftId: "abc" }));
 
@@ -117,6 +117,49 @@ describe("POST /api/resume/publish", () => {
 
     expect(res.status).toBe(404);
     expect(copyObject).not.toHaveBeenCalled();
+  });
+
+  it("archives a live pair that is missing its PDF instead of throwing", async () => {
+    // Exactly the state a half-finished first publish leaves behind: JSON
+    // promoted, PDF not. The retry the route asks for lands here, so copying a
+    // CURRENT_PDF_KEY that is not there would throw NoSuchKey out of the route.
+    existsExcept("resume/current.pdf");
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, archived: true });
+    const calls = vi.mocked(copyObject).mock.calls.map(([, from, to]) => [from, to]);
+    expect(calls.some(([from]) => from === "resume/current.pdf")).toBe(false);
+    expect(calls.some(([from]) => from === "resume/current.json")).toBe(true);
+  });
+
+  it("archives a lone live PDF rather than overwriting it uncopied", async () => {
+    existsExcept("resume/current.json");
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, archived: true });
+    const calls = vi.mocked(copyObject).mock.calls.map(([, from, to]) => [from, to]);
+    expect(calls[0][0]).toBe("resume/current.pdf");
+    expect(calls[0][1]).toMatch(/^resume\/archive\/.*\.pdf$/);
+  });
+
+  it("refuses to overwrite the live resume when archiving it fails", async () => {
+    vi.mocked(copyObject).mockImplementation(async (_bucket, from) => {
+      if (from === "resume/current.pdf") throw new Error("s3 503");
+    });
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(500);
+    // Nothing is overwritten before the archive completes, so the live pair
+    // must still be intact.
+    const promoted = vi
+      .mocked(copyObject)
+      .mock.calls.filter(([, , to]) => to === "resume/current.json" || to === "resume/current.pdf");
+    expect(promoted).toEqual([]);
   });
 
   it("reports a half-finished publish rather than failing silently", async () => {

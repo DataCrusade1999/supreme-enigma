@@ -27,6 +27,15 @@ export default function ResumeAdminPage() {
 
   async function handleFile(file: File) {
     setError(null);
+    // Cleared before the presign rather than after it. `draftId` advances to the
+    // new draft the moment the presign returns, so anything still in the editor
+    // belongs to a draft the operator has moved on from — and a settled failure
+    // after that point (a 502 from extract, say) re-enables the buttons with the
+    // previous draft's JSON under the new draft's id. Choosing a new file is an
+    // explicit abandon of the old one, so dropping its edits is the intent.
+    setJson("");
+    setSchemaError(null);
+    setDraftId(null);
     try {
       setStatus("uploading");
       const urlRes = await fetch("/api/resume/upload-url", {
@@ -91,11 +100,22 @@ export default function ResumeAdminPage() {
   // whatever JSON is already in S3 — the pre-correction extraction — while the
   // UI reports success, silently discarding the owner's edits.
   async function save(): Promise<boolean> {
-    const res = await fetch("/api/resume/draft", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ draftId, resume: JSON.parse(json) }),
-    });
+    // `busy` disables both buttons while this runs, so a throw escaping here
+    // would leave them disabled and the status stuck on the in-flight text with
+    // no way back but a reload — the same wedge the empty-editor guard above
+    // exists to prevent. handleFile already wraps its fetches for this reason.
+    let res: Response;
+    try {
+      res = await fetch("/api/resume/draft", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draftId, resume: JSON.parse(json) }),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error while saving.");
+      setStatus("error");
+      return false;
+    }
     if (!res.ok) {
       setError("The server rejected those corrections.");
       setStatus("error");
@@ -109,11 +129,18 @@ export default function ResumeAdminPage() {
     // Stop here on a failed save — save() has already set the error state.
     if (!(await save())) return;
 
-    const res = await fetch("/api/resume/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ draftId }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("/api/resume/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draftId }),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error while publishing.");
+      setStatus("error");
+      return;
+    }
     if (!res.ok) {
       const { error: message } = await res.json().catch(() => ({ error: null }));
       setError(
@@ -128,7 +155,10 @@ export default function ResumeAdminPage() {
   }
 
   // Anything in flight that makes the draftId and the editor's contents
-  // disagree, or that a second write would race.
+  // disagree, or that a second write would race. Deliberately not "error":
+  // a failed publish is retried from this same page with the same draft, and
+  // the publish route's half-finished path explicitly asks for that retry.
+  // Staleness after a failed upload is handled at the source, in handleFile.
   const busy = status === "uploading" || status === "extracting" || status === "publishing";
 
   return (

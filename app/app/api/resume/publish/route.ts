@@ -50,11 +50,30 @@ export async function POST(request: Request) {
 
   // Archive before promoting. The reverse order would overwrite the live pair
   // before it had been copied anywhere.
-  const archived = await objectExists(bucket, CURRENT_JSON_KEY);
+  //
+  // Each half is checked on its own because the live pair can genuinely be
+  // asymmetric: the very first publish promotes current.json and can then fail
+  // on current.pdf, so the retry it asks for below finds a live JSON with no
+  // PDF beside it. Keying the whole step off current.json alone would copy a
+  // CURRENT_PDF_KEY that is not there and throw NoSuchKey out of the route;
+  // keying it off nothing would let a lone current.pdf be overwritten with no
+  // copy kept anywhere.
+  const liveJson = await objectExists(bucket, CURRENT_JSON_KEY);
+  const livePdf = await objectExists(bucket, CURRENT_PDF_KEY);
+  const archived = liveJson || livePdf;
   if (archived) {
     const target = archiveKeys();
-    await copyObject(bucket, CURRENT_PDF_KEY, target.pdf);
-    await copyObject(bucket, CURRENT_JSON_KEY, target.json);
+    try {
+      if (livePdf) await copyObject(bucket, CURRENT_PDF_KEY, target.pdf);
+      if (liveJson) await copyObject(bucket, CURRENT_JSON_KEY, target.json);
+    } catch {
+      // Nothing has been overwritten yet at this point, so refusing here keeps
+      // the live resume intact rather than replacing it with no copy kept.
+      return NextResponse.json(
+        { error: "could not archive the live resume — nothing was overwritten" },
+        { status: 500 },
+      );
+    }
   }
 
   // JSON first: it is what the public page renders. If the second copy fails the
