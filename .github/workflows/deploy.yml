@@ -89,6 +89,7 @@ jobs:
     if: github.event_name == 'push'
     outputs:
       lambda: ${{ steps.check.outputs.lambda }}
+      releasable: ${{ steps.check.outputs.releasable }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -99,6 +100,7 @@ jobs:
         run: |
           if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
             echo "lambda=true" >> "$GITHUB_OUTPUT"
+            echo "releasable=true" >> "$GITHUB_OUTPUT"
             echo "No previous commit to diff against (new branch or rewritten history) — building to be safe."
             exit 0
           fi
@@ -107,6 +109,17 @@ jobs:
             echo "No changes under lambda/ or deploy.yml — skipping the Lambda image build."
           else
             echo "lambda=true" >> "$GITHUB_OUTPUT"
+          fi
+          # A push that touches nothing but CHANGELOG.md must not cut a
+          # version. Without this, main's changelog cannot be corrected by
+          # hand at all: any push to main satisfies release's condition and
+          # BUMP defaults to "patch", so a typo fix ships a release. Hit for
+          # real repairing the v1.3.0 heading (#118).
+          if git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- . ':(exclude)CHANGELOG.md'; then
+            echo "releasable=false" >> "$GITHUB_OUTPUT"
+            echo "CHANGELOG.md is the only change — skipping the release job."
+          else
+            echo "releasable=true" >> "$GITHUB_OUTPUT"
           fi
 
   deploy:
@@ -177,7 +190,7 @@ jobs:
           fi
 
   release:
-    needs: [test, deploy]
+    needs: [test, deploy, changes]
     runs-on: ubuntu-latest
     # deploy is legitimately skipped (not failed) on a main push that touches
     # no lambda/ files — release must still run in that case, so this can't
@@ -186,7 +199,16 @@ jobs:
     # explicitly too: deploy.result == 'skipped' is ambiguous on its own
     # between "no lambda changes" (fine, release should run) and "test
     # failed so deploy's own condition never ran" (must not release).
-    if: always() && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled'
+    #
+    # The changes half is split by event_name the same way deploy's is, and
+    # for the same reason: `changes` only runs on push, so on
+    # workflow_dispatch its result is 'skipped' and its outputs are empty.
+    # Testing `releasable != 'false'` would be fail-OPEN — a job-level
+    # failure of `changes` leaves the output empty, and '' != 'false', so a
+    # runner or checkout failure would cut a release. Testing
+    # `== 'true'` alone would be fail-CLOSED but would also kill the
+    # workflow_dispatch escape hatch. Branching on the event does both.
+    if: always() && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.releasable == 'true'))
     permissions:
       contents: write
       pull-requests: write
