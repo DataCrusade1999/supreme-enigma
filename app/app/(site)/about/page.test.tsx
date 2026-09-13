@@ -18,7 +18,7 @@ const RESUME = {
 
 describe("AboutPage", () => {
   it("renders the published title and summary", async () => {
-    vi.mocked(getPublishedResume).mockResolvedValue({ resume: RESUME, published: true });
+    vi.mocked(getPublishedResume).mockResolvedValue({ resume: RESUME, published: true, pdfPublished: true });
 
     render(await AboutPage());
 
@@ -34,6 +34,7 @@ describe("AboutPage", () => {
     vi.mocked(getPublishedResume).mockResolvedValue({
       resume: RESUME,
       published: false,
+      pdfPublished: false,
     });
 
     render(await AboutPage());

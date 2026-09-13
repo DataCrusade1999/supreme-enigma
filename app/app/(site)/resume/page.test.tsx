@@ -25,7 +25,7 @@ const PUBLISHED = {
 
 describe("ResumePage", () => {
   it("renders the published roles, dates, and bullets", async () => {
-    vi.mocked(getPublishedResume).mockResolvedValue({ resume: PUBLISHED, published: true });
+    vi.mocked(getPublishedResume).mockResolvedValue({ resume: PUBLISHED, published: true, pdfPublished: true });
 
     render(await ResumePage());
 
@@ -38,7 +38,7 @@ describe("ResumePage", () => {
   });
 
   it("renders the skills section", async () => {
-    vi.mocked(getPublishedResume).mockResolvedValue({ resume: PUBLISHED, published: true });
+    vi.mocked(getPublishedResume).mockResolvedValue({ resume: PUBLISHED, published: true, pdfPublished: true });
 
     render(await ResumePage());
 
@@ -48,7 +48,7 @@ describe("ResumePage", () => {
   });
 
   it("shows the download link once a resume is published", async () => {
-    vi.mocked(getPublishedResume).mockResolvedValue({ resume: PUBLISHED, published: true });
+    vi.mocked(getPublishedResume).mockResolvedValue({ resume: PUBLISHED, published: true, pdfPublished: true });
 
     render(await ResumePage());
 
@@ -64,6 +64,7 @@ describe("ResumePage", () => {
     vi.mocked(getPublishedResume).mockResolvedValue({
       resume: PUBLISHED,
       published: false,
+      pdfPublished: false,
     });
 
     render(await ResumePage());

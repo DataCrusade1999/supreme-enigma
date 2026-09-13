@@ -118,6 +118,38 @@ describe("getPublishedResume", () => {
     expect(vi.mocked(console.error).mock.calls[0][0]).toMatch(/failed validation/);
   });
 
+  it("hides the PDF link when a publish landed the JSON but not the PDF", async () => {
+    // publish copies current.json and current.pdf in two separate calls, so a
+    // failure between them leaves exactly this state. Rendering a Download
+    // link against it points the visitor at a 404.
+    vi.mocked(objectExists).mockImplementation(
+      async (_bucket: string, key: string) => key === "resume/current.json",
+    );
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(PUBLISHED)));
+
+    const { published, pdfPublished, resume } = await getPublishedResume();
+
+    expect(published).toBe(true);
+    expect(pdfPublished).toBe(false);
+    expect(resume).toEqual(PUBLISHED);
+  });
+
+  it("keeps the published resume when the PDF probe itself fails", async () => {
+    // A HEAD failure on the PDF must not drop a timeline we already read.
+    vi.mocked(objectExists).mockImplementation(async (_bucket: string, key: string) => {
+      if (key === "resume/current.json") return true;
+      throw new Error("ExpiredToken");
+    });
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(PUBLISHED)));
+
+    const { published, pdfPublished, resume } = await getPublishedResume();
+
+    expect(published).toBe(true);
+    expect(pdfPublished).toBe(false);
+    expect(resume).toEqual(PUBLISHED);
+    expect(console.error).toHaveBeenCalledOnce();
+  });
+
   it("reads from the resume bucket, not the audio bucket", async () => {
     vi.mocked(objectExists).mockResolvedValue(true);
     vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(PUBLISHED)));

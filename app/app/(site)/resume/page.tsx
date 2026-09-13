@@ -2,7 +2,7 @@ import { getPublishedResume } from "../../../lib/resume-content";
 import { PageMasthead } from "../../../components/site/PageMasthead";
 
 export default async function ResumePage() {
-  const { resume, published } = await getPublishedResume();
+  const { resume, pdfPublished } = await getPublishedResume();
 
   return (
     <section>
@@ -10,9 +10,10 @@ export default async function ResumePage() {
         eyebrow="Timeline"
         title="Resume"
         right={
-          // Conditional: /resume.pdf 404s until something is published, and a
-          // link to a 404 is the bug this closes.
-          published ? (
+          // Gated on the PDF, not on `published`: /resume.pdf answers on
+          // current.pdf alone, and a half-finished publish can leave the JSON
+          // present without it. A link to a 404 is the bug this closes.
+          pdfPublished ? (
             <a
               href="/resume.pdf"
               download
