@@ -7,7 +7,10 @@ import { GridBackdrop } from "../../components/site/GridBackdrop";
 import { LoopRing } from "../../components/site/LoopRing";
 import { toolNameFor } from "../../lib/route-gate";
 
-const FALLBACK = "/tools/bgm-looper";
+// The hub, not a tool: a password-first visit hasn't said where it's going, and
+// the copy below promises every tool opens — landing on one of them picks for
+// the visitor. A visit that *did* say (a `next`) still goes straight through.
+const FALLBACK = "/tools";
 
 // Null rather than the fallback when `next` is missing or off-origin, so the
 // caller can tell "go here" from "we don't know where you were headed" — the

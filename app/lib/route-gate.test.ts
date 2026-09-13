@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isGatedPath, toolNameFor } from "./route-gate";
+import { isGatedPath, toolNameFor, TOOLS } from "./route-gate";
 
 describe("isGatedPath", () => {
   it.each([
@@ -10,6 +10,11 @@ describe("isGatedPath", () => {
     ["/contact", false],
     ["/tools/bgm-looper", true],
     ["/tools/bgm-looper/", true],
+    // The hub itself is gated, and so is the whole namespace under it — a
+    // future tool is behind the password before anyone remembers to list it.
+    ["/tools", true],
+    ["/tools/", true],
+    ["/tools/something-new", true],
     ["/login", false],
     ["/api/login", false],
     // The old login path moved to /login and is no longer carved out, so it
@@ -39,6 +44,9 @@ describe("toolNameFor", () => {
     ["/tools/bgm-looper#top", null],
     ["/", null],
     ["/about", null],
+    // The hub is not itself a tool: naming it would put "Continuing to Tools"
+    // on the gate, where the no-destination copy already says it better.
+    ["/tools", null],
     ["/tools/something-new", null],
     ["/api/looper/process", null],
   ])("toolNameFor(%s) === %s", (pathname, expected) => {
@@ -67,5 +75,34 @@ describe("resume admin gating", () => {
 
   it("names the destination on the login gate", () => {
     expect(toolNameFor("/tools/resume-admin")).toBe("Resume admin");
+  });
+});
+
+describe("TOOLS", () => {
+  it("lists every tool the hub offers", () => {
+    expect(TOOLS.map((tool) => tool.href)).toEqual([
+      "/tools/bgm-looper",
+      "/tools/resume-admin",
+      "/keystatic",
+    ]);
+  });
+
+  it("is the source the destination strip names tools from", () => {
+    for (const tool of TOOLS) {
+      expect(toolNameFor(tool.href)).toBe(tool.name);
+    }
+  });
+
+  it("only lists gated destinations", () => {
+    for (const tool of TOOLS) {
+      expect(isGatedPath(tool.href)).toBe(true);
+    }
+  });
+
+  it("gives every tool a kind and a blurb for the hub row", () => {
+    for (const tool of TOOLS) {
+      expect(tool.kind).not.toBe("");
+      expect(tool.blurb).not.toBe("");
+    }
   });
 });

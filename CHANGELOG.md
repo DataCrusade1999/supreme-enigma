@@ -86,6 +86,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
   first extraction and first publish fails; and the Vercel project now exposes
   system environment variables, without which `VERCEL_ENV` is unset at runtime
   and the production-only publish gate refuses everywhere, including production.
+- A tools hub at `/tools`, behind the same password, listing every gated tool
+  with what it does. Before this, the resume admin and the Keystatic content
+  editor had no link anywhere on the site — typing the URL was the only way in.
+  A password-first login (one with no `?next`) now lands here rather than on the
+  BGM Looper, and the command bar carries `cd tools`, `open resume-admin` and
+  `open content-editor` alongside the existing `open bgm-looper`.
 
 ### Fixed
 
@@ -131,6 +137,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - Bucket CORS is scoped to the app's own origins instead of `*`.
 - The Vercel IAM user's S3 access is scoped to specific prefixes rather than
   whole buckets, and gains `DeleteObject` on resume drafts only.
+- The password now gates the whole `/tools` namespace rather than one prefix per
+  tool, so the hub itself is behind it and a page added under `/tools` is gated
+  before anyone remembers to list it. `app/lib/route-gate.ts` also gained
+  `TOOLS`, one list of the gated tools that the hub, the login page's
+  "Continuing to → X" strip and the command bar all read.
 
 ### Added
 
