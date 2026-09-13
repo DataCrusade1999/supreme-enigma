@@ -1,21 +1,58 @@
+// Every tool the shared password opens, in the order the hub lists them.
+// One list, three consumers: the /tools hub renders a row per entry, the login
+// page's "Continuing to → X" strip names the destination from it, and the
+// command bar gets an `open <tool>` row per entry. Adding a tool is one entry
+// here — as long as its href sits under a gated prefix below.
+export type Tool = {
+  href: string;
+  name: string;
+  kind: string;
+  blurb: string;
+};
+
+export const TOOLS: Tool[] = [
+  {
+    href: "/tools/bgm-looper",
+    name: "BGM Looper",
+    kind: "Audio",
+    blurb:
+      "Find the seamless loop point in a track, crossfade the seam, normalize to −14 LUFS.",
+  },
+  {
+    href: "/tools/resume-admin",
+    name: "Resume admin",
+    kind: "Site",
+    blurb:
+      "Upload a resume PDF, check what was read out of it, publish it to the public page.",
+  },
+  {
+    href: "/keystatic",
+    name: "Content editor",
+    kind: "Site",
+    blurb: "Write and edit blog posts. Commits straight to the repo through Keystatic.",
+  },
+];
+
+// `/tools` rather than a prefix per tool: the hub itself has to be gated, and
+// the whole namespace under it is tools by definition — so a page added there
+// is behind the password before anyone remembers to list it. The API prefixes
+// stay explicit, since /api/ also holds ungated routes.
 const GATED_PREFIXES = [
-  "/tools/bgm-looper",
+  "/tools",
   "/api/looper",
-  "/tools/resume-admin",
   "/api/resume",
   "/keystatic",
   "/api/keystatic",
 ];
 const ALWAYS_ALLOWED_PATHS = ["/login", "/api/login"];
 
-// What the login page calls each destination. Keyed by the same prefixes
-// GATED_PREFIXES uses, so adding a tool is one entry in each list — and a
-// prefix with no entry here just means the login page shows no destination.
-const TOOL_NAMES: Record<string, string> = {
-  "/tools/bgm-looper": "BGM Looper",
-  "/tools/resume-admin": "Resume admin",
-  "/keystatic": "Content editor",
-};
+// Derived from TOOLS so the strip can never name a tool the hub doesn't list,
+// or go quiet on one it does. Key order follows TOOLS, which matters to the
+// prefix `find()` below. The hub itself is deliberately absent: "Continuing to
+// Tools" says less than the no-destination copy the login page already has.
+const TOOL_NAMES: Record<string, string> = Object.fromEntries(
+  TOOLS.map((tool) => [tool.href, tool.name]),
+);
 
 function matches(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);

@@ -31,31 +31,31 @@ describe("LoginPage", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/keystatic"));
   });
 
-  it("falls back to /tools/bgm-looper when next is missing", async () => {
+  it("falls back to the tools hub when next is missing", async () => {
     render(<LoginPage />);
     await submit();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools/bgm-looper"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools"));
   });
 
-  it("falls back to /tools/bgm-looper when next is not a relative path (open-redirect guard)", async () => {
+  it("falls back to the tools hub when next is not a relative path (open-redirect guard)", async () => {
     mockSearch = "next=https%3A%2F%2Fevil.example";
     render(<LoginPage />);
     await submit();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools/bgm-looper"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools"));
   });
 
-  it("falls back to /tools/bgm-looper when next is a protocol-relative URL (open-redirect guard)", async () => {
+  it("falls back to the tools hub when next is a protocol-relative URL (open-redirect guard)", async () => {
     mockSearch = "next=%2F%2Fevil.example";
     render(<LoginPage />);
     await submit();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools/bgm-looper"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools"));
   });
 
-  it("falls back to /tools/bgm-looper when next hides a control character that would resolve off-origin (open-redirect guard)", async () => {
+  it("falls back to the tools hub when next hides a control character that would resolve off-origin (open-redirect guard)", async () => {
     mockSearch = "next=%2F%09%2Fevil.example";
     render(<LoginPage />);
     await submit();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools/bgm-looper"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools"));
   });
 
   it("opens the command bar on Ctrl+K", () => {
