@@ -80,6 +80,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
   publishing is refused outside the production deployment — drafts stay
   writable on every branch so one reviewed on `dev` can be published from
   production unchanged.
+- Two infrastructure changes the pipeline depends on, both applied: the Vercel
+  service account now holds `s3:ListBucket` on the resume bucket, without which
+  S3 answers `403` rather than `404` for a key that does not exist and every
+  first extraction and first publish fails; and the Vercel project now exposes
+  system environment variables, without which `VERCEL_ENV` is unset at runtime
+  and the production-only publish gate refuses everywhere, including production.
 
 ### Fixed
 
