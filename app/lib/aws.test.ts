@@ -3,6 +3,8 @@ import {
   keyForUpload,
   deriveOutputKey,
   presignUpload,
+  presignUploadTo,
+  presignDownloadFrom,
   MAX_AUDIO_UPLOAD_BYTES,
   MAX_RESUME_UPLOAD_BYTES,
 } from "./aws";
@@ -45,5 +47,37 @@ describe("upload size limits", () => {
     // content-length appears in the signed-headers list, so a client sending a
     // different length fails signature validation rather than being trusted.
     expect(decodeURIComponent(url)).toContain("content-length");
+  });
+});
+
+describe("bucket-aware helpers", () => {
+  it("signs an upload against the bucket it is given, not S3_BUCKET_NAME", async () => {
+    process.env.APP_AWS_REGION = "us-east-1";
+    process.env.S3_BUCKET_NAME = "audio-bucket";
+    process.env.AWS_ACCESS_KEY_ID = "AKIATEST";
+    process.env.AWS_SECRET_ACCESS_KEY = "secret";
+
+    const url = await presignUploadTo(
+      "resume-bucket",
+      "resume/drafts/abc/resume.pdf",
+      "application/pdf",
+      1234,
+    );
+
+    expect(url).toContain("resume-bucket");
+    expect(url).not.toContain("audio-bucket");
+    expect(decodeURIComponent(url)).toContain("content-length");
+  });
+
+  it("signs a download against the bucket it is given", async () => {
+    process.env.APP_AWS_REGION = "us-east-1";
+    process.env.S3_BUCKET_NAME = "audio-bucket";
+    process.env.AWS_ACCESS_KEY_ID = "AKIATEST";
+    process.env.AWS_SECRET_ACCESS_KEY = "secret";
+
+    const url = await presignDownloadFrom("resume-bucket", "resume/current.pdf");
+
+    expect(url).toContain("resume-bucket");
+    expect(url).not.toContain("audio-bucket");
   });
 });
