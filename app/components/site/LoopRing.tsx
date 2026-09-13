@@ -10,9 +10,13 @@ import { WAVE, barClass } from "../../content/wave-envelope";
 export function LoopRing({
   radius = 104,
   scale = 0.5,
+  seam = true,
 }: {
   radius?: number;
   scale?: number;
+  // The seam mark states the loop claim, so anywhere the ring stands in as the
+  // site's mark rather than the tool's figure (the login page) turns it off.
+  seam?: boolean;
 }) {
   const step = 360 / WAVE.length;
   // The box has to clear the longest bar, which grows outward from the circle.
@@ -53,9 +57,11 @@ export function LoopRing({
 
       {/* The only accent event: a mark that flashes for ~3% of the cycle as the
        * wrap passes twelve o'clock. */}
-      <span className="ring-seam absolute left-1/2 top-0 -translate-x-1/2 text-[0.6875rem] uppercase tracking-[0.16em] text-accent">
-        Tail → head
-      </span>
+      {seam ? (
+        <span className="ring-seam absolute left-1/2 top-0 -translate-x-1/2 text-[0.6875rem] uppercase tracking-[0.16em] text-accent">
+          Tail → head
+        </span>
+      ) : null}
     </div>
   );
 }

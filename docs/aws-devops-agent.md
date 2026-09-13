@@ -59,6 +59,18 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
 - **Poll `get_task` on a ~30s cadence** until `status` is one of `COMPLETED`,
   `FAILED`, `CANCELED`, `TIMED_OUT`, then call `get_release_readiness_report`
   with the `executionId` for the actual findings.
+- **On a PR, the verdict and the findings live in two different places.** The
+  approve/reject verdict is a **commit status** (`gh api
+  repos/<owner>/<repo>/commits/<sha>/status`, not `.../check-runs`); the
+  findings are **inline review comments** (`gh api --paginate
+  repos/<owner>/<repo>/pulls/<N>/comments` — `--paginate` matters, the REST
+  default is 30 per page and a truncated read hides later findings). `gh pr
+  view <N> --json
+  reviews,comments` shows neither usefully — it returns the review summary body,
+  which is routinely empty, plus issue-level comments. The two are independent:
+  the agent approved #83 and filed a correctness bug on it in the same run, so
+  a green verdict never means "no findings". Check both before merging; missing
+  this is what let #83 merge with a known bug, fixed after the fact in #84.
 - **`list_recommendations` starts empty.** Proactive recommendations only
   populate after the agent has run investigations/reviews over time — an
   empty result on a freshly created space is expected, not a misconfiguration.
@@ -67,6 +79,105 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
   unless this project actually needs them — the value of a project-scoped
   agent is that its topology and blast-radius reasoning stay limited to what
   you attached.
+
+## Release testing (UI) — `.github/workflows/release-tests.yml`
+
+Manual-dispatch workflow that runs the agent's UI release testing against the
+`stage` deployment and reports the verdict as a GitHub Check Run.
+
+```bash
+gh workflow run release-tests.yml --ref dev   -f test_requirement="verify the home/about/projects nav and the resume page"
+```
+
+Use `--ref dev` until the file has been promoted to `stage`/`main` — the run
+tests the stage URL either way (that comes from the test profile, not the ref).
+
+**The action name in the AWS docs is wrong.** The prose says
+`aws-actions/devops-agent-release-testing@v1`; that repo 404s. The real action
+is `aws-actions/devops-agent-qa@v1` — which is what the doc's own YAML sample
+uses. Only the `v1` tag is published.
+
+Configuration (all console-only on the AWS side — there is no MCP or CLI tool
+to create a webhook or a test profile; `create_release_testing_job` only
+consumes an existing profile id):
+
+| Where | What |
+|---|---|
+| Console → Agent Space → **Capabilities** → Webhook → Generate | Auth type **HMAC** (the action signs HMAC-SHA256). Secret is shown once — download the CSV. Auth type is fixed for the webhook's life; to switch, delete and recreate. |
+| Web app → **Release Manager** → Test profiles → Add | Type **UI testing**; target URL is the plain stage URL, no query params. Yields a `ki-…` id. |
+| Repo secrets | `DEVOPS_AGENT_WEBHOOK_URL`, `DEVOPS_AGENT_WEBHOOK_SECRET` |
+| Repo variable (`gh variable set DEVOPS_AGENT_TEST_PROFILE_ID --body ki-…`) | `DEVOPS_AGENT_TEST_PROFILE_ID` (the `ki-…` id — not a secret, kept out of the workflow file so rebuilding the profile doesn't need a PR) |
+
+Do all of the above **before** the first dispatch: an unset `vars.*` renders as
+an empty string rather than erroring, so a premature run fails inside the action
+rather than at input validation.
+
+**What the action actually puts on the wire** (from its `dist/index.js` — AWS
+documents only the `eventType: "incident"` investigation payload, so this is
+recorded here rather than guessed at later):
+
+```json
+{
+  "eventType": "deployment_completed",
+  "testProfileId": "ki-...",
+  "testRequirement": "...",
+  "repository": "owner/repo",
+  "headSha": "...",
+  "prNumber": null
+}
+```
+
+Profileless mode replaces `testProfileId` with
+`testProfileValues: { testAgentType, targetUrl, apiSpec? }`. The envelope is the
+same as the documented incident one — HMAC-SHA256 over `` `${timestamp}:${payload}` ``,
+base64, in `x-amzn-event-signature` alongside an `x-amzn-event-timestamp` of the
+form `2026-09-05T00:00:00.000Z`. So a single generic **HMAC** webhook serves both
+investigations and release testing; that is why HMAC (not API key) is the right
+choice when generating it. The action retries once after 2s on a 403, and
+resolves `prNumber` via `listPullRequestsAssociatedWithCommit`, leaving it
+`null` on a direct push or a manual dispatch.
+
+**The agent cannot use a Vercel protection bypass token** — this cost a whole
+run (execution `6d2c9593`, 12/12 test cases blocked) before it was understood.
+Two independent reasons:
+
+1. The token only lives in the test profile URL's query string. When a test
+   intent names a specific page, the agent navigates **directly** to that path
+   (`/resume`), never loading the profile URL, so `x-vercel-set-bypass-cookie`
+   never fires and no cookie is established.
+2. When the agent tries to re-add the token itself, it only has what survived
+   plan generation — the report records *"partial bypass token"* and
+   *"truncated in user request"*. It never sees the full 32 characters.
+
+Hence `vercel_authentication = { deployment_type = "none" }` on the project: the
+preview URLs are simply public. Do not "fix" this by putting the bypass params
+back on the test profile URL — that configuration was tested and does not work.
+
+**The agent's browser cannot resize the viewport**, so mobile-responsiveness
+test cases come back `Blocked` no matter what. Don't write intents that ask for
+them; Playwright's projects in `app/playwright.config.ts` are the right tool for
+viewport testing.
+
+Gotchas:
+
+- **`workflow_dispatch` only lists branches where the file already exists**, and
+  the Check Run lands on that branch's HEAD SHA. The file lands on `dev` first,
+  so until it is promoted you must dispatch `--ref dev` — the run still tests
+  the *stage* URL (that's baked into the test profile, not the workflow), but
+  the check attaches to a `dev` commit. Promote through `dev → stage → main` as
+  usual and this resolves itself.
+- **The agent performs real writes** (POST/PUT/DELETE) while exploring. Against
+  stage that means real uploads to `bgm-looper-audio-stage-*` and real
+  `bgm-looper-processor-stage` invocations. Objects expire after 1 day, so the
+  cost is bounded but not zero.
+- **`/tools/bgm-looper` is not reachable by the agent.** The Vercel bypass gets
+  it past Vercel Authentication, but `app/lib/route-gate.ts` gates the tool,
+  `/api/looper`, and `/keystatic` behind `APP_PASSWORD` independently. Scope
+  `test_requirement` to the public portfolio pages, or accept putting the app
+  password into the requirement string — where it would land in Actions logs
+  and the Agent Space journal.
+- The profileless path (`target-url` + `agent-type: ui` inputs, no profile) is
+  in the action's `action.yml` but undocumented by AWS — treat it as a fallback.
 
 ## Sample review: `dev` → `main` (2026-08-06)
 

@@ -64,6 +64,14 @@ describe("LoopRing", () => {
     expect(screen.getByText("Tail → head")).toHaveClass("ring-seam");
   });
 
+  // The login page borrows the ring as the site's mark, away from any claim
+  // about loops, so the seam label has to be droppable without forking it.
+  it("omits the seam mark when asked, keeping the hand", () => {
+    const { container } = render(<LoopRing seam={false} />);
+    expect(screen.queryByText("Tail → head")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-ring-hand]")).toBeInTheDocument();
+  });
+
   // jsdom applies no stylesheet, so the reduced-motion switch is asserted where
   // it actually lives — the globals.css rules beside .playhead — plus the class
   // names that link the markup to them, so a rename can't silently break it.

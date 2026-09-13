@@ -1,5 +1,6 @@
 import { LoopRing } from "../../../components/site/LoopRing";
 import { PageMasthead } from "../../../components/site/PageMasthead";
+import { getPublishedResume } from "../../../lib/resume-content";
 
 // Bracketed placeholders, deliberately: the repo's own About copy is still the
 // scaffold's, and writing it is separate work. See the design spec §8.
@@ -9,7 +10,9 @@ const META = [
   { label: "Working with", value: "[Your stack]" },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const { resume } = await getPublishedResume();
+
   return (
     <section>
       <PageMasthead eyebrow="Background" title="About" />
@@ -17,11 +20,10 @@ export default function AboutPage() {
       <div className="mt-14 grid grid-cols-12 gap-6">
         <div className="col-span-12 md:col-span-6">
           <p className="font-display text-3xl leading-[1.15] md:text-[2.5rem]">
-            [One sentence on what you build and why it is worth building.]
+            {resume.headline.title}
           </p>
           <p className="mt-8 text-base leading-relaxed text-fg/80">
-            Replace this paragraph with your real background, skills, and
-            interests.
+            {resume.headline.summary}
           </p>
           <p className="mt-5 text-base leading-relaxed text-fg/80">
             [A second paragraph: how you got here, and what you are looking for

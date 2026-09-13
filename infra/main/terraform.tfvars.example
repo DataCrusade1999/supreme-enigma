@@ -1,0 +1,24 @@
+# Copy to terraform.tfvars (gitignored via *.tfvars) and fill in real values.
+# Every variable here is required — none has a default, so `terraform plan` fails
+# with "No value for required variable" until all five are set.
+
+# Vercel API token with access to the project.
+vercel_api_token = "..."
+
+# The shared password gating /tools/bgm-looper, /api/looper/* and /keystatic.
+app_password = "..."
+
+# owner/repo for the Vercel git integration.
+github_repo = "DataCrusade1999/supreme-enigma"
+
+# Receives budget threshold alerts. The SNS email subscription has to be
+# confirmed by hand from the inbox after the first apply, or nothing notifies.
+alert_email = "you@example.com"
+
+# OpenRouter key used for resume extraction. Blast radius is OpenRouter credit
+# only — set a spend limit on the key in the OpenRouter dashboard, which is not
+# manageable from Terraform and is not covered by the AWS budget.
+openrouter_api_key = "sk-or-v1-..."
+
+# Optional — defaults to anthropic/claude-haiku-4.5.
+# openrouter_model = "anthropic/claude-haiku-4.5"
