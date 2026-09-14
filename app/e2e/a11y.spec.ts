@@ -10,6 +10,8 @@ const PATHS = [
   "/contact",
   "/blog",
   "/blog/hello-world",
+  "/newsletter",
+  "/newsletter/hello-newsletter",
   "/login",
 ];
 

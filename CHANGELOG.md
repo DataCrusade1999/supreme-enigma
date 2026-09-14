@@ -7,6 +7,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Newsletter archive at `/newsletter`, powered by the same Keystatic setup
+  as the blog. Sending is manual: the gated `/tools/newsletter-admin` tool
+  triggers delivery via Buttondown once an issue is reviewed.
+
 ## [1.3.1] - 2026-09-13
 
 ## [1.3.0] - 2026-09-13
