@@ -12,6 +12,19 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - Newsletter archive at `/newsletter`, powered by the same Keystatic setup
   as the blog. Sending is manual: the gated `/tools/newsletter-admin` tool
   triggers delivery via Buttondown once an issue is reviewed.
+- Vercel WAF rate limit on `/api/login` — 10 requests per 600s per IP/JA4,
+  denied for 10m. The app-level limiter in `app/lib/rate-limit.ts` counts in
+  serverless instance memory and so cannot see attempts spread across cold
+  starts; this one counts at the edge. Uses the single rate-limit rule the
+  Hobby plan includes.
+
+### Changed
+
+- Vercel only builds when `app/` or `content/` changed, via `ignore_command`
+  on the project. Commits touching only `lambda/`, `infra/`, `docs/` or
+  `CHANGELOG.md` no longer produce a deployment — which also makes Instant
+  Rollback useful, since the release job's CHANGELOG commit is no longer the
+  deployment that a Hobby-plan rollback would land on.
 
 ## [1.3.1] - 2026-09-13
 
