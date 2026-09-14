@@ -31,4 +31,10 @@ test("header nav links navigate between pages", async ({ page }) => {
   await expect(
     page.getByRole("heading", { level: 1, name: "Blog" }),
   ).toBeVisible();
+
+  await page.getByRole("link", { name: "Newsletter" }).click();
+  await expect(page).toHaveURL("/newsletter");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Newsletter" }),
+  ).toBeVisible();
 });

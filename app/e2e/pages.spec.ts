@@ -9,6 +9,8 @@ const PAGES = [
   { path: "/contact", heading: "Contact" },
   { path: "/blog", heading: "Blog" },
   { path: "/blog/hello-world", heading: "Hello, World" },
+  { path: "/newsletter", heading: "Newsletter" },
+  { path: "/newsletter/hello-newsletter", heading: "Hello, newsletter" },
   { path: "/login", heading: "Sign in" },
 ];
 
