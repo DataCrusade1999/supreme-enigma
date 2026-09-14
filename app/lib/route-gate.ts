@@ -26,10 +26,18 @@ export const TOOLS: Tool[] = [
       "Upload a resume PDF, check what was read out of it, publish it to the public page.",
   },
   {
+    href: "/tools/newsletter-admin",
+    name: "Newsletter admin",
+    kind: "Site",
+    blurb:
+      "Review an archived newsletter issue and send it to subscribers through Buttondown.",
+  },
+  {
     href: "/keystatic",
     name: "Content editor",
     kind: "Site",
-    blurb: "Write and edit blog posts. Commits straight to the repo through Keystatic.",
+    blurb:
+      "Write and edit blog posts and newsletter issues. Commits straight to the repo through Keystatic.",
   },
 ];
 
@@ -41,6 +49,7 @@ const GATED_PREFIXES = [
   "/tools",
   "/api/looper",
   "/api/resume",
+  "/api/newsletter",
   "/keystatic",
   "/api/keystatic",
 ];
