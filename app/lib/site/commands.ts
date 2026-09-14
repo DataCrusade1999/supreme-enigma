@@ -23,6 +23,12 @@ export const COMMANDS: Command[] = [
   { id: "cd-resume", label: "cd resume", hint: "View resume", run: (ctx) => ctx.push("/resume") },
   { id: "cd-blog", label: "cd blog", hint: "Read the blog", run: (ctx) => ctx.push("/blog") },
   {
+    id: "cd-newsletter",
+    label: "cd newsletter",
+    hint: "Read the newsletter archive",
+    run: (ctx) => ctx.push("/newsletter"),
+  },
+  {
     id: "cd-contact",
     label: "cd contact",
     hint: "Get in touch",
@@ -43,6 +49,12 @@ export const COMMANDS: Command[] = [
     label: "open resume-admin",
     hint: "Publish a resume",
     run: (ctx) => ctx.push("/tools/resume-admin"),
+  },
+  {
+    id: "open-newsletter-admin",
+    label: "open newsletter-admin",
+    hint: "Send a newsletter issue",
+    run: (ctx) => ctx.push("/tools/newsletter-admin"),
   },
   {
     id: "open-content-editor",
