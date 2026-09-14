@@ -241,6 +241,25 @@ resource "vercel_project" "looper" {
   framework      = "nextjs"
   root_directory = "app"
 
+  # Only build when something the app actually builds from changed. Vercel's
+  # contract is inverted from the usual reading: exit 0 skips the build, exit 1
+  # issues one — which is exactly what `git diff --quiet` returns for "no
+  # differences" and "differences", so no wrapper logic is needed. Same
+  # hand-rolled `git diff --quiet` as deploy.yml's `changes` job.
+  #
+  # An allowlist rather than a denylist of lambda/infra/docs: root_directory is
+  # "app", and the only other build input is content/ (the git-backed Keystatic
+  # blog, which must keep triggering rebuilds). The failure mode to know about
+  # is that a *new* top-level directory that becomes build-relevant would
+  # silently stop deploying until it is added here.
+  #
+  # This also makes Instant Rollback usable. On Hobby it only reaches the
+  # immediately previous production deployment, and the release job pushes a
+  # CHANGELOG-only commit to main right after each promotion merge — without
+  # this, that commit is its own deployment and the single rollback step
+  # reverts a markdown heading instead of the release.
+  ignore_command = "git diff --quiet HEAD^ HEAD -- app content"
+
   # The resume publish route refuses to run unless VERCEL_ENV is "production"
   # (spec §7.3), and VERCEL_ENV is a Vercel system variable. The provider
   # defaults this to false, which leaves system variables unexposed at runtime —
@@ -265,6 +284,50 @@ resource "vercel_project" "looper" {
   # so this exposes only the public portfolio pages, which are already public on
   # production.
   vercel_authentication = { deployment_type = "none" }
+}
+
+# --- Firewall ---
+
+# app/lib/rate-limit.ts caps /api/login at 5 attempts per 15 minutes, but its
+# counter is a Map in serverless instance memory — its own header comment notes
+# that an attacker spread across cold starts gets more than that in total. This
+# rule is the edge-side backstop for exactly that case: it lives on the Edge
+# Network, so it counts across instances.
+#
+# 10/600s is deliberately looser than the app-level limiter, not tighter. A
+# normal wrong-password run still trips the app's 429 first and gets its
+# Retry-After header; this only fires on volume the in-memory counter cannot
+# see. 600s is the maximum window the Hobby plan allows, and this consumes the
+# one free rate-limit rule (Hobby also caps total custom rules at 3).
+resource "vercel_firewall_config" "looper" {
+  project_id = vercel_project.looper.id
+
+  rules {
+    rule {
+      name        = "Rate limit login"
+      description = "Cap /api/login attempts per source across serverless instances"
+
+      condition_group = [{
+        conditions = [{
+          type  = "path"
+          op    = "pre"
+          value = "/api/login"
+        }]
+      }]
+
+      action = {
+        action = "rate_limit"
+        rate_limit = {
+          limit  = 10
+          window = 600
+          keys   = ["ip", "ja4"]
+          algo   = "fixed_window"
+          action = "deny"
+        }
+        action_duration = "10m"
+      }
+    }
+  }
 }
 
 locals {
