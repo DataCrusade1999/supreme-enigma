@@ -12,6 +12,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - Newsletter archive at `/newsletter`, powered by the same Keystatic setup
   as the blog. Sending is manual: the gated `/tools/newsletter-admin` tool
   triggers delivery via Buttondown once an issue is reviewed.
+- Vercel Web Analytics and Speed Insights on every route, mounted in the root
+  layout. Both are free on the Hobby plan (50,000 analytics events/month,
+  10,000 Speed Insights events per 30 days) and Analytics is cookie-free, so
+  no consent banner is needed.
 - Vercel WAF rate limit on `/api/login` — 10 requests per 600s per IP/JA4,
   denied for 10m. The app-level limiter in `app/lib/rate-limit.ts` counts in
   serverless instance memory and so cannot see attempts spread across cold
