@@ -23,6 +23,13 @@ function makeRequest(body: unknown) {
   });
 }
 
+function makeRawRequest(body: string) {
+  return new Request("http://localhost/api/newsletter/send", {
+    method: "POST",
+    body,
+  });
+}
+
 describe("POST /api/newsletter/send", () => {
   beforeEach(() => {
     mockRead.mockReset();
@@ -66,6 +73,66 @@ describe("POST /api/newsletter/send", () => {
       subject: "Issue One",
       body: "body text",
     });
+  });
+
+  it("returns 400 rather than 500 when the body is not valid JSON", async () => {
+    const res = await POST(makeRawRequest("not-json"));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("Invalid JSON body");
+  });
+
+  it("returns a structured 502 when the status check itself fails", async () => {
+    mockRead.mockResolvedValue({
+      title: "Issue One",
+      content: async () => "body text",
+    });
+    mockIsIssueSent.mockRejectedValue(new Error("Buttondown list emails failed: 503 down"));
+    const res = await POST(makeRequest({ slug: "issue-one" }));
+    expect(res.status).toBe(502);
+    const data = await res.json();
+    expect(data.error).toContain("Status check failed");
+    expect(mockSendIssue).not.toHaveBeenCalled();
+  });
+
+  it("does not dispatch twice when two sends for the same slug race", async () => {
+    mockRead.mockResolvedValue({
+      title: "Issue One",
+      content: async () => "body text",
+    });
+    mockIsIssueSent.mockResolvedValue(false);
+
+    // Hold the first send open until the second has been answered, so the two
+    // genuinely overlap rather than running back to back.
+    let release: () => void = () => {};
+    let signalEntered: () => void = () => {};
+    const entered = new Promise<void>((resolve) => { signalEntered = resolve; });
+    mockSendIssue.mockImplementation(() => {
+      signalEntered();
+      return new Promise<void>((resolve) => { release = resolve; });
+    });
+
+    const first = POST(makeRequest({ slug: "issue-one" }));
+    await entered;
+    const second = await POST(makeRequest({ slug: "issue-one" }));
+
+    expect(second.status).toBe(409);
+    release();
+    expect((await first).status).toBe(200);
+    expect(mockSendIssue).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a later send proceed once the in-flight one has settled", async () => {
+    mockRead.mockResolvedValue({
+      title: "Issue One",
+      content: async () => "body text",
+    });
+    mockIsIssueSent.mockResolvedValue(false);
+    mockSendIssue.mockResolvedValue(undefined);
+
+    expect((await POST(makeRequest({ slug: "issue-one" }))).status).toBe(200);
+    expect((await POST(makeRequest({ slug: "issue-one" }))).status).toBe(200);
+    expect(mockSendIssue).toHaveBeenCalledTimes(2);
   });
 
   it("returns 502 with the error message when sendIssue throws", async () => {

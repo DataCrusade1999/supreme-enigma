@@ -268,11 +268,20 @@ reachable by name from anywhere on the site.
 1. Takes `{ slug }` in the request body.
 2. Re-reads that issue's content fresh from the reader — never trusts
    client-supplied title/body, only the slug to look up.
-3. Calls `isIssueSent(slug)` again, immediately before sending — closes
-   the race where the admin page's last render is stale (a second tab, a
-   rapid double-click) by re-verifying right before the irreversible
-   action. If already sent, responds with a clear "already sent" error
-   and does not call `sendIssue`.
+3. Holds a per-slug in-flight claim for the duration of the request, then
+   calls `isIssueSent(slug)` again immediately before sending. **Corrected
+   2026-09-14 — the earlier wording here overclaimed.** It said re-verifying
+   "closes the race" where the admin page's last render is stale (a second
+   tab, a rapid double-click). It does not: two requests can both pass the
+   check before either creates the email, and a send is irreversible. The
+   in-flight claim closes that window on a single instance, which covers the
+   realistic triggers. It does **not** close it across instances — Vercel runs
+   this route on more than one, and the claim is per-instance. Closing that
+   needs either durable state (ruled out by §6 — no database, no new AWS
+   resource) or a verified guarantee that Buttondown rejects a duplicate
+   client-supplied `slug`, which is unconfirmed. Tracked as a known
+   limitation, not a solved problem. If already sent, responds with a clear
+   "already sent" error and does not call `sendIssue`.
 4. Otherwise calls `sendIssue({ slug, subject: title, body: content })`.
 5. Returns success or a clear error — the caller (the admin page) must
    not treat a network-level ambiguity as success.

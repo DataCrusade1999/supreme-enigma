@@ -12,16 +12,23 @@ export function SendButton({ slug }: { slug: string }) {
     }
     setStatus("sending");
     setError(null);
-    const res = await fetch("/api/newsletter/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug }),
-    });
-    const data = await res.json().catch(() => ({ error: "Unknown error" }));
-    if (res.ok) {
-      setStatus("sent");
-    } else {
-      setError(data.error ?? "Send failed");
+    try {
+      const res = await fetch("/api/newsletter/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      const data = await res.json().catch(() => ({ error: "Unknown error" }));
+      if (res.ok) {
+        setStatus("sent");
+      } else {
+        setError(data.error ?? "Send failed");
+        setStatus("error");
+      }
+    } catch (err) {
+      // A rejected fetch (offline, DNS failure, connection dropped) would
+      // otherwise escape the handler and strand the button on "Sending…".
+      setError(err instanceof Error ? err.message : "Network error");
       setStatus("error");
     }
   }

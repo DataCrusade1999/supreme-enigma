@@ -29,6 +29,16 @@ describe("SendButton", () => {
     );
   });
 
+  it("surfaces a rejected fetch instead of stranding the button", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    render(<SendButton slug="hello-newsletter" />);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("Failed to fetch"),
+    );
+    expect(screen.getByRole("button", { name: "Send" })).not.toBeDisabled();
+  });
+
   it("does not call fetch when the confirm dialog is declined", async () => {
     vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
     const fetchMock = vi.fn();
