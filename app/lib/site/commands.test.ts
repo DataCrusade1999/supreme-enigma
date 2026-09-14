@@ -14,10 +14,12 @@ describe("COMMANDS", () => {
       "cd-projects",
       "cd-resume",
       "cd-blog",
+      "cd-newsletter",
       "cd-contact",
       "cd-tools",
       "open-bgm-looper",
       "open-resume-admin",
+      "open-newsletter-admin",
       "open-content-editor",
       "theme-dark",
       "theme-light",
@@ -37,6 +39,7 @@ describe("COMMANDS", () => {
     ["cd-tools", "/tools"],
     ["open-bgm-looper", "/tools/bgm-looper"],
     ["open-resume-admin", "/tools/resume-admin"],
+    ["open-newsletter-admin", "/tools/newsletter-admin"],
     ["open-content-editor", "/keystatic"],
   ])("%s pushes %s", (id, href) => {
     const push = vi.fn();

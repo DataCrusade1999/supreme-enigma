@@ -19,5 +19,21 @@ export default config({
         content: fields.mdx({ label: "Content" }),
       },
     }),
+    newsletter: collection({
+      label: "Newsletter",
+      slugField: "title",
+      path: "content/newsletter/*",
+      format: { contentField: "content" },
+      schema: {
+        title: fields.slug({ name: { label: "Title" } }),
+        date: fields.date({ label: "Date" }),
+        summary: fields.text({ label: "Summary" }),
+        content: fields.mdx({
+          label: "Content",
+          description:
+            "Plain Markdown only — no custom JSX components. This body is also sent as an email via Buttondown, which cannot render JSX.",
+        }),
+      },
+    }),
   },
 });

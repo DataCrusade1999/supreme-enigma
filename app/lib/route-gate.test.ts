@@ -25,6 +25,14 @@ describe("isGatedPath", () => {
     ["/keystatic", true],
     ["/keystatic/blog/hello-world", true],
     ["/api/keystatic/github/oauth/callback", true],
+    ["/api/newsletter", true],
+    ["/api/newsletter/send", true],
+    // Gated by the /tools prefix rather than an entry of its own — this case
+    // is here to pin that, so moving the admin out of /tools fails loudly.
+    ["/tools/newsletter-admin", true],
+    // The public archive stays public, like /blog.
+    ["/newsletter", false],
+    ["/newsletter/hello-newsletter", false],
   ])("isGatedPath(%s) === %s", (pathname, expected) => {
     expect(isGatedPath(pathname)).toBe(expected);
   });
@@ -49,6 +57,7 @@ describe("toolNameFor", () => {
     ["/tools", null],
     ["/tools/something-new", null],
     ["/api/looper/process", null],
+    ["/tools/newsletter-admin", "Newsletter admin"],
   ])("toolNameFor(%s) === %s", (pathname, expected) => {
     expect(toolNameFor(pathname)).toBe(expected);
   });
@@ -83,6 +92,7 @@ describe("TOOLS", () => {
     expect(TOOLS.map((tool) => tool.href)).toEqual([
       "/tools/bgm-looper",
       "/tools/resume-admin",
+      "/tools/newsletter-admin",
       "/keystatic",
     ]);
   });
