@@ -8,6 +8,20 @@ function getApiKey(): string {
   return key;
 }
 
+/**
+ * Whether the Buttondown integration is configured at all.
+ *
+ * Deliberately separate from `getApiKey()` throwing: the admin page renders a
+ * row per issue and catches per row, so an unset key would otherwise surface as
+ * N identical failures flattened into "status unknown" — the same thing it
+ * shows when an issue simply has not been sent. Asking this once up front lets
+ * the page name the actual problem, and skips a fan-out of calls that are all
+ * going to throw.
+ */
+export function isButtondownConfigured(): boolean {
+  return Boolean(process.env.BUTTONDOWN_API_KEY);
+}
+
 function headers(): Record<string, string> {
   return {
     Authorization: `Token ${getApiKey()}`,

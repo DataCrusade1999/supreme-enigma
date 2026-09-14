@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isIssueSent, sendIssue } from "./buttondown";
+import { isButtondownConfigured, isIssueSent, sendIssue } from "./buttondown";
 
 describe("buttondown", () => {
   beforeEach(() => {
@@ -98,5 +98,31 @@ describe("buttondown", () => {
   it("throws when BUTTONDOWN_API_KEY is not set", async () => {
     vi.unstubAllEnvs();
     await expect(isIssueSent("issue-one")).rejects.toThrow("BUTTONDOWN_API_KEY");
+  });
+
+  describe("isButtondownConfigured", () => {
+    // The admin page asks this *before* fanning out, so that a missing key is
+    // reported as a missing key rather than as N identical thrown errors that
+    // its per-issue catch would flatten into "status unknown".
+    it("is true when the key is set", () => {
+      expect(isButtondownConfigured()).toBe(true);
+    });
+
+    it("is false when the key is absent", () => {
+      vi.unstubAllEnvs();
+      expect(isButtondownConfigured()).toBe(false);
+    });
+
+    it("is false when the key is present but empty", () => {
+      vi.stubEnv("BUTTONDOWN_API_KEY", "");
+      expect(isButtondownConfigured()).toBe(false);
+    });
+
+    it("does not make a network request", () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      isButtondownConfigured();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
   });
 });

@@ -7,6 +7,14 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Fixed
+
+- The newsletter admin now says `BUTTONDOWN_API_KEY is not set` when the key is
+  missing, instead of `Status unknown` for every issue. The old fallback was
+  indistinguishable from "nothing has been sent yet", so a broken integration
+  looked like an empty archive. A configured key that still fails reports
+  `Buttondown unreachable`, which is a different problem.
+
 ## [1.4.0] - 2026-09-14
 
 ### Added
