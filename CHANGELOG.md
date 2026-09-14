@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-14
+
 ### Added
 
 - Newsletter archive at `/newsletter`, powered by the same Keystatic setup
