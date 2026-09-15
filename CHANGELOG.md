@@ -7,6 +7,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- `CLAUDE.md`'s stale-Lambda guidance now prefers `gh run rerun --failed` and
+  states that a `workflow_dispatch` run on `main` also cuts a release. The old
+  wording recommended dispatch as the fix without that side effect.
+
 ### Added
 
 - `docs/runbooks/` — operator checklists for release promotion, stale-Lambda
