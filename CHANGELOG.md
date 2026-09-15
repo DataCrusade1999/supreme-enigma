@@ -7,6 +7,14 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- `docs/runbooks/` — operator checklists for release promotion, stale-Lambda
+  recovery, BGM Looper incident triage, and Terraform apply/teardown. Two
+  corrections fall out of writing them: a `workflow_dispatch` run on `main`
+  also cuts a release, and `terraform destroy` aborts with `BucketNotEmpty`
+  because no bucket sets `force_destroy` and main's never empties itself.
+
 ### Fixed
 
 - The newsletter admin now says `BUTTONDOWN_API_KEY is not set` when the key is
