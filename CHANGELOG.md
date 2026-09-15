@@ -7,6 +7,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- `docs/research/2026-09-15-architecture-review.md` — a review of the whole
+  system against the tree and the live account. Seven findings; the two worth
+  acting on are the pair of permanent IAM access keys with no OIDC anywhere,
+  and the absence of any concurrency ceiling on the Lambdas.
+
 ### Changed
 
 - `CLAUDE.md`'s stale-Lambda guidance now prefers `gh run rerun --failed` and
