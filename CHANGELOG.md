@@ -38,6 +38,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- The app's S3 and Lambda clients now federate through the Vercel OIDC token
+  when `APP_AWS_ROLE_ARN` is set, via a new `awsCredentials()` helper in
+  `app/lib/aws.ts`. With the variable absent the helper contributes nothing and
+  the SDK's default credential chain still applies, so the unit tests,
+  Playwright's self-hosted server and local `npm run dev` are unaffected.
 - `deploy.yml`'s `deploy` job now authenticates to AWS by assuming
   `bgm-looper-ci-deploy` through GitHub Actions OIDC instead of the
   `AWS_CI_ACCESS_KEY_ID`/`AWS_CI_SECRET_ACCESS_KEY` secrets. The secrets stay in
