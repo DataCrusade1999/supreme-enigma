@@ -126,3 +126,29 @@ Still under the 200 INR/month target, with the range's width driven
 entirely by the Demucs image size, which won't be known precisely until
 it's actually built (Task 3/9 of the implementation plan) — re-measure
 the same way `bgm-looper-lambda` was just measured once it exists.
+
+### Worst case, if something runs away (2026-09-16)
+
+The numbers above are steady-state. The ceiling is set by the account's
+Lambda concurrency quota (`L-B99A9384`), which is **10**, not the default
+1,000 — a reduced quota this account has never had raised. Ten concurrent
+executions at 1024MB is ~$0.60/hour, ~$14/day, if every one of them ran
+flat out continuously. That is the hard bound on a runaway invoke loop.
+
+There is deliberately no `reserved_concurrent_executions` in the Terraform
+lowering it further, because AWS will not allow one: reserving concurrency
+is capped at "unreserved account concurrency minus 100", and with a quota
+of 10 any non-zero reservation is rejected. Verified against the live
+account — `put-function-concurrency 0` succeeds, `2` fails with
+`InvalidParameterValueException ... below its minimum value of [10]`.
+
+Two signals sit under that ceiling, at different speeds:
+
+- `aws_cloudwatch_metric_alarm.lambda_invocation_rate` — >50 invocations
+  in five minutes on any of the three functions, straight to the
+  `bgm-looper-budget-alerts` SNS topic. Minutes.
+- `aws_budgets_budget.project` — $5/month at 80% and 100%. Hours, because
+  AWS budget evaluation lags actual usage.
+
+The alarm is what makes the budget survivable; on its own the budget
+reports after the money is gone.
