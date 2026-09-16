@@ -263,9 +263,11 @@ substitute that environment's host.
 | `ResumeObjects` (`GetObject`, main's bucket) | `GET /api/resume/draft?draftId=<random uuid>` | 404 `no draft for that id` — the `NoSuchKey` path, not a credential error |
 | `ResumeHeadObjectNotFound` (`s3:ListBucket`) | `POST /api/resume/extract` with a random `draftId` | 404 `no PDF for that draft`. **This is the load-bearing one**: without `ListBucket`, `HeadObject` on an absent key returns 403, `objectExists()` rethrows, and this is a 500. It also costs nothing — the route returns before any model call. |
 
-**`ResumeDraftCleanup` (`s3:DeleteObject`) is the one grant never exercised.** It needs a real draft
-upload and discard. Do that on `dev` before B5, or accept that B5 removes the only identity that has
-proven it.
+**`ResumeDraftCleanup` (`s3:DeleteObject`) is the one grant never exercised, and it cannot be.**
+`grep -rn 'DeleteObject' app/` returns nothing — `app/lib/aws.ts` has no delete helper and no route
+issues a `DeleteObjectCommand`. The statement was carried into both the user policy and the role with
+no caller behind it, so there is no request that would prove it. Nothing to do before B5; flagged
+here only so the gap is not mistaken for an untested path. Removing it is separate work from #155.
 
 Both roles' assumption is recorded in CloudTrail with no `errorCode`:
 `aws-sdk-js-session-*` on `bgm-looper-vercel`, subject
