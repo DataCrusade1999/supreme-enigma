@@ -9,6 +9,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- `aws_iam_openid_connect_provider.vercel` and `aws_iam_role.vercel` — a Vercel
+  OIDC role carrying the five statements from `aws_iam_user_policy.vercel`, plus
+  an `APP_AWS_ROLE_ARN` project environment variable holding its ARN. Nothing
+  reads the variable yet; the app still authenticates with the static key pair.
 - `aws_iam_openid_connect_provider.github` and `aws_iam_role.ci_deploy` — a
   GitHub Actions OIDC role carrying the same three statements as
   `aws_iam_user_policy.ci_deploy`. Its trust policy pins `sub` with
