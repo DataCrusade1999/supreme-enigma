@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-16
+
 ## [1.4.0] - 2026-09-14
 
 ### Added
