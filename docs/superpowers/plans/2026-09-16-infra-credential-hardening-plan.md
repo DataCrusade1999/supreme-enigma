@@ -5,8 +5,8 @@ Covers the two `priority: high` findings from
 (#152) judged worth acting on:
 
 - **#154** — no concurrency ceiling on the Lambdas. **Done**, though not as the issue proposed. Part A.
-- **#155** — two permanent IAM access key pairs, no federation anywhere. **In progress** — B1 (#157),
-  B2 (#158) and the immutable-subject fix (#159) shipped 2026-09-16. Part B.
+- **#155** — two permanent IAM access key pairs, no federation anywhere. **B1-B4 shipped
+  2026-09-16** (#157, #158, #159, #160, #161); **B5 outstanding.** Part B.
 
 There is no matching design spec. The issues are the spec; this is the plan.
 
@@ -217,7 +217,13 @@ rather than breaking — which is exactly why deletion is a separate PR.
 
 ### B5 — delete both users (`Closes #155`)
 
-Only after B4 is verified on all three environments.
+**This is the only step left.** B1-B4 shipped 2026-09-16 — see "What B1-B4 actually verified" below
+for what is already proven and what is not.
+
+Only after B4 is verified on all three environments. As of 2026-09-16 it is verified on `dev` only:
+`stage` and `main` still run on the static keys, because Vercel bakes env vars at build time and
+neither has rebuilt with `APP_AWS_ROLE_ARN` present. **Promote `dev → stage` and `stage → main`
+first, then re-run the checks below on each**, and only then open B5.
 
 Remove `aws_iam_user.vercel` / `.ci_deploy`, both `aws_iam_access_key`, both `aws_iam_user_policy`,
 and `vercel_project_environment_variable.aws_access_key` / `.aws_secret_key` from `shared.tf`; remove
@@ -241,6 +247,30 @@ Docs to correct in the same PR:
 Re-run the prose grep at implementation time (`ci-deploy|vercel-sa|access key|iam_user` over
 `README.md`, `ARCHITECTURE.md`, `docs/runbooks/`, `.claude/`). Leave `docs/superpowers/specs/` and the
 older `docs/superpowers/plans/` alone — they are dated records of what was designed then.
+
+### What B1-B4 actually verified, on `dev`, 2026-09-16
+
+Re-run each of these on `stage` and on `main` after promotion. They need no UI: log in via
+`POST /api/login` with `app_password` from `infra/main/terraform.tfvars`, keep the cookie, and
+substitute that environment's host.
+
+| Grant | Check | Result on `dev` |
+|---|---|---|
+| CI role, all three policy statements | `gh run rerun <id> --failed` on a lambda-touching commit | `deploy` green; `bgm-looper-processor-dev` on `dev-487b873e…` |
+| `AudioScratchObjects` (`PutObject`) | `POST /api/looper/upload-url`, then `PUT` the file | 200; signed URL carries `X-Amz-Security-Token` and an `ASIA…` key id, not `AKIA…` |
+| `InvokeProcessor` | `POST /api/looper/process` | 200 with peaks, duration and a download URL |
+| `AudioScratchObjects` (`GetObject`) | `GET` the returned download URL | 200, 24049 bytes |
+| `ResumeObjects` (`GetObject`, main's bucket) | `GET /api/resume/draft?draftId=<random uuid>` | 404 `no draft for that id` — the `NoSuchKey` path, not a credential error |
+| `ResumeHeadObjectNotFound` (`s3:ListBucket`) | `POST /api/resume/extract` with a random `draftId` | 404 `no PDF for that draft`. **This is the load-bearing one**: without `ListBucket`, `HeadObject` on an absent key returns 403, `objectExists()` rethrows, and this is a 500. It also costs nothing — the route returns before any model call. |
+
+**`ResumeDraftCleanup` (`s3:DeleteObject`) is the one grant never exercised.** It needs a real draft
+upload and discard. Do that on `dev` before B5, or accept that B5 removes the only identity that has
+proven it.
+
+Both roles' assumption is recorded in CloudTrail with no `errorCode`:
+`aws-sdk-js-session-*` on `bgm-looper-vercel`, subject
+`owner:ashutosh-pandeys-projects-77cb3a00:project:bgm-looper:environment:preview` — the documented
+form, so Vercel's subject needed no correction the way GitHub's did.
 
 ### B6 — verification
 
