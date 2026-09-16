@@ -9,6 +9,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- `aws_iam_openid_connect_provider.github` and `aws_iam_role.ci_deploy` — a
+  GitHub Actions OIDC role carrying the same three statements as
+  `aws_iam_user_policy.ci_deploy`. Its trust policy pins `sub` with
+  `StringEquals` on the three permanent branches rather than a wildcard, so a
+  fork PR's `pull_request` context cannot assume it. Nothing uses the role yet;
+  `deploy.yml` still authenticates with the static key pair.
 - `aws_cloudwatch_metric_alarm.lambda_invocation_rate` — one alarm per Lambda
   function, firing on more than 50 invocations in five minutes to the existing
   `bgm-looper-budget-alerts` SNS topic. This is the fast signal for a runaway
