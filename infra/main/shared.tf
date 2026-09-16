@@ -233,6 +233,82 @@ resource "aws_iam_user_policy" "ci_deploy" {
   })
 }
 
+# --- GitHub Actions OIDC: the federated replacement for aws_iam_user.ci_deploy above.
+#     Added alongside it, not instead of it — deploy.yml still uses the static key until
+#     the workflow is switched over, and the user is only deleted once that is proven. ---
+
+# No thumbprint_list: AWS validates token.actions.githubusercontent.com against its own
+# trusted-root CA library, so pinning a leaf thumbprint here only creates something that
+# breaks when GitHub rotates its certificate.
+resource "aws_iam_openid_connect_provider" "github" {
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
+}
+
+resource "aws_iam_role" "ci_deploy" {
+  name = "${var.project_name}-ci-deploy"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+      Condition = {
+        # StringEquals on an explicit list of the three permanent branches, NOT
+        # StringLike with a wildcard. A wildcard `sub` would also match a
+        # pull_request context, which is what a fork PR runs as — that is the
+        # documented way this trust policy gets abused. deploy.yml declares no
+        # `environment:`, so the ref: form is the sub GitHub actually issues.
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_repo}:ref:refs/heads/main",
+            "repo:${var.github_repo}:ref:refs/heads/dev",
+            "repo:${var.github_repo}:ref:refs/heads/stage",
+          ]
+        }
+      }
+    }]
+  })
+}
+
+# Same three statements as aws_iam_user_policy.ci_deploy, verbatim — this is a move of
+# the identity, not a change of permissions.
+resource "aws_iam_role_policy" "ci_deploy" {
+  name = "${var.project_name}-ci-deploy-policy"
+  role = aws_iam_role.ci_deploy.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecr:BatchGetImage",
+          "ecr:DescribeImages",
+        ]
+        Resource = aws_ecr_repository.looper.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["lambda:UpdateFunctionCode", "lambda:GetFunction"]
+        Resource = local.all_lambda_function_arns
+      }
+    ]
+  })
+}
+
 # --- Vercel project + the config/secrets that are identical across production and preview ---
 
 resource "random_password" "cookie_secret" {
