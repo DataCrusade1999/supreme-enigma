@@ -23,6 +23,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
   to publish. That policy replaces SNS's default, so without the statement the
   alarms would transition to `ALARM` and notify nobody.
 
+### Fixed
+
+- `aws_iam_role.ci_deploy`'s trust policy pinned the name-only GitHub subject
+  (`repo:<owner>/<repo>:ref:...`), which this repo never issues — it has
+  `use_immutable_subject: true`, so the subject carries numeric owner and repo
+  IDs. The first federated deploy failed at `Configure AWS credentials` with
+  `Not authorized to perform sts:AssumeRoleWithWebIdentity`. The three subjects
+  now use the immutable prefix.
+
 ### Changed
 
 - `deploy.yml`'s `deploy` job now authenticates to AWS by assuming

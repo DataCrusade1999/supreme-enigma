@@ -5,7 +5,8 @@ Covers the two `priority: high` findings from
 (#152) judged worth acting on:
 
 - **#154** — no concurrency ceiling on the Lambdas. **Done**, though not as the issue proposed. Part A.
-- **#155** — two permanent IAM access key pairs, no federation anywhere. **Not started.** Part B.
+- **#155** — two permanent IAM access key pairs, no federation anywhere. **In progress** — B1 (#157),
+  B2 (#158) and the immutable-subject fix (#159) shipped 2026-09-16. Part B.
 
 There is no matching design spec. The issues are the spec; this is the plan.
 
@@ -109,6 +110,16 @@ merge**, per `CLAUDE.md`.
   `enabled` field. Do not go looking for one.
 - **`aws_iam_openid_connect_provider` needs no `thumbprint_list`** — AWS provider 6.63 documents
   GitHub as one of the IdPs validated against AWS's own trusted-root CA library.
+- **GitHub's `sub` is the immutable, ID-qualified form, not `repo:<owner>/<repo>:...`.** This repo
+  has `use_immutable_subject: true` (GitHub's current default — `use_default: true`), so the sub is
+  `repo:DataCrusade1999@57610394/supreme-enigma@1313947304:ref:refs/heads/<branch>`. Read it off
+  `gh api repos/DataCrusade1999/supreme-enigma/actions/oidc/customization/sub`, whose
+  `sub_claim_prefix` is exactly that string, and copy it verbatim rather than rebuilding it from
+  `var.github_repo`. B1 shipped with the name-only form and #158's deploy failed at `Configure AWS
+  credentials` with `Not authorized to perform sts:AssumeRoleWithWebIdentity`; the real sub came out
+  of CloudTrail's `LookupEvents` on `AssumeRoleWithWebIdentity`, which records it as `userName`.
+  That lookup is the diagnostic for any future trust-policy mismatch — the STS error names no claim.
+  Fixed in #159.
 
 ### B1 — CI role in Terraform (infra only, nothing switches over)
 
@@ -119,12 +130,13 @@ In `infra/main/shared.tf`, beside the existing `ci_deploy` resources, which stay
 - `aws_iam_role.ci_deploy`: `sts:AssumeRoleWithWebIdentity`, `StringEquals` on both `:aud` =
   `sts.amazonaws.com` **and** `:sub` as an explicit three-entry list:
   ```
-  repo:DataCrusade1999/supreme-enigma:ref:refs/heads/main
-  repo:DataCrusade1999/supreme-enigma:ref:refs/heads/dev
-  repo:DataCrusade1999/supreme-enigma:ref:refs/heads/stage
+  repo:DataCrusade1999@57610394/supreme-enigma@1313947304:ref:refs/heads/main
+  repo:DataCrusade1999@57610394/supreme-enigma@1313947304:ref:refs/heads/dev
+  repo:DataCrusade1999@57610394/supreme-enigma@1313947304:ref:refs/heads/stage
   ```
   `StringEquals` on a literal list, **not** `StringLike` with a wildcard — a wildcard `sub` lets a
-  fork PR's `pull_request` context assume the role. `var.github_repo` already holds the repo string.
+  fork PR's `pull_request` context assume the role. The prefix is the immutable subject described
+  above; `var.github_repo` is the wrong source for it.
 - `aws_iam_role_policy.ci_deploy`: the three statements from `aws_iam_user_policy.ci_deploy`
   verbatim, same `local.all_lambda_function_arns`. Do not "improve" them while moving.
 - New output `ci_deploy_role_arn`.
