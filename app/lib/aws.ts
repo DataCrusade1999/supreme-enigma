@@ -7,13 +7,32 @@ import {
   CopyObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { awsCredentialsProvider } from "@vercel/oidc-aws-credentials-provider";
 
 /** Presigned URLs last five minutes. Exported so the process route can tell
- * the page when its download link stops working. */
+ * the page when its download link stops working.
+ *
+ * Do not raise this without raising the assumed role's session duration too.
+ * A URL signed with role credentials embeds X-Amz-Security-Token and dies with
+ * the session; the SDK only refreshes at five minutes remaining, and this TTL
+ * is exactly that, so a longer TTL would start handing out URLs that expire
+ * before they say they do. */
 export const DOWNLOAD_URL_TTL_SECONDS = 300;
 
+/** Credentials for every AWS client the app builds.
+ *
+ * With APP_AWS_ROLE_ARN set — which Terraform sets on Vercel for production and
+ * preview — this federates through the Vercel OIDC token and no long-lived key
+ * exists. Without it this returns nothing at all, so the client falls through to
+ * the SDK's default chain: that is what keeps the unit tests, Playwright's
+ * self-hosted server and local `npm run dev` working on static env-var keys. */
+export function awsCredentials() {
+  const roleArn = process.env.APP_AWS_ROLE_ARN;
+  return roleArn ? { credentials: awsCredentialsProvider({ roleArn }) } : {};
+}
+
 export function getS3Client(): S3Client {
-  return new S3Client({ region: process.env.APP_AWS_REGION! });
+  return new S3Client({ region: process.env.APP_AWS_REGION!, ...awsCredentials() });
 }
 
 export function keyForUpload(filename: string): string {
