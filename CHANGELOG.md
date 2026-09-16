@@ -26,15 +26,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - `aws_sns_topic_policy.budget_alerts` now also allows `cloudwatch.amazonaws.com`
   to publish. That policy replaces SNS's default, so without the statement the
   alarms would transition to `ALARM` and notify nobody.
-
-### Fixed
-
-- `aws_iam_role.ci_deploy`'s trust policy pinned the name-only GitHub subject
-  (`repo:<owner>/<repo>:ref:...`), which this repo never issues — it has
-  `use_immutable_subject: true`, so the subject carries numeric owner and repo
-  IDs. The first federated deploy failed at `Configure AWS credentials` with
-  `Not authorized to perform sts:AssumeRoleWithWebIdentity`. The three subjects
-  now use the immutable prefix.
+- `docs/research/2026-09-15-architecture-review.md` — a review of the whole
+  system against the tree and the live account. Seven findings; the two worth
+  acting on are the pair of permanent IAM access keys with no OIDC anywhere,
+  and the absence of any concurrency ceiling on the Lambdas.
+- `docs/runbooks/` — operator checklists for release promotion, stale-Lambda
+  recovery, BGM Looper incident triage, and Terraform apply/teardown. Two
+  corrections fall out of writing them: a `workflow_dispatch` run on `main`
+  also cuts a release, and `terraform destroy` aborts with `BucketNotEmpty`
+  because no bucket sets `force_destroy` and main's never empties itself.
 
 ### Changed
 
@@ -55,30 +55,18 @@ git tags / GitHub Releases cut automatically by the `release` job in
   worst case). `ARCHITECTURE.md`, `docs/runbooks/incident-tool-down.md` and
   `.claude/rules/infra.md` now record that, with the verification output, and
   the incident runbook's throttle lever is documented as zero-or-nothing.
-
-### Added
-
-- `docs/research/2026-09-15-architecture-review.md` — a review of the whole
-  system against the tree and the live account. Seven findings; the two worth
-  acting on are the pair of permanent IAM access keys with no OIDC anywhere,
-  and the absence of any concurrency ceiling on the Lambdas.
-
-### Changed
-
 - `CLAUDE.md`'s stale-Lambda guidance now prefers `gh run rerun --failed` and
   states that a `workflow_dispatch` run on `main` also cuts a release. The old
   wording recommended dispatch as the fix without that side effect.
 
-### Added
-
-- `docs/runbooks/` — operator checklists for release promotion, stale-Lambda
-  recovery, BGM Looper incident triage, and Terraform apply/teardown. Two
-  corrections fall out of writing them: a `workflow_dispatch` run on `main`
-  also cuts a release, and `terraform destroy` aborts with `BucketNotEmpty`
-  because no bucket sets `force_destroy` and main's never empties itself.
-
 ### Fixed
 
+- `aws_iam_role.ci_deploy`'s trust policy pinned the name-only GitHub subject
+  (`repo:<owner>/<repo>:ref:...`), which this repo never issues — it has
+  `use_immutable_subject: true`, so the subject carries numeric owner and repo
+  IDs. The first federated deploy failed at `Configure AWS credentials` with
+  `Not authorized to perform sts:AssumeRoleWithWebIdentity`. The three subjects
+  now use the immutable prefix.
 - The newsletter admin now says `BUTTONDOWN_API_KEY is not set` when the key is
   missing, instead of `Status unknown` for every issue. The old fallback was
   indistinguishable from "nothing has been sent yet", so a broken integration
