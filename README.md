@@ -116,6 +116,8 @@ infra/
               only. Deliberately outside the kill switch.
   main/       Terraform, remote state — S3, ECR, Lambda, IAM, Vercel project.
               `terraform destroy` here removes the entire application.
+docs/runbooks/            Operator checklists — release promotion, incident
+                          triage, stale-Lambda recovery, Terraform apply/teardown
 docs/superpowers/specs/   Design specs, one per phase
 docs/superpowers/plans/   TDD implementation plans, checkbox-tracked
 .github/workflows/        CI/CD — tests, per-branch Lambda image build/push,
@@ -215,6 +217,10 @@ buckets, and the IAM resources — including the `ci-deploy` user, so
 re-applying afterward means refreshing the `AWS_CI_*` GitHub secrets before
 CI can deploy again. The Terraform state bucket in `infra/bootstrap` is left
 alone: it holds no app data and costs nothing meaningful.
+
+The destroy will not run as written — no bucket sets `force_destroy`, and
+main's bucket holds the published resume indefinitely. Back it up and empty
+the buckets first: [docs/runbooks/infra-apply-teardown.md](docs/runbooks/infra-apply-teardown.md#kill-switch-full-teardown).
 
 ## Cost
 
