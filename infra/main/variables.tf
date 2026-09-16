@@ -4,7 +4,7 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  description = "Named AWS CLI profile Terraform authenticates with (local runs only — CI uses env-var credentials and never sets this)."
+  description = "Named AWS CLI profile Terraform authenticates with. Local runs only — Terraform is never applied from CI, and the deploy workflow authenticates by assuming bgm-looper-ci-deploy through OIDC rather than with any profile or key."
   type        = string
   default     = "personal"
 }

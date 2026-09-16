@@ -182,13 +182,13 @@ pushed by GitHub Actions, never locally, so bootstrap order matters:
    terraform apply -target=aws_ecr_repository.looper -var-file=terraform.tfvars
    ```
 
-3. **Lambda execution role + IAM users**:
+3. **Lambda execution role + the two OIDC providers and their roles**:
    ```bash
    terraform apply -var-file=terraform.tfvars
    ```
-   Copy `ci_deploy_access_key_id` / `ci_deploy_secret_access_key` from
-   `terraform output` into the GitHub secrets `AWS_CI_ACCESS_KEY_ID` /
-   `AWS_CI_SECRET_ACCESS_KEY`.
+   Nothing to copy anywhere. CI and the app both authenticate by assuming a
+   role through OIDC, so there is no access key to distribute and no GitHub
+   secret to set.
 
 4. **Push to `main`/`dev`/`stage`** — CI tests, then builds and pushes each
    branch's Lambda image to ECR.
@@ -213,10 +213,11 @@ terraform destroy -var-file=terraform.tfvars
 ```
 
 Removes the Vercel project, all three Lambdas, the ECR repo, the S3 audio
-buckets, and the IAM resources — including the `ci-deploy` user, so
-re-applying afterward means refreshing the `AWS_CI_*` GitHub secrets before
-CI can deploy again. The Terraform state bucket in `infra/bootstrap` is left
-alone: it holds no app data and costs nothing meaningful.
+buckets, and the IAM resources — including both OIDC providers and their
+roles. Re-applying recreates them with the same names and ARNs, so CI and the
+app work again with nothing to copy by hand. The Terraform state bucket in
+`infra/bootstrap` is left alone: it holds no app data and costs nothing
+meaningful.
 
 The destroy will not run as written — no bucket sets `force_destroy`, and
 main's bucket holds the published resume indefinitely. Back it up and empty
