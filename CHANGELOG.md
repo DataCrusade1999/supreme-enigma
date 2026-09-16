@@ -7,6 +7,18 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Removed
+
+- Both IAM users and their permanent access key pairs — `bgm-looper-vercel-sa`
+  and `bgm-looper-ci-deploy` — along with their inline policies and the
+  `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` Vercel environment variables.
+  CI and the app both authenticate by assuming a federated role through OIDC,
+  verified end to end on `dev`, `stage` and production first. There are now no
+  long-lived AWS credentials anywhere in this project. Closes #155.
+- The `vercel_access_key_id`, `ci_deploy_access_key_id` and
+  `ci_deploy_secret_access_key` Terraform outputs, and the `AWS_CI_*` GitHub
+  repository secrets they fed.
+
 ## [1.5.0] - 2026-09-16
 
 ### Added
