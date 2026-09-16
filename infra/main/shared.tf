@@ -4,6 +4,15 @@
 # S3 buckets, and the env vars that point at them) live in environments.tf instead.
 
 locals {
+  # GitHub issues an *immutable* subject for this repo — GET
+  # /repos/DataCrusade1999/supreme-enigma/actions/oidc/customization/sub returns
+  # use_default: true, use_immutable_subject: true, and this exact sub_claim_prefix.
+  # The sub therefore carries numeric owner and repo IDs rather than the plain names,
+  # and the name-only form `repo:${var.github_repo}:...` is never issued, so a trust
+  # policy written against it can never match. Copied verbatim from that API response;
+  # do not rebuild it out of var.github_repo.
+  github_sub_prefix = "repo:DataCrusade1999@57610394/supreme-enigma@1313947304"
+
   lambda_function_name = "${var.project_name}-processor"
   lambda_function_arn  = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.lambda_function_name}"
 
@@ -263,9 +272,9 @@ resource "aws_iam_role" "ci_deploy" {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           "token.actions.githubusercontent.com:sub" = [
-            "repo:${var.github_repo}:ref:refs/heads/main",
-            "repo:${var.github_repo}:ref:refs/heads/dev",
-            "repo:${var.github_repo}:ref:refs/heads/stage",
+            "${local.github_sub_prefix}:ref:refs/heads/main",
+            "${local.github_sub_prefix}:ref:refs/heads/dev",
+            "${local.github_sub_prefix}:ref:refs/heads/stage",
           ]
         }
       }
