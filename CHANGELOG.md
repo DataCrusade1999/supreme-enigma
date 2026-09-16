@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-16
+
 ### Added
 
 - `aws_iam_openid_connect_provider.vercel` and `aws_iam_role.vercel` — a Vercel
