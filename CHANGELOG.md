@@ -9,6 +9,26 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- `aws_cloudwatch_metric_alarm.lambda_invocation_rate` — one alarm per Lambda
+  function, firing on more than 50 invocations in five minutes to the existing
+  `bgm-looper-budget-alerts` SNS topic. This is the fast signal for a runaway
+  invoke loop; the $5 budget lags actual usage by hours.
+- `aws_sns_topic_policy.budget_alerts` now also allows `cloudwatch.amazonaws.com`
+  to publish. That policy replaces SNS's default, so without the statement the
+  alarms would transition to `ALARM` and notify nobody.
+
+### Changed
+
+- #154 asked for `reserved_concurrent_executions = 2` on the Lambdas. It cannot
+  be applied: this account's Lambda concurrency quota is 10, and AWS caps a
+  reservation at unreserved concurrency minus 100, so any non-zero value is
+  rejected. The quota is therefore the real ceiling (10 × 1024MB, ~$0.60/hour
+  worst case). `ARCHITECTURE.md`, `docs/runbooks/incident-tool-down.md` and
+  `.claude/rules/infra.md` now record that, with the verification output, and
+  the incident runbook's throttle lever is documented as zero-or-nothing.
+
+### Added
+
 - `docs/research/2026-09-15-architecture-review.md` — a review of the whole
   system against the tree and the live account. Seven findings; the two worth
   acting on are the pair of permanent IAM access keys with no OIDC anywhere,

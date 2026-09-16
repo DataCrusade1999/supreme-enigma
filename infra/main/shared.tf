@@ -11,6 +11,10 @@ locals {
     [local.lambda_function_arn],
     [for f in aws_lambda_function.looper_env : f.arn]
   )
+  all_lambda_function_names = concat(
+    [local.lambda_function_name],
+    [for f in aws_lambda_function.looper_env : f.function_name]
+  )
   all_audio_bucket_arns = concat(
     [aws_s3_bucket.audio.arn],
     [for b in aws_s3_bucket.audio_env : b.arn]
@@ -433,17 +437,35 @@ resource "aws_sns_topic_subscription" "budget_alerts_email" {
 resource "aws_sns_topic_policy" "budget_alerts" {
   arn = aws_sns_topic.budget_alerts.arn
 
+  # This policy REPLACES the default SNS topic policy rather than adding to it, so every
+  # publisher has to be named here. The cloudwatch statement is what lets
+  # aws_cloudwatch_metric_alarm.lambda_invocation_rate deliver — without it the alarm
+  # still transitions to ALARM and simply notifies nobody, which is the same silent
+  # failure mode as an unconfirmed email subscription.
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "budgets.amazonaws.com" }
-      Action    = "SNS:Publish"
-      Resource  = aws_sns_topic.budget_alerts.arn
-      Condition = {
-        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+    Statement = [
+      {
+        Sid       = "BudgetsPublish"
+        Effect    = "Allow"
+        Principal = { Service = "budgets.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.budget_alerts.arn
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+        }
+      },
+      {
+        Sid       = "CloudWatchAlarmsPublish"
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.budget_alerts.arn
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+        }
       }
-    }]
+    ]
   })
 }
 

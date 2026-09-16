@@ -154,13 +154,48 @@ aws lambda put-function-concurrency --function-name bgm-looper-processor \
 
 Remove it with `delete-function-concurrency` once resolved.
 
-`reserved_concurrent_executions` appears nowhere in `infra/main/*.tf`, so the
-provider's default of `-1` (unreserved) applies and the next `terraform apply`
-will most likely undo the throttle as drift. Treat it as a stopgap for the
-minutes it takes to find the real cause, not as a setting — and run
+**Zero is the only value this account can set.** Reserving concurrency is
+capped at "unreserved account concurrency minus 100", and this account's
+Lambda concurrency quota (`L-B99A9384`) is 10, not the default 1,000. Zero
+takes nothing out of the pool and is accepted; anything higher is rejected.
+Exercised against `bgm-looper-processor-dev` on 2026-09-16:
+
+```
+put-function-concurrency 0  → {"ReservedConcurrentExecutions": 0}
+put-function-concurrency 2  → InvalidParameterValueException: Specified
+    ReservedConcurrentExecutions for function decreases account's
+    UnreservedConcurrentExecution below its minimum value of [10].
+```
+
+So this is a throttle, not a cap: there is no intermediate setting to fall
+back to, which is also why `reserved_concurrent_executions` appears nowhere in
+`infra/main/*.tf`.
+
+It remains a stopgap rather than a setting. The attribute is unmanaged, so the
+provider's default of `-1` applies, and the next `terraform apply` plans
+`0 → -1` and calls `DeleteFunctionConcurrency`, lifting the throttle. Run
 `terraform plan` before assuming it survived.
-*(Written from the provider schema and the documented behaviour of these
-APIs; not exercised here.)*
+
+### Detection
+
+`aws_cloudwatch_metric_alarm.lambda_invocation_rate` fires on more than 50
+invocations in five minutes on any of the three functions, to the same
+`bgm-looper-budget-alerts` SNS topic as the budget. Normal use is one
+invocation per track processed. That alarm is what should reach you first —
+the $5 budget also notifies, but AWS budget evaluation lags actual usage by
+hours, so it reports after the money is gone.
+
+Check which function is running away before throttling:
+
+```bash
+aws cloudwatch describe-alarms --alarm-name-prefix bgm-looper-processor \
+  --profile personal --region us-east-1 \
+  --query 'MetricAlarms[].{name:AlarmName,state:StateValue,reason:StateReason}'
+```
+
+The ceiling while you work is the quota: 10 concurrent executions at 1024MB,
+roughly $0.60/hour. See
+[ARCHITECTURE.md](../../ARCHITECTURE.md#worst-case-if-something-runs-away-2026-09-16).
 
 ## Escalation
 
