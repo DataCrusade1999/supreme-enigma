@@ -13,6 +13,12 @@ locals {
   # do not rebuild it out of var.github_repo.
   github_sub_prefix = "repo:DataCrusade1999@57610394/supreme-enigma@1313947304"
 
+  # Vercel account slug, the personal Hobby scope. It appears in the OIDC issuer URL,
+  # the aud claim and the sub claim, so it is not cosmetic. Read off any deployment
+  # inspector URL (vercel.com/<slug>/bgm-looper/...) — `list_teams` returns [] on a
+  # personal scope, but OIDC still keys on the slug.
+  vercel_team_slug = "ashutosh-pandeys-projects-77cb3a00"
+
   lambda_function_name = "${var.project_name}-processor"
   lambda_function_arn  = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.lambda_function_name}"
 
@@ -318,6 +324,97 @@ resource "aws_iam_role_policy" "ci_deploy" {
   })
 }
 
+# --- Vercel OIDC: the federated replacement for aws_iam_user.vercel above. Same shape
+#     as the GitHub role — added alongside the user, and the app only starts using it
+#     once APP_AWS_ROLE_ARN is read at both client construction sites. ---
+
+resource "aws_iam_openid_connect_provider" "vercel" {
+  # Team issuer mode, set on vercel_project.looper below — the issuer carries the
+  # account slug, so the global-mode URL (no slug) would not match the iss claim.
+  url            = "https://oidc.vercel.com/${local.vercel_team_slug}"
+  client_id_list = ["https://vercel.com/${local.vercel_team_slug}"]
+}
+
+resource "aws_iam_role" "vercel" {
+  name = "${var.project_name}-vercel"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Principal = { Federated = aws_iam_openid_connect_provider.vercel.arn }
+      Condition = {
+        StringEquals = {
+          "oidc.vercel.com/${local.vercel_team_slug}:aud" = "https://vercel.com/${local.vercel_team_slug}"
+          # Two entries, not three. Vercel has no per-branch environment: main is
+          # "production" and both dev and stage deploy as "preview", so there is no
+          # stage subject to name. That grants nothing new — all three branches
+          # already share this one policy, exactly as the IAM user did.
+          "oidc.vercel.com/${local.vercel_team_slug}:sub" = [
+            "owner:${local.vercel_team_slug}:project:${var.project_name}:environment:production",
+            "owner:${local.vercel_team_slug}:project:${var.project_name}:environment:preview",
+          ]
+        }
+      }
+    }]
+  })
+}
+
+# The five statements from aws_iam_user_policy.vercel, verbatim — a move of the
+# identity, not a change of permissions. ResumeHeadObjectNotFound in particular is
+# load-bearing; its comment explains why.
+resource "aws_iam_role_policy" "vercel" {
+  name = "${var.project_name}-vercel-policy"
+  role = aws_iam_role.vercel.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AudioScratchObjects"
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:GetObject"]
+        Resource = flatten([
+          for arn in local.all_audio_bucket_arns : ["${arn}/uploads/*", "${arn}/outputs/*"]
+        ])
+      },
+      {
+        Sid      = "ResumeObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = ["${local.resume_bucket_arn}/resume/*"]
+      },
+      {
+        Sid      = "ResumeDraftCleanup"
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject"]
+        Resource = ["${local.resume_bucket_arn}/resume/drafts/*"]
+      },
+      {
+        # HeadObject on a key that does not exist returns 403, not 404, unless the
+        # caller holds s3:ListBucket on the bucket — so without this the app's
+        # objectExists() rethrows on every absent key and the first extraction and
+        # the first publish both 500. Deliberately unconditioned: S3 evaluates this
+        # for its 404-vs-403 decision with no s3:prefix in context, so an
+        # s3:prefix-scoped grant does not restore the 404. Bucket ARN only, so this
+        # grants listing key names in main's bucket and nothing else — GetObject
+        # stays scoped to uploads/, outputs/ and resume/ above.
+        Sid      = "ResumeHeadObjectNotFound"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [local.resume_bucket_arn]
+      },
+      {
+        Sid      = "InvokeProcessor"
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = local.all_lambda_function_arns
+      }
+    ]
+  })
+}
+
 # --- Vercel project + the config/secrets that are identical across production and preview ---
 
 resource "random_password" "cookie_secret" {
@@ -362,6 +459,11 @@ resource "vercel_project" "looper" {
     repo              = var.github_repo
     production_branch = "main"
   }
+
+  # Team mode puts the account slug in the iss claim, which is what
+  # aws_iam_openid_connect_provider.vercel's URL is registered as. Global mode would
+  # issue a slugless iss that no longer matches the provider.
+  oidc_token_config = { issuer_mode = "team" }
 
   # Preview deployments (dev/stage) are publicly reachable. The AWS DevOps Agent's
   # UI release testing cannot get through Vercel Authentication: it navigates to
@@ -453,6 +555,18 @@ resource "vercel_project_environment_variable" "aws_secret_key" {
   value      = aws_iam_access_key.vercel.secret
   target     = local.env_targets
   sensitive  = true
+}
+
+# APP_AWS_ROLE_ARN, not AWS_ROLE_ARN. The AWS SDK's default credential chain reads
+# AWS_ROLE_ARN itself and would try web-identity resolution from a token file that does
+# not exist on Vercel, breaking the fallback to the static keys. Same collision
+# APP_AWS_REGION exists to avoid.
+resource "vercel_project_environment_variable" "aws_role_arn" {
+  project_id = vercel_project.looper.id
+  key        = "APP_AWS_ROLE_ARN"
+  value      = aws_iam_role.vercel.arn
+  target     = local.env_targets
+  sensitive  = false
 }
 
 resource "vercel_project_environment_variable" "aws_region" {
