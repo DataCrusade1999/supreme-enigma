@@ -125,6 +125,13 @@ jobs:
   deploy:
     needs: [test, changes]
     runs-on: ubuntu-latest
+    # Required for OIDC: id-token: write is what lets the job mint the token
+    # aws-actions/configure-aws-credentials exchanges for the role. Declaring a
+    # permissions block replaces the repo default outright rather than adding to
+    # it, so contents: read has to be listed too or actions/checkout fails.
+    permissions:
+      id-token: write
+      contents: read
     # A custom `if:` replaces the default `if: success()` entirely, so
     # test's success is checked explicitly here rather than assumed.
     # `changes` only runs (and is only needed) on push — on workflow_dispatch
@@ -145,8 +152,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-access-key-id: ${{ secrets.AWS_CI_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_CI_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::223376380711:role/bgm-looper-ci-deploy
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Log in to ECR
@@ -299,7 +305,7 @@ jobs:
             git push origin "$BRANCH"
             gh pr create --base dev --head "$BRANCH" \
               --title "chore(changelog): sync ${{ steps.version.outputs.tag }} heading to dev" \
-              --body "Automated — keeps CHANGELOG.md identical across dev/stage/main after the ${{ steps.version.outputs.tag }} release. Cherry-picks only the changelog rename commit from main, nothing else. Safe to merge. Note: PRs opened by the default GITHUB_TOKEN don't trigger the test workflow, so this won't show CI checks — that's expected for a changelog-only change."
+              --body "Automated — keeps CHANGELOG.md identical across dev/stage/main after the ${{ steps.version.outputs.tag }} release. Cherry-picks only the changelog rename commit from main, nothing else. This PR does get CI: wait for the test workflow and the release-readiness verdict before merging, the same as any other PR into dev."
           else
             git cherry-pick --abort
             echo "::warning::CHANGELOG.md cherry-pick to dev conflicted — sync it by hand."

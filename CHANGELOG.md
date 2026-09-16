@@ -9,6 +9,74 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- `aws_iam_openid_connect_provider.vercel` and `aws_iam_role.vercel` — a Vercel
+  OIDC role carrying the five statements from `aws_iam_user_policy.vercel`, plus
+  an `APP_AWS_ROLE_ARN` project environment variable holding its ARN. Nothing
+  reads the variable yet; the app still authenticates with the static key pair.
+- `aws_iam_openid_connect_provider.github` and `aws_iam_role.ci_deploy` — a
+  GitHub Actions OIDC role carrying the same three statements as
+  `aws_iam_user_policy.ci_deploy`. Its trust policy pins `sub` with
+  `StringEquals` on the three permanent branches rather than a wildcard, so a
+  fork PR's `pull_request` context cannot assume it. Nothing uses the role yet;
+  `deploy.yml` still authenticates with the static key pair.
+- `aws_cloudwatch_metric_alarm.lambda_invocation_rate` — one alarm per Lambda
+  function, firing on more than 50 invocations in five minutes to the existing
+  `bgm-looper-budget-alerts` SNS topic. This is the fast signal for a runaway
+  invoke loop; the $5 budget lags actual usage by hours.
+- `aws_sns_topic_policy.budget_alerts` now also allows `cloudwatch.amazonaws.com`
+  to publish. That policy replaces SNS's default, so without the statement the
+  alarms would transition to `ALARM` and notify nobody.
+- `docs/research/2026-09-15-architecture-review.md` — a review of the whole
+  system against the tree and the live account. Seven findings; the two worth
+  acting on are the pair of permanent IAM access keys with no OIDC anywhere,
+  and the absence of any concurrency ceiling on the Lambdas.
+- `docs/runbooks/` — operator checklists for release promotion, stale-Lambda
+  recovery, BGM Looper incident triage, and Terraform apply/teardown. Two
+  corrections fall out of writing them: a `workflow_dispatch` run on `main`
+  also cuts a release, and `terraform destroy` aborts with `BucketNotEmpty`
+  because no bucket sets `force_destroy` and main's never empties itself.
+
+### Changed
+
+- The app's S3 and Lambda clients now federate through the Vercel OIDC token
+  when `APP_AWS_ROLE_ARN` is set, via a new `awsCredentials()` helper in
+  `app/lib/aws.ts`. With the variable absent the helper contributes nothing and
+  the SDK's default credential chain still applies, so the unit tests,
+  Playwright's self-hosted server and local `npm run dev` are unaffected.
+- `deploy.yml`'s `deploy` job now authenticates to AWS by assuming
+  `bgm-looper-ci-deploy` through GitHub Actions OIDC instead of the
+  `AWS_CI_ACCESS_KEY_ID`/`AWS_CI_SECRET_ACCESS_KEY` secrets. The secrets stay in
+  the repo, unreferenced, as the rollback; they are deleted once the Vercel
+  runtime is federated too.
+- #154 asked for `reserved_concurrent_executions = 2` on the Lambdas. It cannot
+  be applied: this account's Lambda concurrency quota is 10, and AWS caps a
+  reservation at unreserved concurrency minus 100, so any non-zero value is
+  rejected. The quota is therefore the real ceiling (10 × 1024MB, ~$0.60/hour
+  worst case). `ARCHITECTURE.md`, `docs/runbooks/incident-tool-down.md` and
+  `.claude/rules/infra.md` now record that, with the verification output, and
+  the incident runbook's throttle lever is documented as zero-or-nothing.
+- `CLAUDE.md`'s stale-Lambda guidance now prefers `gh run rerun --failed` and
+  states that a `workflow_dispatch` run on `main` also cuts a release. The old
+  wording recommended dispatch as the fix without that side effect.
+
+### Fixed
+
+- `aws_iam_role.ci_deploy`'s trust policy pinned the name-only GitHub subject
+  (`repo:<owner>/<repo>:ref:...`), which this repo never issues — it has
+  `use_immutable_subject: true`, so the subject carries numeric owner and repo
+  IDs. The first federated deploy failed at `Configure AWS credentials` with
+  `Not authorized to perform sts:AssumeRoleWithWebIdentity`. The three subjects
+  now use the immutable prefix.
+- The newsletter admin now says `BUTTONDOWN_API_KEY is not set` when the key is
+  missing, instead of `Status unknown` for every issue. The old fallback was
+  indistinguishable from "nothing has been sent yet", so a broken integration
+  looked like an empty archive. A configured key that still fails reports
+  `Buttondown unreachable`, which is a different problem.
+
+## [1.4.0] - 2026-09-14
+
+### Added
+
 - Newsletter archive at `/newsletter`, powered by the same Keystatic setup
   as the blog. Sending is manual: the gated `/tools/newsletter-admin` tool
   triggers delivery via Buttondown once an issue is reviewed.

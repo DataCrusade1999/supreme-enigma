@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getReader } from "../../../lib/keystatic-reader";
-import { isIssueSent } from "../../../lib/buttondown";
+import { isButtondownConfigured, isIssueSent } from "../../../lib/buttondown";
 import { CommandBar } from "../../../components/site/CommandBar";
 import { SendButton } from "../../../components/newsletter/SendButton";
 
@@ -13,15 +13,31 @@ export default async function NewsletterAdminPage() {
     (b.entry.date ?? "").localeCompare(a.entry.date ?? ""),
   );
 
+  // Asked once, before the fan-out. Every per-issue check would throw the same
+  // way on an unset key, and the catch below would render each as "status
+  // unavailable" — which reads as "not sent yet" and hides a broken
+  // integration behind what looks like an empty archive.
+  const configured = isButtondownConfigured();
+
   const withStatus = await Promise.all(
     sorted.map(async ({ slug, entry }) => {
-      let sent: boolean | null;
-      try {
-        sent = await isIssueSent(slug);
-      } catch {
-        sent = null;
+      let sent: boolean | null = null;
+      let problem: string | null = null;
+
+      if (!configured) {
+        problem = "BUTTONDOWN_API_KEY is not set";
+      } else {
+        try {
+          sent = await isIssueSent(slug);
+        } catch {
+          // A configured key that still failed is a different problem —
+          // Buttondown down, key revoked, network. Says so rather than
+          // blaming configuration.
+          problem = "Buttondown unreachable";
+        }
       }
-      return { slug, title: entry.title, date: entry.date ?? "", sent };
+
+      return { slug, title: entry.title, date: entry.date ?? "", sent, problem };
     }),
   );
 
@@ -68,9 +84,9 @@ export default async function NewsletterAdminPage() {
                   </span>
                 )}
                 {issue.sent === false && <SendButton slug={issue.slug} />}
-                {issue.sent === null && (
+                {issue.problem !== null && (
                   <span className="text-[0.6875rem] uppercase tracking-[0.16em] text-peak">
-                    Status unknown
+                    {issue.problem}
                   </span>
                 )}
               </li>

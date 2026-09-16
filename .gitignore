@@ -16,3 +16,6 @@ webhook-creds-*.csv
 
 # Source resume PDFs kept at the repo root as pipeline input — never commit
 *_Resume.pdf
+
+# graphify knowledge-graph output — regenerated from the tree, not source
+graphify-out/
