@@ -25,6 +25,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- `deploy.yml`'s `deploy` job now authenticates to AWS by assuming
+  `bgm-looper-ci-deploy` through GitHub Actions OIDC instead of the
+  `AWS_CI_ACCESS_KEY_ID`/`AWS_CI_SECRET_ACCESS_KEY` secrets. The secrets stay in
+  the repo, unreferenced, as the rollback; they are deleted once the Vercel
+  runtime is federated too.
 - #154 asked for `reserved_concurrent_executions = 2` on the Lambdas. It cannot
   be applied: this account's Lambda concurrency quota is 10, and AWS caps a
   reservation at unreserved concurrency minus 100, so any non-zero value is
