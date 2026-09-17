@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-09-17
+
 ### Changed
 
 - The Next.js project directory is now `web/` rather than `app/`. Next.js
