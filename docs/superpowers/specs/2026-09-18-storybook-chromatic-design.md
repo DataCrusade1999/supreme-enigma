@@ -62,6 +62,7 @@ catches more.
 | Where Storybook is built in CI | `chromaui/action` builds it, in a dedicated `chromatic` job | Approach A in §4. Parallel to `test`, ~2–3 min, zero local cost. |
 | Theme modes snapshotted | Both light and dark | `globals.css` declares every token in both blocks precisely so neither mode falls back to the other's value. A dark-only baseline would never catch a broken light override, which is the specific regression this is for. |
 | How both modes are captured | `parameters.chromatic.modes` set globally in `preview.tsx` | Each story snapshots twice without writing two story exports per component. |
+| How the theme class is applied | A decorator calling `lib/site/theme.ts`'s `setTheme`, driven by a `theme` global; no `@storybook/addon-themes` | The addon writes the class after the story renders, too late for `ThemeToggle`'s mount-time read — §7.2 item 3. `setTheme` is the site's own code path and fires the event the toggle listens for. |
 | Trigger scope | PRs into `dev`, and pushes to `dev` | `dev` is the default branch and the baseline. Promotion PRs (`dev → stage`, `stage → main`) and `stage`/`main` pushes are skipped: that SHA was already snapshotted on `dev`, so re-running spends budget for no new information. |
 | PR gate | Advisory — `exitZeroOnChanges: true` (the action's default, set explicitly) | Chromatic's own `UI Tests` / `Storybook Publish` PR checks carry the diff link; the CI job stays green. Consistent with how this repo treats its two review bots: read the finding, judge it yourself. A red X for every intentional restyle is friction without a second reviewer to justify it. |
 | Baseline acceptance | `autoAcceptChanges: dev` | Required, not just tidy: this repo squash-merges feature PRs into `dev`, and Chromatic's docs note that GitHub squash/rebase creates commits unassociated with the merged branch, so baselines do not carry over. `autoAcceptChanges` on the target branch is the documented remedy (the alternative is installing Chromatic's GitHub App for UI Review). |
@@ -96,8 +97,8 @@ Chromatic's free tier is 5,000 snapshots/month.
 
 | | Snapshots |
 |---|---|
-| 17 components × ~3 stories | ~51 |
-| × 2 theme modes | **~102 per cold build** |
+| 17 components × ~3 stories | ~51 (the plan as written lands on 31) |
+| × 2 theme modes | **~102 per cold build** (62 for the plan's 31) |
 | Typical PR with TurboSnap | ~4–12 |
 
 Adding a mobile viewport would take a cold build to ~153 (three modes) and a
@@ -139,7 +140,7 @@ All new files live under `web/`.
 ```ts
 framework: '@storybook/nextjs-vite'
 stories: ['../components/**/*.stories.tsx']
-addons: ['@storybook/addon-themes', '@chromatic-com/storybook']
+addons: ['@chromatic-com/storybook']
 ```
 
 No `staticDirs` — there is no `web/public/` directory.
@@ -166,16 +167,27 @@ things the app gets from `app/layout.tsx` that a story never would:
    element that declares it*; descendants inherit the already-computed result.
    Define `--font-instrument-serif` on a wrapper and `--font-display` has
    already collapsed to `serif` on `:root` — every story renders in the
-   fallback. Same target as `withThemeByClassName`'s `parentSelector: 'html'`,
+   fallback. Same target as the theme decorator's `setTheme` (item 3),
    and the same thing `app/layout.tsx` does.
 
    **This is the failure mode that looks correct and is not** — a baseline of
    the fallback stack silently locks in the wrong typography and then reports
    every future fix as a regression.
-3. **The theme class.** `withThemeByClassName({ themes: { light: '', dark: 'dark' }, parentSelector: 'html' })`
-   — `dark` on `<html>`, exactly what `lib/site/theme.ts` and the
-   pre-hydration script in `app/layout.tsx` do. Any other element would not
-   match `:root.dark` and the dark tokens would never apply.
+3. **The theme class.** A decorator reads a `theme` global (declared in
+   `globalTypes`, with a toolbar switcher; `initialGlobals: { theme: 'dark' }`)
+   and calls `setTheme` from `lib/site/theme.ts` in a React effect — `dark` on
+   `<html>`, exactly what the site does, and `THEME_CHANGE_EVENT` dispatched.
+   Any other element would not match `:root.dark` and the dark tokens would
+   never apply.
+
+   Not `@storybook/addon-themes`, which an earlier revision of this spec named.
+   Its `withThemeByClassName` writes the class from a `storybook/preview-api`
+   `useEffect`, which fires after the story has rendered (checked against the
+   10.6.0 source). `ThemeToggle` reads the class in its own mount effect and
+   re-reads only on `THEME_CHANGE_EVENT`, so it would capture the previous
+   theme and never be told to look again — a dark snapshot with the light-mode
+   icon, auto-accepted as baseline. A parent React effect that calls `setTheme`
+   runs after the toggle's mount effect and fires the event it listens for.
 
 Then, globally:
 
@@ -185,7 +197,7 @@ parameters: {
 }
 ```
 
-Chromatic modes set Storybook globals, which `withThemeByClassName` reads — so
+Chromatic modes set Storybook globals, which the theme decorator reads — so
 every story is captured twice from one export.
 
 ### 7.3 Stories
@@ -265,16 +277,17 @@ Success criteria, in order:
    §7.2's failure mode and the one thing that must be checked directly rather
    than eyeballed.
 3. **Theme check.** A dark-mode story's computed background resolves to
-   `#131311`, not `#eceae5` — i.e. `withThemeByClassName` is reaching `<html>`.
+   `#131311`, not `#eceae5` — i.e. `setTheme` is reaching `<html>`.
 4. First `chromatic` run on `dev` completes and establishes a baseline; the
    Chromatic UI shows two modes per story.
    Confirm `UI Tests` and `Storybook Publish` appear as commit statuses on the
    next PR — if they do not, the project is not linked to the repo (§11.1) and
    the advisory gate is silently a no-op.
-5. **Regression proof.** Change `--color-accent` in `globals.css` by one value
-   on a scratch branch, open a PR into `dev`, and confirm Chromatic reports a
-   diff in both modes and that the CI job still reports green (advisory gate
-   working as specified). Revert.
+5. **Regression proof.** Change the light `@theme` value of `--color-accent`
+   in `globals.css` (leaving the `:root.dark` override alone) on a scratch
+   commit, and confirm Chromatic reports a diff in the light mode only, none
+   in dark, and that the CI job still reports green. Light-only proves the
+   two modes are independent; green proves the advisory gate. Revert.
 6. `cd web && npm test` and `npm run lint` still pass — the new devDependencies
    and config must not perturb the existing suites. In particular
    `vitest.config.ts`'s `exclude` list is hand-written and spreads

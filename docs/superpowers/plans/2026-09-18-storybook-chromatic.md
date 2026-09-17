@@ -4,24 +4,25 @@
 
 **Goal:** Give `web/components/` an isolated render surface (Storybook) and automated visual regression (Chromatic) on every PR into `dev`, with all build cost paid by CI.
 
-**Architecture:** Storybook 10.6 with the `@storybook/nextjs-vite` framework reuses the Vite toolchain Vitest already runs on. A preview decorator reproduces the two things `app/layout.tsx` gives the real app and a story would otherwise lack — the `next/font` `.variable` classes and the `dark` class, both on `<html>`. Chromatic's GitHub Action builds Storybook on its own runner in a job parallel to `test`, snapshotting every story in light and dark via `parameters.chromatic.modes`.
+**Architecture:** Storybook 10.6 with the `@storybook/nextjs-vite` framework reuses the Vite toolchain Vitest already runs on. Two preview decorators reproduce what `app/layout.tsx` gives the real app and a story would otherwise lack — the `next/font` `.variable` classes on `<html>`, and the theme, applied through the site's own `setTheme` from `lib/site/theme.ts` so `ThemeToggle` sees the same class and event it sees in production. Chromatic's GitHub Action builds Storybook on its own runner in a job parallel to `test`, snapshotting every story in light and dark via `parameters.chromatic.modes`.
 
-**Tech Stack:** Storybook 10.6 (`@storybook/nextjs-vite`, `@storybook/addon-themes`), `@chromatic-com/storybook` 5.3, `chromaui/action@v18`, Next 16, React 19, Vite 6, Vitest 4, Tailwind CSS v4.
+**Tech Stack:** Storybook 10.6 (`@storybook/nextjs-vite`), `@chromatic-com/storybook` 5.3, `chromaui/action@v18`, Next 16, React 19, Vite 6, Vitest 4, Tailwind CSS v4.
 
 **Spec:** `docs/superpowers/specs/2026-09-18-storybook-chromatic-design.md`
 
 **Issue:** #209 — the PR closes it with `Closes #209`.
 
-**Branch:** `feat/storybook-chromatic` (already created, spec already committed on it).
+**Branch:** `feat/storybook-chromatic`, which already exists locally: it is `origin/dev` plus one docs commit (`0763186`, the `setTheme` revision of the spec and this plan) that is not on `dev`. **Work on that branch as it is** — do not re-cut it from `origin/dev`, which would drop that commit. The branch is pushed and tracks `origin/feat/storybook-chromatic`, and PR #211 (docs only, `Refs #209`) is open on it. The implementation lands on this same branch: once #211 merges, rebase onto `dev` or wait for it, then push normally. #210 deleted the earlier remote branch, so there is no stale history to force over.
 
 ## Global Constraints
 
 - All commands run from `E:\Personal\looper\web` unless stated otherwise.
 - **Never add `storybook` or `build-storybook` to `npm test`, `npm run lint`, or any hook.** Storybook is installed locally but only run on demand. This is the whole point of the change.
-- Exact dependency versions: `storybook@^10.6.0`, `@storybook/nextjs-vite@^10.6.0`, `@storybook/addon-themes@^10.6.0`, `@chromatic-com/storybook@^5.3.1`, `chromatic@^18.9.4`. Do not run `npx storybook init` — it is interactive and rewrites files. Install and hand-write the config.
+- Exact dependency versions: `storybook@^10.6.0`, `@storybook/nextjs-vite@^10.6.0`, `@chromatic-com/storybook@^5.3.1`, `chromatic@^18.9.4` (all four verified to exist at exactly these versions on 2026-09-18). Do not run `npx storybook init` — it is interactive and rewrites files. Install and hand-write the config.
 - **The `next/font` `.variable` classes and the `dark` class go on `document.documentElement`, never on a wrapper `<div>`.** `@theme` emits `--font-display: var(--font-instrument-serif), serif` on `:root`; a custom property resolves its inner `var()` on the declaring element, so a wrapper leaves `--font-display` already collapsed to `serif` and every snapshot renders in the fallback. Spec §7.2.
 - **Do not import `next/font/google` from any file Vitest loads.** It is a build-time SWC transform and throws under Vitest. `preview.tsx` imports it; `decorators.tsx` must not, which is why the decorator takes class names as an argument.
-- Theme classes: `light` → `""`, `dark` → `"dark"`, default `"dark"` (the site default, per `app/layout.tsx`). The empty string is safe and deliberate — light mode on this site is the *absence* of `.dark`, and `withThemeByClassName` filters empty class strings out before calling `classList.add` (verified against `@storybook/addon-themes@10.6.0`'s shipped source, which guards with `classes.length > 0`). Its `parentSelector` already defaults to `"html"`; the plan sets it explicitly to document the dependency.
+- **The theme is applied with `setTheme` from `lib/site/theme.ts`, not with `@storybook/addon-themes`.** The spec named `withThemeByClassName`; it is dropped here for a reason checked against the addon's shipped 10.6.0 source. That decorator adds the class inside a `useEffect` from `storybook/preview-api`, which fires *after* the story has rendered to the canvas. `ThemeToggle` reads `documentElement.classList.contains("dark")` in a React mount effect and re-reads only on `THEME_CHANGE_EVENT`, so on a fresh dark-mode load it would read the class before the addon writes it, show the light-mode icon on a dark page, and `autoAcceptChanges: dev` would lock that in — the spec's own "confident, wrong baseline" failure. `setTheme` toggles the class *and* dispatches the event the toggle already listens for, and it is the exact code path the site uses. The toolbar switcher comes from a plain `globalTypes.theme` entry, which is also the global Chromatic's modes set. Theme values: `"light"` / `"dark"`, default `"dark"` (the site default, per `app/layout.tsx`).
+- `web/tsconfig.json` includes `**/*.tsx`, so `next build` — locally and on Vercel — typechecks every story file: a type error in a story fails the Vercel build, not just Storybook. That glob does **not** reach `.storybook/` — TypeScript's `**` skips dot-directories (verified with `tsc --listFilesOnly`), and neither Vitest nor the Vite builder typechecks — so Task 1 adds `.storybook/**/*.ts(x)` to `include` explicitly. Vitest, by contrast, does collect tests under dot-directories, which is why `.storybook/decorators.test.tsx` runs under `npm test` with no config change.
 - Story files are colocated: `components/**/*.stories.tsx`.
 - `CHANGELOG.md` (repo root) gets its entry under `## [Unreleased]` in this same branch.
 - Every commit message ends with `Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>`.
@@ -30,16 +31,18 @@
 ## File Structure
 
 **Create:**
-- `web/.storybook/main.ts` — framework, stories glob, addons. ~15 lines.
-- `web/.storybook/decorators.tsx` — the one piece of real logic: put class names on `<html>` for the life of a story. Framework-agnostic, no `next/font` import, unit-tested.
-- `web/.storybook/decorators.test.tsx` — proves the classes land on `documentElement` and are cleaned up.
-- `web/.storybook/preview.tsx` — imports `globals.css`, declares the two fonts, wires the decorators, sets the Chromatic modes.
+- `web/.storybook/main.ts` — framework, stories glob, addons. ~12 lines.
+- `web/.storybook/decorators.tsx` — the real logic: put class names on `<html>` for the life of a story, and apply the theme through `setTheme`. No `next/font` import, unit-tested.
+- `web/.storybook/decorators.test.tsx` — proves the classes land on `documentElement` and are cleaned up, and that the theme decorator toggles `dark` and fires `THEME_CHANGE_EVENT`.
+- `web/.storybook/preview.tsx` — imports `globals.css`, declares the two fonts, declares the `theme` global, wires the decorators, sets the Chromatic modes.
 - `web/components/**/*.stories.tsx` — 17 files, one per component.
-- `.github/workflows/deploy.yml` — new `chromatic` job (modify).
 
 **Modify:**
-- `web/package.json` — 5 devDependencies, 2 scripts.
+- `.github/workflows/deploy.yml` — new `chromatic` job.
+- `web/package.json` — 4 devDependencies, 2 scripts.
+- `web/tsconfig.json` — `.storybook/**` added to `include`.
 - `web/.gitignore` — `storybook-static/`.
+- `web/eslint.config.mjs` — ignore `storybook-static/**`.
 - `CHANGELOG.md` — one entry under `[Unreleased]`.
 
 **Why `decorators.tsx` is separate from `preview.tsx`:** `preview.tsx` cannot be unit-tested (it imports `next/font/google` and Tailwind CSS). Splitting the DOM logic out makes the one thing that can silently break — the `<html>` target — testable in jsdom under the existing Vitest run.
@@ -51,6 +54,8 @@
 **Files:**
 - Modify: `web/package.json`
 - Modify: `web/.gitignore`
+- Modify: `web/eslint.config.mjs`
+- Modify: `web/tsconfig.json`
 - Create: `web/.storybook/main.ts`
 - Create: `web/components/site/TerminalWindow.stories.tsx` (one story, so the build has something to index)
 
@@ -62,10 +67,10 @@
 
 ```bash
 cd web
-npm install --save-dev storybook@^10.6.0 @storybook/nextjs-vite@^10.6.0 @storybook/addon-themes@^10.6.0 @chromatic-com/storybook@^5.3.1 chromatic@^18.9.4
+npm install --save-dev storybook@^10.6.0 @storybook/nextjs-vite@^10.6.0 @chromatic-com/storybook@^5.3.1 chromatic@^18.9.4
 ```
 
-Expected: installs clean. `@storybook/nextjs-vite@10.6` declares `next: ^14.1.0 || ^15.0.0 || ^16.0.0`, `react: ^19`, `vite: ^5–^8`, so the repo's `next@16.3.4` / `react@19` / `vite@6.4.3` all satisfy it — **there must be no peer-dependency error and `vite` must not be upgraded.** If npm proposes bumping `vite`, stop and report it rather than accepting.
+Expected: installs clean. `@storybook/nextjs-vite@10.6` declares `next: ^14.1.0 || ^15.0.0 || ^16.0.0`, `react: ^16.8 – ^19`, `vite: ^5 – ^8`, so the repo's `next@16.3.4` / `react@19` / `vite@6.4.3` all satisfy it — **there must be no peer-dependency error and `vite` must not be upgraded.** If npm proposes bumping `vite`, stop and report it rather than accepting.
 
 - [ ] **Step 2: Add the scripts**
 
@@ -87,6 +92,27 @@ Append to `web/.gitignore`, after the Playwright/Vitest block:
 storybook-static/
 ```
 
+Then, in `web/eslint.config.mjs`, extend the existing `ignores` array:
+
+```js
+    ignores: ["next-env.d.ts", ".next/**", "storybook-static/**"],
+```
+
+`npm run lint` is `eslint .`, and ESLint's flat config does not read `.gitignore`. Without this, the first local `build-storybook` leaves a bundle that every later `npm run lint` walks. `.storybook/` itself is *not* ignored — flat config lints dot-directories, and the decorators should be linted.
+
+Then, in `web/tsconfig.json`, extend `include` so `next build` typechecks the Storybook config too (its `**/*.tsx` glob skips dot-directories):
+
+```json
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".storybook/**/*.ts",
+    ".storybook/**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+```
+
 - [ ] **Step 4: Write `.storybook/main.ts`**
 
 ```ts
@@ -96,9 +122,6 @@ const config: StorybookConfig = {
   // Colocated with the components, the same place *.test.tsx lives.
   stories: ["../components/**/*.stories.tsx"],
   addons: [
-    // Puts `dark` on <html> from a toolbar global, which is also the global
-    // Chromatic's modes set. See preview.tsx.
-    "@storybook/addon-themes",
     // Visual-test addon: surfaces Chromatic changes in the Storybook UI.
     "@chromatic-com/storybook",
   ],
@@ -141,7 +164,7 @@ export const Default: Story = {
 - [ ] **Step 6: Verify the build passes**
 
 Run: `cd web && npm run build-storybook`
-Expected: exits 0, writes `storybook-static/`. The output names `1` story file. There is no theme or font handling yet — that is Task 2 — so do not judge the rendering.
+Expected: exits 0, writes `storybook-static/`. There is no theme or font handling yet — that is Task 2 — so do not judge the rendering.
 
 - [ ] **Step 7: Verify nothing else broke**
 
@@ -152,7 +175,7 @@ Expected: both pass. Specifically confirm Vitest does **not** collect `TerminalW
 
 ```bash
 cd /e/Personal/looper
-git add web/package.json web/package-lock.json web/.gitignore web/.storybook/main.ts web/components/site/TerminalWindow.stories.tsx
+git add web/package.json web/package-lock.json web/.gitignore web/eslint.config.mjs web/tsconfig.json web/.storybook/main.ts web/components/site/TerminalWindow.stories.tsx
 git commit -m "chore(web): add Storybook with the nextjs-vite framework
 
 Config only, plus one story so the build has something to index. No
@@ -176,18 +199,21 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 - Produces:
   - `HtmlClasses({ classes: string[], children: React.ReactNode }): JSX.Element` — adds `classes` to `document.documentElement` while mounted, removes them on unmount.
   - `makeHtmlClassDecorator(classNames: string[]): Decorator` — the same, packaged as a Storybook decorator.
+  - `SiteTheme({ theme: "light" | "dark", children }): JSX.Element` — calls `setTheme(theme)` in an effect, so `dark` lands on `<html>` and `THEME_CHANGE_EVENT` fires exactly as on the site.
+  - `withSiteTheme: Decorator` — reads `context.globals.theme` and renders `SiteTheme`.
   - `.storybook/preview.tsx` default export, consumed by Storybook only.
 
-This is the task the spec calls out as the failure mode that looks correct and is not. The test exists specifically to pin the `<html>` target.
+This is the task the spec calls out as the failure mode that looks correct and is not. The tests pin the two things that can silently go wrong: the `<html>` target for the font variables, and the theme reaching `ThemeToggle` after it has mounted (see Global Constraints for why the addon could not do that).
 
 - [ ] **Step 1: Write the failing test**
 
 Create `web/.storybook/decorators.test.tsx`:
 
 ```tsx
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
-import { HtmlClasses, makeHtmlClassDecorator } from "./decorators";
+import { THEME_CHANGE_EVENT } from "../lib/site/theme";
+import { HtmlClasses, SiteTheme, makeHtmlClassDecorator, withSiteTheme } from "./decorators";
 
 // Stand-ins for the hashed class names next/font generates (e.g.
 // "__variable_1e4310"). The real values come from preview.tsx; this module
@@ -238,7 +264,7 @@ describe("HtmlClasses", () => {
     );
     unmount();
 
-    // withThemeByClassName owns `dark`. Stripping it on unmount would make
+    // SiteTheme owns `dark`. Stripping it on unmount would make
     // every story after the first render in light mode.
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     document.documentElement.classList.remove("dark");
@@ -257,6 +283,52 @@ describe("makeHtmlClassDecorator", () => {
     expect(document.documentElement.classList.contains("__variable_display")).toBe(true);
   });
 });
+
+describe("SiteTheme", () => {
+  it("puts dark on documentElement and fires the theme event after children mount", () => {
+    // ThemeToggle reads the class in its own mount effect and re-reads on this
+    // event. A parent's effect runs after a child's, so the event is what
+    // makes the toggle's icon match the page in a fresh dark-mode load.
+    const onChange = vi.fn();
+    window.addEventListener(THEME_CHANGE_EVENT, onChange);
+
+    render(
+      <SiteTheme theme="dark">
+        <p>story</p>
+      </SiteTheme>,
+    );
+
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    window.removeEventListener(THEME_CHANGE_EVENT, onChange);
+  });
+
+  it("removes dark for the light theme", () => {
+    document.documentElement.classList.add("dark");
+
+    render(
+      <SiteTheme theme="light">
+        <p>story</p>
+      </SiteTheme>,
+    );
+
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+});
+
+describe("withSiteTheme", () => {
+  it("reads the theme global, defaulting to dark", () => {
+    document.documentElement.classList.remove("dark");
+    function Wrapped() {
+      return <>{withSiteTheme(() => <p>story</p>, { globals: {} } as never)}</>;
+    }
+
+    render(<Wrapped />);
+
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    document.documentElement.classList.remove("dark");
+  });
+});
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -269,6 +341,7 @@ Expected: FAIL — `Failed to resolve import "./decorators"`.
 ```tsx
 import { useEffect } from "react";
 import type { Decorator } from "@storybook/nextjs-vite";
+import { setTheme } from "../lib/site/theme";
 
 /**
  * Adds class names to <html> for as long as a story is mounted.
@@ -290,7 +363,7 @@ export function HtmlClasses({
 }) {
   useEffect(() => {
     const html = document.documentElement;
-    // Only remove what we added: withThemeByClassName owns `dark` on the same
+    // Only remove what we added: SiteTheme owns `dark` on the same
     // element, and clobbering it would leave every story after the first in
     // light mode.
     const added = classes.filter((name) => name && !html.classList.contains(name));
@@ -309,20 +382,48 @@ export function makeHtmlClassDecorator(classNames: string[]): Decorator {
     </HtmlClasses>
   );
 }
+
+/**
+ * Applies the theme the way the site does: setTheme toggles `dark` on <html>
+ * and dispatches THEME_CHANGE_EVENT. Deliberately not @storybook/addon-themes —
+ * its withThemeByClassName writes the class from a storybook/preview-api
+ * useEffect, which fires after the story has rendered, so ThemeToggle's
+ * mount-time read of the class would see the previous theme and nothing would
+ * tell it to look again. This runs as a parent effect (after the toggle's own
+ * mount effect) and the event is what brings the toggle back in sync.
+ */
+export function SiteTheme({
+  theme,
+  children,
+}: {
+  theme: "light" | "dark";
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    setTheme(theme);
+  }, [theme]);
+
+  return <>{children}</>;
+}
+
+export const withSiteTheme: Decorator = (Story, context) => (
+  <SiteTheme theme={context.globals.theme === "light" ? "light" : "dark"}>
+    <Story />
+  </SiteTheme>
+);
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd web && npx vitest run .storybook/decorators.test.tsx`
-Expected: PASS, 4 tests.
+Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Write `.storybook/preview.tsx`**
 
 ```tsx
 import type { Preview } from "@storybook/nextjs-vite";
-import { withThemeByClassName } from "@storybook/addon-themes";
 import { IBM_Plex_Sans, Instrument_Serif } from "next/font/google";
-import { makeHtmlClassDecorator } from "./decorators";
+import { makeHtmlClassDecorator, withSiteTheme } from "./decorators";
 import "../app/globals.css";
 
 // Same two faces, same weights and fallbacks as app/layout.tsx. Declared here
@@ -353,15 +454,29 @@ const ibmPlexSans = IBM_Plex_Sans({
 });
 
 const preview: Preview = {
+  // The toolbar switcher. Chromatic's modes below set this same global, so one
+  // story export is captured once per theme.
+  globalTypes: {
+    theme: {
+      description: "Colour theme",
+      toolbar: {
+        title: "Theme",
+        icon: "contrast",
+        items: ["light", "dark"],
+        dynamicTitle: true,
+      },
+    },
+  },
+  // The site default, per app/layout.tsx.
+  initialGlobals: { theme: "dark" },
   parameters: {
     // globals.css sets html { background-color: var(--color-bg) }, so the
     // canvas already tracks the theme. Storybook's own backgrounds addon would
     // paint over it.
     backgrounds: { disable: true },
-    // Two snapshots per story from one export. The keys set Storybook globals,
-    // which is exactly what withThemeByClassName reads. Chromatic's docs
-    // factor these into a separate .storybook/modes.ts; inlined here because
-    // there are two modes and one consumer.
+    // Two snapshots per story from one export. Chromatic's docs factor these
+    // into a separate .storybook/modes.ts; inlined here because there are two
+    // modes and one consumer.
     chromatic: {
       modes: {
         light: { theme: "light" },
@@ -372,13 +487,9 @@ const preview: Preview = {
   decorators: [
     // Font variables on <html> — see decorators.tsx for why the target matters.
     makeHtmlClassDecorator([instrumentSerif.variable, ibmPlexSans.variable]),
-    // `dark` on <html>, the same class lib/site/theme.ts toggles at runtime.
-    // parentSelector must be "html": :root.dark is what globals.css overrides.
-    withThemeByClassName({
-      themes: { light: "", dark: "dark" },
-      defaultTheme: "dark",
-      parentSelector: "html",
-    }),
+    // `dark` on <html> via lib/site/theme.ts's setTheme — see decorators.tsx
+    // for why this is not @storybook/addon-themes.
+    withSiteTheme,
     // Presentation padding and the base text colour. Safe on a wrapper — only
     // the custom-property *declarations* above have to be on :root.
     (Story) => (
@@ -401,10 +512,10 @@ Expected: exits 0. A failure here is most likely `next/font/google` — confirm 
 
 Run: `cd web && npm run storybook`
 Open <http://localhost:6006>, select `Site/TerminalWindow → Default`, and check:
-- The toolbar has a theme switcher; switching to `light` turns the canvas background from `#131311` to `#eceae5`. If it does not, `parentSelector` is not reaching `<html>`.
-- Inspect any element using `font-display` elsewhere later; for now confirm in DevTools that `<html>` carries **three** classes — `dark` plus the two hashed `__variable_*` names. Two classes means the font decorator is on the wrong element.
+- The toolbar has a `Theme` switcher; switching to `light` turns the canvas background from `#131311` to `#eceae5`. If it does not, `withSiteTheme` is not reading the global.
+- In DevTools, `<html>` carries **three** classes in dark mode — `dark` plus the two hashed `__variable_*` names. Two classes means the font decorator is on the wrong element.
 
-Stop the server. This is the one manual check in the plan; everything after it is automated.
+The computed-font check the spec asks for (§8.2) needs a display-font element, which `TerminalWindow` lacks — it is done in Task 3 Step 10 on `PageMasthead`. Stop the server.
 
 - [ ] **Step 8: Run the full suite**
 
@@ -422,7 +533,10 @@ A story never renders app/layout.tsx, so it inherits neither the
 next/font .variable classes nor the dark class. Both now go on
 documentElement via decorators — the target is load-bearing, since
 @theme resolves --font-display's inner var() on :root and a wrapper
-would leave every story on the fallback stack. Pinned by a test.
+would leave every story on the fallback stack. The theme goes through
+lib/site/theme.ts's setTheme rather than addon-themes, whose class
+lands after the story renders and so after ThemeToggle has read it.
+Both pinned by tests.
 
 Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 ```
@@ -573,8 +687,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // The component reads document.documentElement.classList.contains("dark") on
-// mount, which withThemeByClassName has already set — so the two Chromatic
-// modes exercise both icon states from this single story.
+// mount and re-reads on THEME_CHANGE_EVENT. withSiteTheme's setTheme call
+// fires that event after this mount, so each Chromatic mode shows the icon
+// that matches its page — the two modes exercise both icon states from this
+// single story.
 export const Default: Story = {};
 ```
 
@@ -730,8 +846,17 @@ Run: `cd web && npm run storybook`, then confirm by eye:
 - `Site/CommandBar → Open` shows the terminal dialog, not an empty canvas.
 - `Site/GridBackdrop → Default` shows 12 vertical rules, not an empty frame.
 - `Site/ProjectDemoGif → Default` shows the teal placeholder, not a broken-image icon.
+- `Site/ThemeToggle → Default` in dark mode shows the sun icon (the state the click would leave), and the moon after switching the toolbar to `light`. A moon on a dark canvas means the theme reached `<html>` after the toggle read it.
 
-Any of these rendering empty means the story is snapshotting nothing and would never fail. Stop the server.
+Any of these rendering empty means the story is snapshotting nothing and would never fail.
+
+Then the spec's font check (§8.2), on `Site/PageMasthead → Default`, in the DevTools console of the preview iframe:
+
+```js
+getComputedStyle(document.querySelector("h1")).fontFamily
+```
+
+Expected: starts with a hashed `__Instrument_Serif_…` family, not `Georgia`. `Georgia` means `--font-display` collapsed to its fallback on `:root` — the font decorator is not reaching `<html>`. Stop the server.
 
 - [ ] **Step 11: Run the full suite and commit**
 
@@ -1055,7 +1180,7 @@ Run: `cd web && npm run build-storybook`, then:
 cd web && node -e "const i=require('./storybook-static/index.json');const t=new Set(Object.values(i.entries).map(e=>e.title));console.log([...t].sort().join('\n'));console.log('components:',t.size,'stories:',Object.keys(i.entries).length)"
 ```
 
-Expected: `components: 17`. Titles cover `Blog/` (2), `Newsletter/` (5), `Site/` (10). If the number is lower, a file is outside the `components/**/*.stories.tsx` glob or has no default export.
+Expected: `components: 17 stories: 31`. Titles cover `Blog/` (2), `Newsletter/` (5), `Site/` (10); story exports are Site 16, Blog 4, Newsletter 11. If the component count is lower, a file is outside the `components/**/*.stories.tsx` glob or has no default export. 31 stories × 2 modes = **62 snapshots** per cold build — that is the number Task 6 checks against, not the spec §5 estimate of ~102.
 
 - [ ] **Step 9: Run the full suite and commit**
 
@@ -1085,7 +1210,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 
 - [ ] **Step 1: Add the job to `deploy.yml`**
 
-Insert after the `test` job's final step and before the `changes` job, at the same indentation as `test:`:
+Insert immediately after the `test` job's final step and before `promotion-guard`, at the same indentation as `test:`:
 
 ```yaml
   # Visual regression. Parallel to `test`, and deliberately absent from every
@@ -1152,14 +1277,14 @@ Expected: prints the job list including `chromatic`, no assertion error.
 - [ ] **Step 3: Confirm `release` gating is untouched**
 
 ```bash
-cd /e/Personal/looper && git diff .github/workflows/deploy.yml | grep -E "^[-+].*(needs|release:)" || echo "no changes to job dependencies"
+cd /e/Personal/looper && git diff .github/workflows/deploy.yml | grep -E "^[-+]\s*needs:" || echo "no changes to job dependencies"
 ```
 
-Expected: `no changes to job dependencies`. If any `needs:` line appears in the diff, the job was inserted in the wrong place — revert and retry.
+Expected: `no changes to job dependencies`. The pattern anchors on a `needs:` *key*, not the word — the new job's own comment says "absent from every other job's `needs:`", and a looser grep matches that comment and fails for nothing. If a real `needs:` line appears in the diff, the job was inserted in the wrong place — revert and retry.
 
 - [ ] **Step 4: Add the CHANGELOG entry**
 
-Under `## [Unreleased]` in the repo-root `CHANGELOG.md`, in the `### Added` subsection (create it if it is not there, keeping Keep a Changelog ordering):
+Under `## [Unreleased]` in the repo-root `CHANGELOG.md`, in the `### Added` subsection. Today `[Unreleased]` holds only `### Fixed`, so create `### Added` *above* it — Keep a Changelog orders Added, Changed, Deprecated, Removed, Fixed, Security:
 
 ```markdown
 - Storybook for `web/components/`, and Chromatic visual regression on pull requests into `dev`. Every story is snapshotted in both light and dark. Storybook is installed locally but never run by `npm test` or `npm run lint` — all build cost is on CI.
@@ -1211,7 +1336,7 @@ Paste the project token when prompted.
 
 ```bash
 cd /e/Personal/looper
-git push -u origin feat/storybook-chromatic
+git push
 gh pr create --base dev --title "Add Storybook and Chromatic visual regression" --body "Closes #209
 
 Storybook over the 17 components in \`web/components/\`, with Chromatic visual regression on PRs into \`dev\`. Every story snapshots in light and dark.
@@ -1229,7 +1354,7 @@ Requires the \`CHROMATIC_PROJECT_TOKEN\` secret and a Chromatic project linked t
 gh pr checks --watch --interval 20
 ```
 
-Expected: `test` green, `chromatic` green. Then confirm the Chromatic build shows **two modes per story** (`light` and `dark`) and roughly 100 snapshots on this first, cold build. A count near 50 means the modes are not applying — check `parameters.chromatic.modes` in `preview.tsx`.
+Expected: `test` green, `chromatic` green. Then confirm the Chromatic build shows **two modes per story** (`light` and `dark`) and **62 snapshots** on this first, cold build (31 stories × 2). A count near 31 means the modes are not applying — check `parameters.chromatic.modes` in `preview.tsx`.
 
 - [ ] **Step 5: Verify Chromatic's own checks appear**
 
@@ -1241,21 +1366,21 @@ Expected: includes `UI Tests` and `Storybook Publish`. **If they are absent, the
 
 - [ ] **Step 6: Prove a regression is actually caught**
 
-Change one token on a scratch commit:
+Change one token on a scratch commit. `#146b64` is the **light** `@theme` value of `--color-accent`; the dark override in `:root.dark` is `#5ec8c0` and is left alone on purpose:
 
 ```bash
 cd web
 sed -i 's/--color-accent: #146b64;/--color-accent: #7a2f8f;/' app/globals.css
 cd /e/Personal/looper
-git commit -am "test: temporary token change to prove Chromatic catches it" --no-verify
+git commit -s -am "test: temporary token change to prove Chromatic catches it"
 git push
 ```
 
-Expected: Chromatic reports diffs in **both** modes, and the `chromatic` job still reports **green** — that combination is the advisory gate working as designed. Then revert:
+Expected: Chromatic reports diffs in the **light** mode only, **none** in dark, and the `chromatic` job still reports **green**. All three matter: light-only diffs prove the light override is exercised and the two modes are independent (a broken light override is the regression this exists for — spec §3); a green job is the advisory gate working as designed. Diffs in both modes mean the dark snapshots are not getting `dark` on `<html>`. Then revert:
 
 ```bash
 cd /e/Personal/looper
-git revert --no-edit HEAD
+git revert -s --no-edit HEAD
 git push
 ```
 
@@ -1279,5 +1404,5 @@ Update `C:\Users\ashut\.claude\projects\E--Personal-looper\memory\project_pendin
 ## Notes for the executor
 
 - **Known annual diff:** `SiteFooter` renders `new Date().getFullYear()`, so its snapshot changes once a year on 1 January. Accept the diff; do not mock the date.
-- **If TurboSnap snapshots ~100 per PR instead of ~10,** the checkout depth is the first thing to check — TurboSnap degrades silently to a full build when it cannot resolve git history.
+- **If TurboSnap snapshots ~60 per PR instead of ~10,** the checkout depth is the first thing to check — TurboSnap degrades silently to a full build when it cannot resolve git history. The second is the base dir: Storybook lives in `web/`, not the git root, and TurboSnap maps changed git paths onto Storybook's module graph. Chromatic's docs say the base dir is auto-detected when the CLI runs from the same directory as `build-storybook`, which `workingDir: web` gives it, so `storybookBaseDir` is deliberately not set; if the build log shows a full rebuild with the history present, add `storybookBaseDir: web` to the action.
 - **Do not add `@storybook/addon-vitest`.** Running stories as tests inside the existing Vitest run is a deliberate follow-up (spec §10), not part of this change — and it would put Storybook back into the local `npm test` loop, which is exactly what this design avoids.
