@@ -386,7 +386,15 @@ jobs:
           # leaving the branch alive, which is the case with commits worth the
           # most.
           # gh's own --jq, so this does not depend on a jq binary being present.
-          IFS=$'	' read -r PR_STATE PR_URL <<< "$(gh pr list --head "$BRANCH" --base dev --state all --json state,url --jq '[(.[0].state // ""), (.[0].url // "")] | @tsv')"
+          # The substitution is a separate assignment on purpose: `set -e` takes
+          # the exit status of `read`, not of a command substitution feeding its
+          # here-string, so folding these two lines together would let a
+          # transient gh failure leave PR_STATE empty and fall past the CLOSED
+          # arm below into the arm that assumes no PR exists. An empty state is
+          # the correct result the first time a tag is synced, so this cannot be
+          # a check on PR_STATE after the read.
+          PR_JSON=$(gh pr list --head "$BRANCH" --base dev --state all --json state,url --jq '[(.[0].state // ""), (.[0].url // "")] | @tsv')
+          IFS=$'	' read -r PR_STATE PR_URL <<< "$PR_JSON"
           case "$PR_STATE" in
             OPEN)
               echo "sync PR for $BRANCH is already open: $PR_URL"
