@@ -12,7 +12,7 @@
 
 **Issue:** #209 — the PR closes it with `Closes #209`.
 
-**Branch:** `feat/storybook-chromatic`, which already exists locally: it is `origin/dev` plus one docs commit (`0763186`, the `setTheme` revision of the spec and this plan) that is not on `dev`. **Work on that branch as it is** — do not re-cut it from `origin/dev`, which would drop that commit. The branch is pushed and tracks `origin/feat/storybook-chromatic`, and PR #211 (docs only, `Refs #209`) is open on it. The implementation lands on this same branch: once #211 merges, rebase onto `dev` or wait for it, then push normally. #210 deleted the earlier remote branch, so there is no stale history to force over.
+**Branch:** `feat/storybook-chromatic`, cut fresh from `dev`: `git checkout -b feat/storybook-chromatic origin/dev`. The spec and this plan reached `dev` through #210 and #211, both docs-only and both squash-merged with their branch deleted, so nothing is waiting on an existing branch and there is no remote history to force over. The PR in Task 6 is a plain push.
 
 ## Global Constraints
 
