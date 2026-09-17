@@ -7,6 +7,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- `aws-actions/amazon-ecr-login` pinned to `v2.1.6` instead of floating on
+  `@v2`, with a matching Dependabot ignore entry. v2.1.7 bundles an
+  `@aws-sdk/core` new enough that the action's deprecated injected request
+  handler logs a `JsonCodec2` deprecation warning on every ECR login. v2.1.7
+  was dependency bumps only, so the pin gives up nothing. Unpin once
+  aws-actions/amazon-ecr-login#1303 ships. Closes #174.
+
 ### Removed
 
 - Both IAM users and their permanent access key pairs — `bgm-looper-vercel-sa`
