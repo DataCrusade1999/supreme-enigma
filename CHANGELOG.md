@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-09-17
+
 ### Fixed
 
 - A transient `gh pr list` failure in the `release` job's changelog-sync step
