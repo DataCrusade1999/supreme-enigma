@@ -42,7 +42,7 @@ compute in AWS that only the gated routes reach.
 Browser
   │
   ▼
-Vercel — Next.js 16 / React 19 (root_directory = "app")
+Vercel — Next.js 16 / React 19 (root_directory = "web")
   │  proxy.ts gates /tools/bgm-looper, /api/looper/*, /keystatic, /api/keystatic/*
   │  public portfolio pages: no auth, no backend
   │
@@ -58,16 +58,16 @@ AWS — Lambda + S3, personal account, us-east-1, all Terraform-managed
 **The site.** Next.js App Router. Public pages live in the `app/(site)/`
 route group; the tools live outside it under `app/tools/`, so they don't
 inherit the site header or command bar. Styling is Tailwind CSS v4,
-configured CSS-first in `app/app/globals.css` (no `tailwind.config.js`) —
+configured CSS-first in `web/app/globals.css` (no `tailwind.config.js`) —
 dark by default, with the theme applied pre-hydration to avoid a flash.
-Portfolio content is hand-written data (`app/content/projects.ts`,
+Portfolio content is hand-written data (`web/content/projects.ts`,
 `resume.ts`); blog posts are MDX in the repo-root `content/` directory,
 git-backed and edited through Keystatic.
 
 **The gate.** One shared password (a Vercel env var) checked with a
 constant-time compare in `/api/login`, exchanged for an HMAC-signed HttpOnly
 cookie. No accounts, no per-user state, no session store.
-`app/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth for
+`web/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth for
 what's protected — adding a new tool means adding its prefix there and
 nothing else.
 
@@ -102,7 +102,7 @@ Promote by PR: `dev` → `stage` → `main`.
 ## Repo layout
 
 ```
-app/        Next.js app (TypeScript)
+web/        Next.js app (TypeScript)
   app/(site)/     public portfolio pages
   app/tools/      password-gated tools
   app/api/        login, per-tool API routes, Keystatic
@@ -128,7 +128,7 @@ docs/superpowers/plans/   TDD implementation plans, checkbox-tracked
 
 ```bash
 # Next.js app
-cd app
+cd web
 npm install
 npm test                                              # vitest (unit/component)
 npx playwright install chromium                       # once, per checkout
@@ -151,7 +151,7 @@ Re-run that `pip install` whenever a dependency bump to `lambda/requirements.txt
 lands — the venv doesn't refresh itself.
 
 `npm run test:e2e` builds the app and serves it on port 3100 itself — see
-`app/TESTING.md` for what belongs in each runner.
+`web/TESTING.md` for what belongs in each runner.
 
 Needs Node 20+, Python 3.12, and ffmpeg on PATH for the Lambda pipeline.
 The public site runs without any AWS credentials; only the BGM Looper tool

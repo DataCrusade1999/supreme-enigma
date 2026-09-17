@@ -224,7 +224,7 @@ resource "aws_iam_role_policy" "ci_deploy" {
 }
 
 # --- Vercel OIDC: how the app reaches S3 and Lambda at runtime, via awsCredentials() in
-#     app/lib/aws.ts reading APP_AWS_ROLE_ARN. It replaced an IAM user with a permanent
+#     web/lib/aws.ts reading APP_AWS_ROLE_ARN. It replaced an IAM user with a permanent
 #     access key pair (#155); the user and its key were deleted once production, stage
 #     and dev had each been exercised end to end through this role. ---
 
@@ -264,7 +264,7 @@ resource "aws_iam_role" "vercel" {
 # Carried over verbatim from the deleted vercel-sa user's inline policy — the migration
 # moved the identity, not the permissions. ResumeHeadObjectNotFound in particular is
 # load-bearing; its comment explains why. ResumeDraftCleanup, by contrast, has no caller:
-# nothing under app/ issues a DeleteObjectCommand. Left in place rather than dropped as a
+# nothing under web/ issues a DeleteObjectCommand. Left in place rather than dropped as a
 # drive-by, since removing it is its own change.
 resource "aws_iam_role_policy" "vercel" {
   name = "${var.project_name}-vercel-policy"
@@ -327,7 +327,7 @@ resource "random_password" "cookie_secret" {
 resource "vercel_project" "looper" {
   name           = var.project_name
   framework      = "nextjs"
-  root_directory = "app"
+  root_directory = "web"
 
   # Only build when something the app actually builds from changed. Vercel's
   # contract is inverted from the usual reading: exit 0 skips the build, exit 1
@@ -336,7 +336,7 @@ resource "vercel_project" "looper" {
   # hand-rolled `git diff --quiet` as deploy.yml's `changes` job.
   #
   # An allowlist rather than a denylist of lambda/infra/docs: root_directory is
-  # "app", and the only other build input is content/ (the git-backed Keystatic
+  # "web", and the only other build input is content/ (the git-backed Keystatic
   # blog, which must keep triggering rebuilds). The failure mode to know about
   # is that a *new* top-level directory that becomes build-relevant would
   # silently stop deploying until it is added here.
@@ -346,7 +346,7 @@ resource "vercel_project" "looper" {
   # CHANGELOG-only commit to main right after each promotion merge — without
   # this, that commit is its own deployment and the single rollback step
   # reverts a markdown heading instead of the release.
-  ignore_command = "git diff --quiet HEAD^ HEAD -- app content"
+  ignore_command = "git diff --quiet HEAD^ HEAD -- web content"
 
   # The resume publish route refuses to run unless VERCEL_ENV is "production"
   # (spec §7.3), and VERCEL_ENV is a Vercel system variable. The provider
@@ -373,7 +373,7 @@ resource "vercel_project" "looper" {
   # never carried over, and the plan-generation step truncates the token when the
   # agent tries to re-add it itself. Execution 6d2c9593 blocked 12/12 test cases
   # on this. The gated parts of the app (/tools/bgm-looper, /api/looper,
-  # /keystatic) are protected by APP_PASSWORD in app/lib/route-gate.ts regardless,
+  # /keystatic) are protected by APP_PASSWORD in web/lib/route-gate.ts regardless,
   # so this exposes only the public portfolio pages, which are already public on
   # production.
   vercel_authentication = { deployment_type = "none" }
@@ -381,7 +381,7 @@ resource "vercel_project" "looper" {
 
 # --- Firewall ---
 
-# app/lib/rate-limit.ts caps /api/login at 5 attempts per 15 minutes, but its
+# web/lib/rate-limit.ts caps /api/login at 5 attempts per 15 minutes, but its
 # counter is a Map in serverless instance memory — its own header comment notes
 # that an attacker spread across cold starts gets more than that in total. This
 # rule is the edge-side backstop for exactly that case: it lives on the Edge
@@ -448,7 +448,7 @@ resource "vercel_project_environment_variable" "cookie_secret" {
 # not exist on Vercel. Same collision APP_AWS_REGION exists to avoid.
 #
 # This is now the app's only credential source — there is no AWS_ACCESS_KEY_ID to fall
-# back to. awsCredentials() in app/lib/aws.ts still treats the variable as optional, which
+# back to. awsCredentials() in web/lib/aws.ts still treats the variable as optional, which
 # is what keeps the unit tests and local `npm run dev` working on their own static keys.
 resource "vercel_project_environment_variable" "aws_role_arn" {
   project_id = vercel_project.looper.id

@@ -9,6 +9,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- The Next.js project directory is now `web/` rather than `app/`. Next.js
+  requires its App Router directory at `<project-root>/app`, so the old name
+  produced `app/app/` for every router path. Nothing inside the project
+  changed: its paths are all relative to the project root. What moved is every
+  reference from outside it — `vercel_project.looper`'s `root_directory` and
+  `ignore_command`, `deploy.yml`'s `working-directory` steps and test-report
+  args, Dependabot's npm `directory`, and `.claude/rules/app.md` (now
+  `web.md`). Historical entries here and under `docs/` still say `app/`; they
+  describe what was true when written. Closes #180.
 - `getPublishedResume` now returns `invalid: true` when a published
   `resume/current.json` is read but fails `resumeSchema`. That state previously
   returned a shape byte-identical to the nothing-published-yet one, so corrupt

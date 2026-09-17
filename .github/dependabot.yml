@@ -7,7 +7,7 @@ version: 2
 # "Bump X from A to B" subject would not parse.
 updates:
   - package-ecosystem: npm
-    directory: /app
+    directory: /web
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

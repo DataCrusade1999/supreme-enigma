@@ -19,7 +19,7 @@ The IAM policies were already extended to make room for it.
 Browser
   │ (shared password → signed HttpOnly cookie)
   ▼
-Vercel (Next.js 15 + React 19, root_directory="app")
+Vercel (Next.js 15 + React 19, root_directory="web")
   │  proxy.ts gates /tools/bgm-looper, /api/looper/*, /keystatic, /api/keystatic/*
   │  (public site pages — home/about/projects/resume/contact — no auth)
   │
@@ -71,7 +71,7 @@ access blocked, CORS (PUT/GET, `*` origin), 1-day object lifecycle.
 Single shared password (Vercel env var), constant-time compare in
 `/api/login`, HttpOnly signed cookie (`COOKIE_SECRET`, payload is just the
 literal string `"authenticated"`) — no accounts, no per-user state.
-`app/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth
+`web/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth
 for what's protected.
 
 ## CI/CD
