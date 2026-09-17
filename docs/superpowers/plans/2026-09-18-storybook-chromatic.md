@@ -12,7 +12,7 @@
 
 **Issue:** #209 — the PR closes it with `Closes #209`.
 
-**Branch:** `feat/storybook-chromatic`, which already exists locally: it is `origin/dev` plus one docs commit (`0763186`, the `setTheme` revision of the spec and this plan) that is not on `dev`. **Work on that branch as it is** — do not re-cut it from `origin/dev`, which would drop that commit. The PR carries it alongside the implementation. `origin/feat/storybook-chromatic` still holds the three pre-squash commits from #210, so the push in Task 6 uses `--force-with-lease` (a plain `git push -u` is rejected because the histories differ).
+**Branch:** `feat/storybook-chromatic`, which already exists locally: it is `origin/dev` plus one docs commit (`0763186`, the `setTheme` revision of the spec and this plan) that is not on `dev`. **Work on that branch as it is** — do not re-cut it from `origin/dev`, which would drop that commit. The branch is pushed and tracks `origin/feat/storybook-chromatic`, and PR #211 (docs only, `Refs #209`) is open on it. The implementation lands on this same branch: once #211 merges, rebase onto `dev` or wait for it, then push normally. #210 deleted the earlier remote branch, so there is no stale history to force over.
 
 ## Global Constraints
 
@@ -1336,9 +1336,7 @@ Paste the project token when prompted.
 
 ```bash
 cd /e/Personal/looper
-# --force-with-lease, not a plain push: the remote branch still holds the
-# pre-squash spec commits from #210 (see Branch, above).
-git push --force-with-lease -u origin feat/storybook-chromatic
+git push
 gh pr create --base dev --title "Add Storybook and Chromatic visual regression" --body "Closes #209
 
 Storybook over the 17 components in \`web/components/\`, with Chromatic visual regression on PRs into \`dev\`. Every story snapshots in light and dark.
