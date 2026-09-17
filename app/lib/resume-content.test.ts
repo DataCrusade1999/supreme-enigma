@@ -54,11 +54,14 @@ describe("getPublishedResume", () => {
     // theoretical edge case.
     vi.mocked(objectExists).mockResolvedValue(false);
 
-    const { resume, published } = await getPublishedResume();
+    const { resume, published, invalid } = await getPublishedResume();
 
     expect(published).toBe(false);
     expect(resume).toEqual(placeholderResume);
     expect(getObjectBytes).not.toHaveBeenCalled();
+    // The half of the discriminator that matters: nothing published is not an
+    // integrity failure, so it must stay distinguishable from one.
+    expect(invalid).toBeUndefined();
   });
 
   it("falls back rather than throwing when the stored JSON is corrupt", async () => {
@@ -78,8 +81,9 @@ describe("getPublishedResume", () => {
       Buffer.from(JSON.stringify({ headline: { name: "only" } })),
     );
 
-    const { published } = await getPublishedResume();
+    const { published, invalid } = await getPublishedResume();
     expect(published).toBe(false);
+    expect(invalid).toBe(true);
   });
 
   it("falls back when the bucket is not configured at all", async () => {
