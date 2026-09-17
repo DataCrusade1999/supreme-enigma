@@ -283,10 +283,11 @@ Success criteria, in order:
    Confirm `UI Tests` and `Storybook Publish` appear as commit statuses on the
    next PR — if they do not, the project is not linked to the repo (§11.1) and
    the advisory gate is silently a no-op.
-5. **Regression proof.** Change `--color-accent` in `globals.css` by one value
-   on a scratch branch, open a PR into `dev`, and confirm Chromatic reports a
-   diff in both modes and that the CI job still reports green (advisory gate
-   working as specified). Revert.
+5. **Regression proof.** Change the light `@theme` value of `--color-accent`
+   in `globals.css` (leaving the `:root.dark` override alone) on a scratch
+   commit, and confirm Chromatic reports a diff in the light mode only, none
+   in dark, and that the CI job still reports green. Light-only proves the
+   two modes are independent; green proves the advisory gate. Revert.
 6. `cd web && npm test` and `npm run lint` still pass — the new devDependencies
    and config must not perturb the existing suites. In particular
    `vitest.config.ts`'s `exclude` list is hand-written and spreads
