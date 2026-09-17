@@ -7,6 +7,71 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Fixed
+
+- A transient `gh pr list` failure in the `release` job's changelog-sync step
+  no longer bypasses the guard that refuses to re-open a sync PR a human closed
+  without merging. `set -e` takes the exit status of `read`, not of the command
+  substitution feeding its here-string, so the failure left `PR_STATE` empty and
+  fell past the `CLOSED` arm into the one that assumes no PR exists, which
+  force-pushes the branch and opens a fresh PR. The substitution is now its own
+  assignment, where `set -e` sees it. Closes #200.
+- The `release` job now opens the changelog-sync PR *before* creating the tag
+  and the GitHub Release. The sync step became fatal on failure in #168's fix,
+  which meant a sync failure published a release with no reconciliation behind
+  it and left the operator to repair `dev` by hand. With the tag last, a
+  failure leaves `main` carrying the changelog commit and nothing published,
+  and re-running the job is the recovery path. Every step in that path is now
+  idempotent by version: `changelog-release.py` matched on version *and* date,
+  so a re-run on a later day inserted a second heading for the same version and
+  filed the entries under the stale copy — the #168 shape, reachable through
+  the new recovery path. The release creation is idempotent too, and the sync
+  step never force-pushes the sync branch and leaves it alone when a sync PR
+  for it exists in any state, so commits a human pushed to it cannot be made
+  unreachable; a sync PR closed without merging is a fatal error rather than
+  a silent skip, since the release it belongs to is then unreconciled.
+  Closes #195.
+- A `promotion-guard` job now fails any PR into `stage` or `main` whose head
+  branch does not already contain the last release tag. That is exactly the
+  state in which merging duplicates the version heading: it means the
+  `chore/changelog-sync-*` PR has not been merged, or was merged with
+  `--squash`, which is how v1.5.1 broke. Detection used to be possible only in
+  the `release` job, after the promotion that caused the damage; this refuses
+  the merge instead. The assertion is on the previous release tag, not on
+  `main` being an ancestor of `dev` — that is false on every healthy run, since
+  a promotion's merge commit lives only on the target branch. Branch protection
+  is not enforced on this repo, so the guard is a red X rather than a hard
+  block. Closes #196.
+- Entries that land on `dev` between a promotion and the release are no longer
+  filed under the version that did not ship them. The sync branch's
+  `CHANGELOG.md` is now built by `.github/scripts/changelog-sync.py`, which
+  copies `main`'s released section verbatim and re-adds only the un-promoted
+  remainder under `## [Unreleased]` — dev's `[Unreleased]` body minus the body
+  `main` filed under the version, matched per entry and insensitive to how the
+  text happens to be wrapped. Copying rather than re-deriving the released
+  section also removes the last way the two files could drift. Previously the
+  step detected the race and asked a reviewer to move the entries back by hand.
+  Entries present on `main` but not on `dev` are counted and called out in the
+  PR title, since those mean a direct commit to `main` or a reword after the
+  promotion. Covered by `.github/scripts/test_changelog_sync.py`, run by the
+  `test` job. Closes #197.
+- The `release` job's changelog-sync step now merges `main` into the branch it
+  cuts from `dev` instead of cherry-picking the release commit onto it, and
+  reconstructs `CHANGELOG.md` on that branch with the same transform `main`
+  just ran (now shared as `.github/scripts/changelog-release.py`) rather than
+  trusting git's merged result. A cherry-pick — and equally a squash-merge of
+  the sync PR — leaves the release commit outside `dev`'s history, so the next
+  `dev -> stage -> main` promotion still had a merge base predating the
+  heading, saw two insertions under the same `## [Unreleased]` anchor, and
+  emitted the heading twice with the new entries filed under the wrong copy.
+  That is why v1.3.0 and v1.5.0 both needed hand repair. Merging makes the
+  release commit an ancestor of `dev`, which retires the conflict class;
+  merge the sync PR with `--merge`, never `--squash`. The step is also fatal
+  on failure now instead of emitting a warning and letting `release` report
+  success, and it flags in the PR title when entries landed on `dev` between
+  the promotion and the release and so got filed under the new version.
+  Closes #168.
+
 ## [1.5.1] - 2026-09-17
 
 ### Changed

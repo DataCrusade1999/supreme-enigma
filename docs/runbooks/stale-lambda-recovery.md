@@ -117,9 +117,9 @@ On `dev` and `stage` this is clean — `release` is `main`-only.
 > **On `main`, a dispatch also cuts a release.** `release`'s condition treats
 > `workflow_dispatch` as satisfying its changes-gate, and `Determine next
 > version` defaults `BUMP=patch` when it finds no qualifying commits since the
-> last tag. So a dispatch on `main` tags a new patch version, renames
-> `[Unreleased]` in `CHANGELOG.md`, pushes that to `main`, creates a GitHub
-> Release, and opens a `chore/changelog-sync-*` PR — for a run that shipped no
+> last tag. So a dispatch on `main` renames `[Unreleased]` in `CHANGELOG.md`,
+> pushes that to `main`, opens a `chore/changelog-sync-*` PR, and then tags a
+> new patch version and creates a GitHub Release — for a run that shipped no
 > new code. This is read from the workflow's `if:` conditions, not observed;
 > it has not been triggered deliberately. Prefer the rerun path on `main`, and
 > if you do dispatch, expect the release and merge the sync PR so the branches
