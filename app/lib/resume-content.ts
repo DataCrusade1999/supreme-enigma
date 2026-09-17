@@ -16,6 +16,11 @@ export type PublishedResume = {
   // present and the PDF absent. /resume.pdf answers on the PDF alone, so the
   // Download link has to as well or it points at a 404.
   pdfPublished: boolean;
+  // Set only when a published object was read and failed the schema. Optional
+  // so the ordinary placeholder returns stay as they are: absent means "not an
+  // integrity failure", which is what separates corrupt data from a page that
+  // has simply never been published.
+  invalid?: boolean;
 };
 
 // unstable_cache rather than the "use cache" directive: cacheComponents is off
@@ -64,7 +69,7 @@ const readCurrent = unstable_cache(
     const parsed = resumeSchema.safeParse(JSON.parse(bytes.toString("utf8")));
     if (!parsed.success) {
       console.error("resume-content: published JSON failed validation", parsed.error);
-      return { resume: placeholderResume, published: false, pdfPublished: false };
+      return { resume: placeholderResume, published: false, pdfPublished: false, invalid: true };
     }
     return {
       resume: parsed.data,

@@ -9,6 +9,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- `getPublishedResume` now returns `invalid: true` when a published
+  `resume/current.json` is read but fails `resumeSchema`. That state previously
+  returned a shape byte-identical to the nothing-published-yet one, so corrupt
+  published data rendered as an ordinary first-run placeholder page with nothing
+  but a log line to tell the two apart. Closes #112.
 - `aws-actions/amazon-ecr-login` pinned to `v2.1.6` instead of floating on
   `@v2`, with a matching Dependabot ignore entry. v2.1.7 bundles an
   `@aws-sdk/core` new enough that the action's deprecated injected request
