@@ -9,6 +9,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Fixed
 
+- A transient `gh pr list` failure in the `release` job's changelog-sync step
+  no longer bypasses the guard that refuses to re-open a sync PR a human closed
+  without merging. `set -e` takes the exit status of `read`, not of the command
+  substitution feeding its here-string, so the failure left `PR_STATE` empty and
+  fell past the `CLOSED` arm into the one that assumes no PR exists, which
+  force-pushes the branch and opens a fresh PR. The substitution is now its own
+  assignment, where `set -e` sees it. Closes #200.
 - The `release` job now opens the changelog-sync PR *before* creating the tag
   and the GitHub Release. The sync step became fatal on failure in #168's fix,
   which meant a sync failure published a release with no reconciliation behind
