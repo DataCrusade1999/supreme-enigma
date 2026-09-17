@@ -91,7 +91,7 @@ What to look for:
 A 504 from the platform rather than a 500 from the route means the Vercel
 function gave up before the Lambda answered. The invoke is synchronous
 (`InvocationType: "RequestResponse"`) against a 60-second Lambda, and
-`app/app/api/looper/process/route.ts` sets no `maxDuration` — so the route
+`web/app/api/looper/process/route.ts` sets no `maxDuration` — so the route
 runs under Vercel's default limit for this plan, which is not pinned anywhere
 in this repo. Confirm the current default in the Vercel dashboard before
 concluding anything; if it is below 60 seconds, a slow-but-successful Lambda

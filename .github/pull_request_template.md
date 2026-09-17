@@ -15,7 +15,7 @@ Closes #<!-- issue number -->
 
 <!-- How was this verified? Commands run, manual steps, screenshots if UI. -->
 
-- [ ] `npm test` passes (`app/`)
+- [ ] `npm test` passes (`web/`)
 - [ ] `pytest` passes (`lambda/`, if touched)
 - [ ] Manually verified in a running app/dev server
 
