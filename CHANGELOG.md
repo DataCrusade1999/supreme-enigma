@@ -7,6 +7,43 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- The Next.js project directory is now `web/` rather than `app/`. Next.js
+  requires its App Router directory at `<project-root>/app`, so the old name
+  produced `app/app/` for every router path. Nothing inside the project
+  changed: its paths are all relative to the project root. What moved is every
+  reference from outside it — `vercel_project.looper`'s `root_directory` and
+  `ignore_command`, `deploy.yml`'s `working-directory` steps and test-report
+  args, Dependabot's npm `directory`, and `.claude/rules/app.md` (now
+  `web.md`). Historical entries here and under `docs/` still say `app/`; they
+  describe what was true when written. Closes #180.
+- `getPublishedResume` now returns `invalid: true` when a published
+  `resume/current.json` is read but fails `resumeSchema`. That state previously
+  returned a shape byte-identical to the nothing-published-yet one, so corrupt
+  published data rendered as an ordinary first-run placeholder page with nothing
+  but a log line to tell the two apart. Closes #112.
+- `aws-actions/amazon-ecr-login` pinned to `v2.1.6` instead of floating on
+  `@v2`, with a matching Dependabot ignore entry. v2.1.7 bundles an
+  `@aws-sdk/core` new enough that the action's deprecated injected request
+  handler logs a `JsonCodec2` deprecation warning on every ECR login. v2.1.7
+  was dependency bumps only, so the pin gives up nothing. Unpin once
+  aws-actions/amazon-ecr-login#1303 ships. Closes #174.
+
+### Removed
+
+- Both IAM users and their permanent access key pairs — `bgm-looper-vercel-sa`
+  and `bgm-looper-ci-deploy` — along with their inline policies and the
+  `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` Vercel environment variables.
+  CI and the app both authenticate by assuming a federated role through OIDC,
+  verified end to end on `dev`, `stage` and production first. There are now no
+  long-lived AWS credentials anywhere in this project. Closes #155.
+- The `vercel_access_key_id`, `ci_deploy_access_key_id` and
+  `ci_deploy_secret_access_key` Terraform outputs, and the `AWS_CI_*` GitHub
+  repository secrets they fed.
+
+## [1.5.0] - 2026-09-16
+
 ### Added
 
 - `aws_iam_openid_connect_provider.vercel` and `aws_iam_role.vercel` — a Vercel

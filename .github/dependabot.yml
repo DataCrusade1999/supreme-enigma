@@ -7,7 +7,7 @@ version: 2
 # "Bump X from A to B" subject would not parse.
 updates:
   - package-ecosystem: npm
-    directory: /app
+    directory: /web
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -38,6 +38,15 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      # amazon-ecr-login v2.1.7 bundles @aws-sdk/core 3.977.8, and from 3.977.5
+      # the JSON protocol hands the transport a Uint8Array subclass whose
+      # valueOf() decodes to a string and warns. The action's own injected
+      # request handler, from the deprecated @aws-sdk/node-http-handler, does
+      # Buffer.from(body) and so trips it on every login. Unignore once
+      # aws-actions/amazon-ecr-login#1303 ships (see #174).
+      - dependency-name: aws-actions/amazon-ecr-login
+        versions: [">2.1.6"]
 
   - package-ecosystem: terraform
     directories:

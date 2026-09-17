@@ -13,7 +13,7 @@ export default async function NewsletterPage() {
   return (
     <section>
       {/* Every page opens with this component and its title is the page's h1 —
-        * app/app/(site)/blog/page.tsx is the pattern this mirrors. */}
+        * web/app/(site)/blog/page.tsx is the pattern this mirrors. */}
       <PageMasthead eyebrow="Writing" title="Newsletter" />
       <IssueList
         issues={sorted.map(({ slug, entry }) => ({

@@ -1,4 +1,4 @@
-// app/components/site/CommandBar.tsx
+// web/components/site/CommandBar.tsx
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";

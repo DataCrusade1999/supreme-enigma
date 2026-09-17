@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { contrastRatio } from "./color-contrast";
 
-// Mirrors app/app/globals.css's portfolio-shell tokens. Keep in sync.
+// Mirrors web/app/globals.css's portfolio-shell tokens. Keep in sync.
 const LIGHT = {
   bg: "#eceae5",
   fg: "#111110",

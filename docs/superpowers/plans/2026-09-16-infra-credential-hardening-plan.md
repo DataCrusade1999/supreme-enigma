@@ -5,8 +5,8 @@ Covers the two `priority: high` findings from
 (#152) judged worth acting on:
 
 - **#154** — no concurrency ceiling on the Lambdas. **Done**, though not as the issue proposed. Part A.
-- **#155** — two permanent IAM access key pairs, no federation anywhere. **B1-B4 shipped
-  2026-09-16** (#157, #158, #159, #160, #161); **B5 outstanding.** Part B.
+- **#155** — two permanent IAM access key pairs, no federation anywhere. **Done, shipped
+  2026-09-16** (#157, #158, #159, #160, #161, #169), promoted to production as v1.5.0. Part B.
 
 There is no matching design spec. The issues are the spec; this is the plan.
 
@@ -215,15 +215,15 @@ get it when the promotion PRs land. Verify a track end to end on **each** of the
 before B5. The old static keys are still live, so a missing variable degrades to existing behaviour
 rather than breaking — which is exactly why deletion is a separate PR.
 
-### B5 — delete both users (`Closes #155`)
+### B5 — delete both users (`Closes #155`) — shipped 2026-09-16 (#169)
 
-**This is the only step left.** B1-B4 shipped 2026-09-16 — see "What B1-B4 actually verified" below
-for what is already proven and what is not.
+Preconditions were met first: `dev → stage` (#164) and `stage → main` (#165) promoted, released as
+v1.5.0, and the check table below re-run against all three hosts. That ordering was not optional —
+Vercel bakes env vars at build time, so until each branch rebuilt with `APP_AWS_ROLE_ARN` present it
+was still running on the static keys.
 
-Only after B4 is verified on all three environments. As of 2026-09-16 it is verified on `dev` only:
-`stage` and `main` still run on the static keys, because Vercel bakes env vars at build time and
-neither has rebuilt with `APP_AWS_ROLE_ARN` present. **Promote `dev → stage` and `stage → main`
-first, then re-run the checks below on each**, and only then open B5.
+`terraform apply` read `0 to add, 0 to change, 8 to destroy` and both users now return `NoSuchEntity`.
+Production was re-smoke-tested immediately afterwards, with no fallback left to mask a failure.
 
 Remove `aws_iam_user.vercel` / `.ci_deploy`, both `aws_iam_access_key`, both `aws_iam_user_policy`,
 and `vercel_project_environment_variable.aws_access_key` / `.aws_secret_key` from `shared.tf`; remove

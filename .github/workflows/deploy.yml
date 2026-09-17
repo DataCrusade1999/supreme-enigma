@@ -39,12 +39,12 @@ jobs:
           node-version: "22"
 
       - name: Install app dependencies
-        working-directory: app
+        working-directory: web
         run: npm install
 
       - name: Lint app
         id: lint
-        working-directory: app
+        working-directory: web
         run: |
           EXIT_CODE=0
           npm run lint || EXIT_CODE=$?
@@ -52,7 +52,7 @@ jobs:
 
       - name: Run app tests
         id: vitest
-        working-directory: app
+        working-directory: web
         run: |
           set -o pipefail
           EXIT_CODE=0
@@ -61,15 +61,15 @@ jobs:
 
       - name: Vitest job summary
         if: always()
-        run: node .github/scripts/test-summary.mjs --kind vitest app/vitest-results.json
+        run: node .github/scripts/test-summary.mjs --kind vitest web/vitest-results.json
 
       - name: Install Playwright browsers
-        working-directory: app
+        working-directory: web
         run: npx playwright install --with-deps chromium
 
       - name: Run e2e + a11y tests
         id: playwright
-        working-directory: app
+        working-directory: web
         run: |
           set -o pipefail
           EXIT_CODE=0
@@ -78,7 +78,7 @@ jobs:
 
       - name: Playwright job summary
         if: always()
-        run: node .github/scripts/test-summary.mjs --kind playwright app/playwright-results.json
+        run: node .github/scripts/test-summary.mjs --kind playwright web/playwright-results.json
 
       - name: Fail the job if lint or any test suite failed
         if: steps.lint.outputs.exit_code != '0' || steps.vitest.outputs.exit_code != '0' || steps.playwright.outputs.exit_code != '0'
@@ -155,9 +155,20 @@ jobs:
           role-to-assume: arn:aws:iam::223376380711:role/bgm-looper-ci-deploy
           aws-region: ${{ env.AWS_REGION }}
 
+      # Pinned to v2.1.6 rather than floating on @v2, which is v2.1.7. Since
+      # @aws-sdk/core 3.977.5 the JSON protocol hands the transport a
+      # Uint8Array subclass whose valueOf() decodes to a string and warns,
+      # and this action injects its own request handler from the deprecated,
+      # frozen @aws-sdk/node-http-handler whose writeBody does
+      # Buffer.from(body) -- which recurses through valueOf(). So every login
+      # logged "JsonCodec2: you have called a string method on a Uint8Array
+      # request body ... In a future version this will throw an error."
+      # v2.1.6 bundles @aws-sdk/core 3.974.20, below that threshold, and
+      # v2.1.7 was dependency bumps only, so nothing is given up by pinning.
+      # Unpin once aws-actions/amazon-ecr-login#1303 ships (see #174).
       - name: Log in to ECR
         id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@v2.1.6
 
       - name: Build, tag, and push image
         working-directory: lambda
