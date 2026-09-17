@@ -7,6 +7,25 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Fixed
+
+- The `release` job's changelog-sync step now merges `main` into the branch it
+  cuts from `dev` instead of cherry-picking the release commit onto it, and
+  reconstructs `CHANGELOG.md` on that branch with the same transform `main`
+  just ran (now shared as `.github/scripts/changelog-release.py`) rather than
+  trusting git's merged result. A cherry-pick — and equally a squash-merge of
+  the sync PR — leaves the release commit outside `dev`'s history, so the next
+  `dev -> stage -> main` promotion still had a merge base predating the
+  heading, saw two insertions under the same `## [Unreleased]` anchor, and
+  emitted the heading twice with the new entries filed under the wrong copy.
+  That is why v1.3.0 and v1.5.0 both needed hand repair. Merging makes the
+  release commit an ancestor of `dev`, which retires the conflict class;
+  merge the sync PR with `--merge`, never `--squash`. The step is also fatal
+  on failure now instead of emitting a warning and letting `release` report
+  success, and it flags in the PR title when entries landed on `dev` between
+  the promotion and the release and so got filed under the new version.
+  Closes #168.
+
 ## [1.5.1] - 2026-09-17
 
 ### Changed

@@ -257,6 +257,7 @@ jobs:
       - name: Update CHANGELOG.md
         id: changelog
         run: |
+          set -euo pipefail
           if [ ! -f CHANGELOG.md ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "CHANGELOG.md not found, skipping."
@@ -265,21 +266,11 @@ jobs:
           VERSION="${{ steps.version.outputs.tag }}"
           VERSION="${VERSION#v}"
           DATE=$(date -u +%Y-%m-%d)
-          python3 - "$VERSION" "$DATE" <<'PYEOF'
-          import sys
-          version, date = sys.argv[1], sys.argv[2]
-          with open("CHANGELOG.md") as f:
-              content = f.read()
-          old = "## [Unreleased]"
-          if old not in content:
-              print("no [Unreleased] heading found")
-              sys.exit(0)
-          new = f"## [Unreleased]\n\n## [{version}] - {date}"
-          content = content.replace(old, new, 1)
-          with open("CHANGELOG.md", "w") as f:
-              f.write(content)
-          print("renamed [Unreleased] -> [%s] - %s" % (version, date))
-          PYEOF
+          python3 .github/scripts/changelog-release.py CHANGELOG.md "$VERSION" "$DATE"
+          # Handed to the sync step, which re-runs the identical transform on
+          # dev rather than replaying this commit. Same inputs, same output.
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
           if git diff --quiet CHANGELOG.md; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -302,22 +293,78 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "${{ steps.version.outputs.tag }}" --target main --generate-notes
 
+      # Opens the PR that puts this release's heading back on dev. It merges
+      # main into a branch off dev instead of cherry-picking the release
+      # commit, because #168 proved a copy is not enough: a cherry-pick — or a
+      # squash-merge of this PR — leaves the release commit outside dev's
+      # history, so the next dev -> stage -> main promotion still has a merge
+      # base predating the heading, sees two insertions at the same anchor, and
+      # emits the heading twice with the new entries filed under the wrong one.
+      # Merging makes the release commit an ancestor of dev, which is what
+      # actually retires the conflict class. Every failure below is fatal: this
+      # step used to warn and pass, which is why three releases drifted before
+      # anyone noticed.
       - name: Open changelog-sync PR to dev
         if: steps.changelog.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.changelog.outputs.version }}
+          DATE: ${{ steps.changelog.outputs.date }}
         run: |
+          set -euo pipefail
+          # The branch below is cut from dev, whose tree need not carry this
+          # script yet, so stash a copy outside the work tree first.
+          cp .github/scripts/changelog-release.py "$RUNNER_TEMP/changelog-release.py"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin dev
-          BRANCH="chore/changelog-sync-${{ steps.version.outputs.tag }}"
+          git fetch origin dev main
+          BRANCH="chore/changelog-sync-$TAG"
           git checkout -b "$BRANCH" origin/dev
-          if git cherry-pick "${{ steps.changelog_commit.outputs.sha }}"; then
-            git push origin "$BRANCH"
-            gh pr create --base dev --head "$BRANCH" \
-              --title "chore(changelog): sync ${{ steps.version.outputs.tag }} heading to dev" \
-              --body "Automated — keeps CHANGELOG.md identical across dev/stage/main after the ${{ steps.version.outputs.tag }} release. Cherry-picks only the changelog rename commit from main, nothing else. This PR does get CI: wait for the test workflow and the release-readiness verdict before merging, the same as any other PR into dev."
-          else
-            git cherry-pick --abort
-            echo "::warning::CHANGELOG.md cherry-pick to dev conflicted — sync it by hand."
+          git merge --no-ff --no-commit origin/main || true
+          OTHER=$(git diff --name-only --diff-filter=U | grep -v '^CHANGELOG\.md$' || true)
+          if [ -n "$OTHER" ]; then
+            echo "::error::merging main into dev conflicted outside CHANGELOG.md: $(echo "$OTHER" | tr '\n' ' ')"
+            exit 1
           fi
+          # CHANGELOG.md is resolved by reconstruction, never by git's merge
+          # result: two insertions under the same [Unreleased] anchor is the one
+          # case git resolves wrongly and silently. Take dev's own file and
+          # apply the exact edit main just made to its copy.
+          git show origin/dev:CHANGELOG.md > CHANGELOG.md
+          python3 "$RUNNER_TEMP/changelog-release.py" CHANGELOG.md "$VERSION" "$DATE"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "dev already carries the $TAG heading and main's history — nothing to sync."
+            exit 0
+          fi
+          # Reaching here with content staged but no MERGE_HEAD means the merge
+          # aborted before touching the index — an untracked file main would
+          # overwrite, a transient git error, anything the `|| true` above
+          # swallowed. The unmerged-paths check cannot see that: there are no
+          # unmerged paths when the merge never started. Committing anyway
+          # would produce a single-parent commit and hand back exactly the
+          # ancestry-less sync #168 is about, silently.
+          if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            echo "::error::origin/main was not merged (no MERGE_HEAD) — refusing to open a sync PR whose commit would have one parent."
+            exit 1
+          fi
+          git commit -m "chore(changelog): sync $TAG heading to dev"
+          if git diff --quiet origin/main HEAD -- CHANGELOG.md; then
+            TITLE="chore(changelog): sync $TAG heading to dev"
+            DRIFT="dev's CHANGELOG.md will be byte-identical to main's once this merges."
+          else
+            TITLE="chore(changelog): sync $TAG heading to dev (dev diverged, check the filing)"
+            DRIFT="**dev's CHANGELOG.md will NOT match main's.** Entries landed on dev between the promotion and this release, so they are now filed under \`$TAG\`, which did not ship them. Move them back under \`## [Unreleased]\` on this branch before merging."
+          fi
+          {
+            echo "Automated. Puts the \`$TAG\` heading on dev after the release."
+            echo
+            echo "$DRIFT"
+            echo
+            echo "**Merge this with \`gh pr merge --merge --delete-branch\`, never \`--squash\`.** The branch merges main into dev deliberately; squashing discards that ancestry and re-creates #168, where the next promotion duplicates the version heading and files new entries under it. Merge it promptly too — until it lands, that promotion has the same broken merge base."
+            echo
+            echo "It gets CI like any other PR into dev: wait for the test workflow and the release-readiness verdict first."
+          } > "$RUNNER_TEMP/pr-body.md"
+          git push origin "$BRANCH"
+          gh pr create --base dev --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
