@@ -110,6 +110,27 @@ def test_entry_only_on_main_is_counted_not_dropped(tmp_path):
     assert out.read_text(encoding="utf-8") == main_text
 
 
+def test_reworded_entry_appears_under_both_headings(tmp_path):
+    """Pins the one case the script cannot resolve, so a refactor cannot quietly
+    change what the reviewer is shown. An entry reworded on dev after the
+    promotion does not match main's wording, so it stays under [Unreleased]
+    while main's copy stays under the version - the same change listed twice.
+    Which wording is authoritative is not something automation can decide; the
+    signal that a human must look is main_only being non-zero, which the sync
+    step puts in the PR title."""
+    long = "- add a user profile page for authenticated users"
+    short = "- add a user profile page"
+    section = "### Added\n\n%s\n"
+    proc, out = sync(tmp_path, released(section % long), dev(section % short))
+    assert proc.returncode == 0, proc.stderr
+    assert "kept=1" in proc.stdout
+    assert "main_only=1" in proc.stdout
+    text = out.read_text(encoding="utf-8")
+    unreleased, _, version = text.partition("## [1.1.0]")
+    assert short + "\n" in unreleased
+    assert long in version
+
+
 def test_missing_version_section_on_main_exits_2(tmp_path):
     proc, _ = sync(tmp_path, released(BODY, version="9.9.9"), dev(BODY))
     assert proc.returncode == 2

@@ -465,12 +465,29 @@ jobs:
             echo
             echo "It gets CI like any other PR into dev: wait for the test workflow and the release-readiness verdict first."
           } > "$RUNNER_TEMP/pr-body.md"
-          # Never --force. The checks above prove no PR exists for this branch,
-          # so the only way it exists on the remote is a previous run that died
-          # between this push and `gh pr create` - which fast-forwards. If it
-          # carries anything else, the push fails loudly instead of making those
-          # commits unreachable.
-          git push origin "$BRANCH"
+          # No PR exists for this branch in any state, so if it is on the remote
+          # at all, an earlier attempt pushed it and died before `gh pr create`.
+          # That branch cannot be fast-forwarded onto: the re-run's commit has a
+          # later committer timestamp and so a different SHA even when its
+          # content is byte-identical, and a plain push is rejected as
+          # non-fast-forward every time, wedging the recovery path this ordering
+          # exists to provide. Replace it - but only when its tip is a commit
+          # this step made, so anything a human put there fails loudly instead
+          # of becoming unreachable.
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch --quiet origin "$BRANCH"
+            TIP=$(git rev-parse FETCH_HEAD)
+            if [ "$(git log -1 --format=%s "$TIP")" = "chore(changelog): sync $TAG heading to dev" ] \
+               && [ "$(git log -1 --format=%an "$TIP")" = "github-actions[bot]" ]; then
+              echo "$BRANCH is left over from an attempt that died before opening the PR - replacing it."
+              git push --force origin "$BRANCH"
+            else
+              echo "::error::$BRANCH exists on the remote with no pull request, and its tip $TIP (\"$(git log -1 --format=%s "$TIP")\" by $(git log -1 --format=%an "$TIP")) is not a commit this step created. Refusing to overwrite it. Inspect that branch, then delete it to let a re-run rebuild the sync from scratch."
+              exit 1
+            fi
+          else
+            git push origin "$BRANCH"
+          fi
           gh pr create --base dev --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
 
       # Last, and only once the sync PR above exists. Idempotent so the re-run
