@@ -338,6 +338,17 @@ jobs:
             echo "dev already carries the $TAG heading and main's history — nothing to sync."
             exit 0
           fi
+          # Reaching here with content staged but no MERGE_HEAD means the merge
+          # aborted before touching the index — an untracked file main would
+          # overwrite, a transient git error, anything the `|| true` above
+          # swallowed. The unmerged-paths check cannot see that: there are no
+          # unmerged paths when the merge never started. Committing anyway
+          # would produce a single-parent commit and hand back exactly the
+          # ancestry-less sync #168 is about, silently.
+          if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            echo "::error::origin/main was not merged (no MERGE_HEAD) — refusing to open a sync PR whose commit would have one parent."
+            exit 1
+          fi
           git commit -m "chore(changelog): sync $TAG heading to dev"
           if git diff --quiet origin/main HEAD -- CHANGELOG.md; then
             TITLE="chore(changelog): sync $TAG heading to dev"
