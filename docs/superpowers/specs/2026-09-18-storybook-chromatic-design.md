@@ -63,10 +63,11 @@ catches more.
 | Theme modes snapshotted | Both light and dark | `globals.css` declares every token in both blocks precisely so neither mode falls back to the other's value. A dark-only baseline would never catch a broken light override, which is the specific regression this is for. |
 | How both modes are captured | `parameters.chromatic.modes` set globally in `preview.tsx` | Each story snapshots twice without writing two story exports per component. |
 | Trigger scope | PRs into `dev`, and pushes to `dev` | `dev` is the default branch and the baseline. Promotion PRs (`dev → stage`, `stage → main`) and `stage`/`main` pushes are skipped: that SHA was already snapshotted on `dev`, so re-running spends budget for no new information. |
-| PR gate | Advisory — `exitZeroOnChanges: true` | Chromatic posts its own check with a diff link; the CI job stays green. Consistent with how this repo treats its two review bots: read the finding, judge it yourself. A red X for every intentional restyle is friction without a second reviewer to justify it. |
-| Baseline acceptance | `autoAcceptChanges: dev` | Whatever lands on `dev` becomes the new baseline, so the next PR diffs against reality rather than against an ever-growing backlog. |
+| PR gate | Advisory — `exitZeroOnChanges: true` (the action's default, set explicitly) | Chromatic's own `UI Tests` / `Storybook Publish` PR checks carry the diff link; the CI job stays green. Consistent with how this repo treats its two review bots: read the finding, judge it yourself. A red X for every intentional restyle is friction without a second reviewer to justify it. |
+| Baseline acceptance | `autoAcceptChanges: dev` | Required, not just tidy: this repo squash-merges feature PRs into `dev`, and Chromatic's docs note that GitHub squash/rebase creates commits unassociated with the merged branch, so baselines do not carry over. `autoAcceptChanges` on the target branch is the documented remedy (the alternative is installing Chromatic's GitHub App for UI Review). |
 | Snapshot economy | TurboSnap (`onlyChanged: true`) | Cuts a typical PR from ~102 snapshots to the handful of changed components. Requires `fetch-depth: 0`. |
 | Vercel `ignore_command` | Left alone | `git diff --quiet HEAD^ HEAD -- web content` (`infra/main/shared.tf:349`) treats a stories-only commit as deploy-relevant, so such a commit redeploys an identical site. Wasteful, harmless, and avoids dragging Terraform into this change — which CI cannot validate (see §9). |
+| Dependabot PRs | Excluded from the job's `if:` | Actions secrets are not exposed to Dependabot-triggered runs, so `CHROMATIC_PROJECT_TOKEN` would be empty and the job would fail red on every bump — a missing token is an error, not a "change", so the advisory gate does not absorb it. Dependency bumps that do move the UI are caught by the next push to `dev`. |
 | Story location | Colocated, `components/**/*.stories.tsx` | Matches where `*.test.tsx` already lives. |
 | Story scope | All 17 components | §6 establishes that all 17 render without a mock. Leaving some out creates gaps that read as deliberate later. |
 
@@ -156,10 +157,21 @@ things the app gets from `app/layout.tsx` that a story never would:
    variables. A story renders none of that, so without a decorator every
    snapshot falls back to Georgia and `ui-sans-serif`. `preview.tsx`
    re-declares both faces (`nextjs-vite` supports `next/font/google`) and a
-   decorator applies both `.variable` classes. **This is the failure mode that
-   looks correct and is not** — a baseline of the fallback stack silently
-   locks in the wrong typography and then reports every future fix as a
-   regression.
+   decorator applies both `.variable` classes **to `document.documentElement`**
+   (via `useEffect`), not to a wrapper `<div>`.
+
+   The target is load-bearing, not a detail. `@theme` emits
+   `--font-display: var(--font-instrument-serif), serif` on `:root`, and a
+   custom property resolves its inner `var()` at computed-value time *on the
+   element that declares it*; descendants inherit the already-computed result.
+   Define `--font-instrument-serif` on a wrapper and `--font-display` has
+   already collapsed to `serif` on `:root` — every story renders in the
+   fallback. Same target as `withThemeByClassName`'s `parentSelector: 'html'`,
+   and the same thing `app/layout.tsx` does.
+
+   **This is the failure mode that looks correct and is not** — a baseline of
+   the fallback stack silently locks in the wrong typography and then reports
+   every future fix as a regression.
 3. **The theme class.** `withThemeByClassName({ themes: { light: '', dark: 'dark' }, parentSelector: 'html' })`
    — `dark` on `<html>`, exactly what `lib/site/theme.ts` and the
    pre-hydration script in `app/layout.tsx` do. Any other element would not
@@ -213,8 +225,10 @@ adding a job there changes gating semantics.
 chromatic:
   runs-on: ubuntu-latest
   if: >-
-    (github.event_name == 'push' && github.ref_name == 'dev') ||
-    (github.event_name == 'pull_request' && github.base_ref == 'dev')
+    github.actor != 'dependabot[bot]' && (
+      (github.event_name == 'push' && github.ref_name == 'dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'dev')
+    )
   steps:
     - uses: actions/checkout@v7
       with:
@@ -254,6 +268,9 @@ Success criteria, in order:
    `#131311`, not `#eceae5` — i.e. `withThemeByClassName` is reaching `<html>`.
 4. First `chromatic` run on `dev` completes and establishes a baseline; the
    Chromatic UI shows two modes per story.
+   Confirm `UI Tests` and `Storybook Publish` appear as commit statuses on the
+   next PR — if they do not, the project is not linked to the repo (§11.1) and
+   the advisory gate is silently a no-op.
 5. **Regression proof.** Change `--color-accent` in `globals.css` by one value
    on a scratch branch, open a PR into `dev`, and confirm Chromatic reports a
    diff in both modes and that the CI job still reports green (advisory gate
@@ -278,6 +295,11 @@ Success criteria, in order:
 - **Free-tier ceiling.** ~102 snapshots per cold build against 5,000/month leaves
   wide headroom under the §3 trigger scope, but widening triggers or adding
   viewports erodes it quickly. §5 has the arithmetic.
+- **Advisory gate degrading to silence.** `exitZeroOnChanges` plus
+  `exitOnceUploaded` means the Actions job is green before Chromatic has even
+  finished comparing. Every PR-visible signal therefore comes from Chromatic's
+  own checks, which exist only because the project is repo-linked. Verified by
+  §8.4.
 - **Redundant Vercel deploys.** Accepted, per §3. A stories-only commit
   redeploys an identical site.
 
@@ -295,7 +317,12 @@ Success criteria, in order:
 
 These are not automatable and block everything else:
 
-1. Create a Chromatic project linked to `DataCrusade1999/supreme-enigma`.
+1. Create a Chromatic project **linked to** `DataCrusade1999/supreme-enigma`.
+   Linking is what makes Chromatic post its `UI Tests` / `Storybook Publish` PR
+   checks — per Chromatic's docs, linked GitHub projects get that "out of the
+   box", with no separate GitHub App install. Since the gate here is advisory
+   and the job exits green, those checks are the *only* PR-visible signal: an
+   unlinked project means the whole thing runs and reports nothing.
 2. Add `CHROMATIC_PROJECT_TOKEN` as a GitHub repository secret.
 
 Until both exist, the `chromatic` job fails on every run. Record in the
@@ -305,8 +332,7 @@ pending-manual-actions memory.
 
 Per `CLAUDE.md`:
 
-- File the GitHub issue **before** the work starts — labels `area: portfolio`,
-  `area: testing`, `priority: medium`. Close it from the PR with `Closes #N`.
+- Tracking issue: **#209**. Close it from the PR with `Closes #209`.
 - `CHANGELOG.md` entry under `## [Unreleased]`, by hand, in the same PR.
 - PR targets `dev`, merged with `--squash --delete-branch`.
 - No Terraform touched, so the `terraform plan` precondition does not apply.
