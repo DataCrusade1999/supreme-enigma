@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """Insert a released-version heading under CHANGELOG.md's [Unreleased] heading.
 
-Run by deploy.yml's `release` job twice per release, against the same version
-and date, and it must produce byte-identical output both times:
+Run by deploy.yml's `release` job against `main`, to turn the accumulated
+[Unreleased] entries into the release's section. The matching edit on `dev` is
+made by changelog-sync.py, which copies main's released section verbatim rather
+than re-deriving it, so the two files cannot drift.
 
-  1. on `main`, to turn the accumulated [Unreleased] entries into the release's
-     section, and
-  2. on the `chore/changelog-sync-*` branch cut from `dev`, to reproduce that
-     same edit there rather than replaying main's commit.
-
-Replaying it (cherry-pick) is what issue #168 was: the replay conflicts against
-dev's own [Unreleased] entries, and a copy of a commit has no ancestry, so the
-next promotion's merge base still predates the heading and git re-inserts it.
+Idempotent by version, deliberately not by version+date: the `release` job can
+re-run on a later day (a sync failure fails the job before the tag is created,
+and the re-run is the recovery path), and a date-sensitive check would insert a
+second heading for the same version on that re-run, filing the entries under
+the stale copy. That is the #168 shape.
 
 Exits 2 if the [Unreleased] heading is missing, so a malformed CHANGELOG.md
 fails the step instead of silently doing nothing.
 """
 
+import re
 import sys
 
 UNRELEASED = "## [Unreleased]"
@@ -32,10 +32,10 @@ def main() -> int:
     if UNRELEASED not in content:
         print(f"{path}: no {UNRELEASED} heading found", file=sys.stderr)
         return 2
-    heading = f"## [{version}] - {date}"
-    if heading in content:
-        print(f"{path}: {heading} already present, nothing to do")
+    if re.search(rf"^## \[{re.escape(version)}\]", content, re.MULTILINE):
+        print(f"{path}: ## [{version}] already present, nothing to do")
         return 0
+    heading = f"## [{version}] - {date}"
     with open(path, "w", encoding="utf-8", newline="") as f:
         f.write(content.replace(UNRELEASED, f"{UNRELEASED}\n\n{heading}", 1))
     print(f"{path}: inserted {heading}")

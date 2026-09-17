@@ -33,6 +33,11 @@ jobs:
         working-directory: lambda
         run: pytest -v
 
+      # The release job's changelog scripts. Cheap, and they are the only thing
+      # standing between a bad merge base and issue #168 coming back.
+      - name: Run CI script tests
+        run: pytest -q .github/scripts/test_changelog_sync.py
+
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
@@ -83,6 +88,57 @@ jobs:
       - name: Fail the job if lint or any test suite failed
         if: steps.lint.outputs.exit_code != '0' || steps.vitest.outputs.exit_code != '0' || steps.playwright.outputs.exit_code != '0'
         run: exit 1
+
+  # Refuses a promotion whose merge base predates the last release's changelog
+  # heading. Merging in that state corrupts CHANGELOG.md: git sees the release
+  # transform as one side's change and the branch's new entries as the other's,
+  # and splices them without a conflict - a duplicate heading when the branch
+  # carries a copy of the transform, entries filed under a version that did not
+  # ship them when it does not. It happens when
+  # the chore/changelog-sync-* PR has not been merged yet, or was merged with
+  # --squash, which copies the release commit instead of inheriting it.
+  #
+  # Checked here rather than in the release job on purpose: by the time
+  # `release` runs, the promotion that duplicated the heading has already
+  # happened, so detection there is after the damage. This refuses the merge
+  # that would cause it.
+  #
+  # The invariant is the previous release *tag* being an ancestor of the branch
+  # being promoted - not `main` being an ancestor of `dev`, which is false on
+  # every healthy run, because the merge commit a promotion creates lives only
+  # on the target branch.
+  #
+  # Branch protection is not enforced on this repo (private, no Pro), so this
+  # is a red X rather than a hard block. Do not merge past it.
+  promotion-guard:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && (github.base_ref == 'stage' || github.base_ref == 'main')
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Assert the last release is an ancestor of the branch being promoted
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --quiet origin +refs/heads/main:refs/remotes/origin/main
+          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v*' origin/main 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            echo "No release tag reachable from main yet - nothing to check."
+            exit 0
+          fi
+          # Deliberately the PR head, not HEAD: on a pull_request event HEAD is
+          # the synthetic merge commit, whose base parent already contains the
+          # tag, so the check would pass for free and test nothing.
+          if git merge-base --is-ancestor "$LAST_TAG" "$HEAD_SHA"; then
+            echo "$LAST_TAG is an ancestor of $HEAD_REF - the merge base already carries its changelog heading."
+            exit 0
+          fi
+          echo "::error::$LAST_TAG is not an ancestor of $HEAD_REF, so merging this promotion would corrupt CHANGELOG.md - either a duplicate $LAST_TAG heading, or entries that did not ship in $LAST_TAG spliced in under it (issue #168). Merge the chore/changelog-sync-$LAST_TAG PR into dev first, with --merge and never --squash, then promote again."
+          exit 1
 
   changes:
     runs-on: ubuntu-latest
@@ -267,10 +323,11 @@ jobs:
           VERSION="${VERSION#v}"
           DATE=$(date -u +%Y-%m-%d)
           python3 .github/scripts/changelog-release.py CHANGELOG.md "$VERSION" "$DATE"
-          # Handed to the sync step, which re-runs the identical transform on
-          # dev rather than replaying this commit. Same inputs, same output.
+          # Handed to the sync step, which copies the section this just created
+          # on main rather than re-deriving it, so the two cannot disagree.
+          # Also what that step keys its `if:` on: it is set whenever a sync is
+          # owed, including on a re-run, where `changed` is false.
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "date=$DATE" >> "$GITHUB_OUTPUT"
           if git diff --quiet CHANGELOG.md; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -288,38 +345,62 @@ jobs:
           git push origin HEAD:main
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Create tag and release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "${{ steps.version.outputs.tag }}" --target main --generate-notes
-
-      # Opens the PR that puts this release's heading back on dev. It merges
-      # main into a branch off dev instead of cherry-picking the release
-      # commit, because #168 proved a copy is not enough: a cherry-pick — or a
-      # squash-merge of this PR — leaves the release commit outside dev's
-      # history, so the next dev -> stage -> main promotion still has a merge
-      # base predating the heading, sees two insertions at the same anchor, and
-      # emits the heading twice with the new entries filed under the wrong one.
-      # Merging makes the release commit an ancestor of dev, which is what
-      # actually retires the conflict class. Every failure below is fatal: this
-      # step used to warn and pass, which is why three releases drifted before
-      # anyone noticed.
+      # Opens the PR that puts this release's heading back on dev, and does it
+      # BEFORE the tag exists. It merges main into a branch off dev instead of
+      # cherry-picking the release commit, because #168 proved a copy is not
+      # enough: a cherry-pick - or a squash-merge of this PR - leaves the
+      # release commit outside dev's history, so the next dev -> stage -> main
+      # promotion still has a merge base predating the heading, sees two
+      # insertions at the same anchor, and emits the heading twice with the new
+      # entries filed under the wrong one. Merging makes the release commit an
+      # ancestor of dev, which is what actually retires the conflict class.
+      #
+      # Every failure below is fatal: this step used to warn and pass, which is
+      # why three releases drifted before anyone noticed. Running it before the
+      # tag is what makes that safe - a failure here leaves main with the
+      # changelog commit and no tag, and re-running the job is the recovery
+      # path, so nothing is ever published that has no reconciliation behind
+      # it. Every step in that path is idempotent by version, not by date.
       - name: Open changelog-sync PR to dev
-        if: steps.changelog.outputs.changed == 'true'
+        # Not `changed == 'true'`: that is false on a re-run, because main
+        # already carries the heading by then. The version output is set
+        # whenever CHANGELOG.md exists, which is exactly when a sync is owed.
+        if: steps.changelog.outputs.version != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.changelog.outputs.version }}
-          DATE: ${{ steps.changelog.outputs.date }}
         run: |
           set -euo pipefail
           # The branch below is cut from dev, whose tree need not carry this
           # script yet, so stash a copy outside the work tree first.
-          cp .github/scripts/changelog-release.py "$RUNNER_TEMP/changelog-release.py"
+          cp .github/scripts/changelog-sync.py "$RUNNER_TEMP/changelog-sync.py"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin dev main
           BRANCH="chore/changelog-sync-$TAG"
+          # A sync PR in any state means an earlier attempt got this far, so
+          # this run must not touch the branch: a human may have corrected it,
+          # and making their commits unreachable is worse than doing nothing.
+          # Checking only `--state open` would miss a PR someone closed while
+          # leaving the branch alive, which is the case with commits worth the
+          # most.
+          # gh's own --jq, so this does not depend on a jq binary being present.
+          IFS=$'	' read -r PR_STATE PR_URL <<< "$(gh pr list --head "$BRANCH" --base dev --state all --json state,url --jq '[(.[0].state // ""), (.[0].url // "")] | @tsv')"
+          case "$PR_STATE" in
+            OPEN)
+              echo "sync PR for $BRANCH is already open: $PR_URL"
+              exit 0
+              ;;
+            MERGED)
+              echo "sync PR for $BRANCH has already merged: $PR_URL"
+              exit 0
+              ;;
+            CLOSED)
+              echo "::error::a sync PR for $BRANCH was closed without merging ($PR_URL), so $TAG is not reconciled onto dev and this step will not re-open it or push over the branch. Reopen that PR and merge it, or delete the branch to have the next run rebuild it from scratch."
+              exit 1
+              ;;
+          esac
           git checkout -b "$BRANCH" origin/dev
           git merge --no-ff --no-commit origin/main || true
           OTHER=$(git diff --name-only --diff-filter=U | grep -v '^CHANGELOG\.md$' || true)
@@ -329,42 +410,96 @@ jobs:
           fi
           # CHANGELOG.md is resolved by reconstruction, never by git's merge
           # result: two insertions under the same [Unreleased] anchor is the one
-          # case git resolves wrongly and silently. Take dev's own file and
-          # apply the exact edit main just made to its copy.
-          git show origin/dev:CHANGELOG.md > CHANGELOG.md
-          python3 "$RUNNER_TEMP/changelog-release.py" CHANGELOG.md "$VERSION" "$DATE"
+          # case git resolves wrongly and silently. The released section is
+          # copied from main verbatim, so the two files cannot drift; the only
+          # thing added is whatever landed on dev after the promotion, which
+          # stays under [Unreleased] instead of being misfiled under a version
+          # that did not ship it.
+          git show origin/main:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
+          git show origin/dev:CHANGELOG.md > "$RUNNER_TEMP/dev-changelog.md"
+          python3 "$RUNNER_TEMP/changelog-sync.py" \
+            "$RUNNER_TEMP/main-changelog.md" "$RUNNER_TEMP/dev-changelog.md" \
+            "$VERSION" CHANGELOG.md | tee "$RUNNER_TEMP/counts.txt"
+          KEPT=$(sed -n 's/^kept=//p' "$RUNNER_TEMP/counts.txt")
+          MAIN_ONLY=$(sed -n 's/^main_only=//p' "$RUNNER_TEMP/counts.txt")
           git add -A
           if git diff --cached --quiet; then
-            echo "dev already carries the $TAG heading and main's history — nothing to sync."
+            echo "dev already carries the $TAG heading and main's history - nothing to sync."
             exit 0
           fi
           # Reaching here with content staged but no MERGE_HEAD means the merge
-          # aborted before touching the index — an untracked file main would
+          # aborted before touching the index - an untracked file main would
           # overwrite, a transient git error, anything the `|| true` above
           # swallowed. The unmerged-paths check cannot see that: there are no
           # unmerged paths when the merge never started. Committing anyway
           # would produce a single-parent commit and hand back exactly the
           # ancestry-less sync #168 is about, silently.
-          if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
-            echo "::error::origin/main was not merged (no MERGE_HEAD) — refusing to open a sync PR whose commit would have one parent."
+          # The `git merge-base` half exempts the case where dev already
+          # contains main - a re-run after the sync PR was merged. There is no
+          # MERGE_HEAD then (the merge was a no-op) and no ancestry to lose, so
+          # a single-parent commit is fine and the error below would be a wrong
+          # diagnosis of a healthy state.
+          if ! git rev-parse -q --verify MERGE_HEAD >/dev/null && ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "::error::origin/main was not merged (no MERGE_HEAD) - refusing to open a sync PR whose commit would have one parent."
             exit 1
           fi
           git commit -m "chore(changelog): sync $TAG heading to dev"
-          if git diff --quiet origin/main HEAD -- CHANGELOG.md; then
-            TITLE="chore(changelog): sync $TAG heading to dev"
-            DRIFT="dev's CHANGELOG.md will be byte-identical to main's once this merges."
-          else
-            TITLE="chore(changelog): sync $TAG heading to dev (dev diverged, check the filing)"
-            DRIFT="**dev's CHANGELOG.md will NOT match main's.** Entries landed on dev between the promotion and this release, so they are now filed under \`$TAG\`, which did not ship them. Move them back under \`## [Unreleased]\` on this branch before merging."
+          TITLE="chore(changelog): sync $TAG heading to dev"
+          if [ "$MAIN_ONLY" != "0" ]; then
+            TITLE="$TITLE (main has $MAIN_ONLY entries dev does not)"
           fi
           {
             echo "Automated. Puts the \`$TAG\` heading on dev after the release."
             echo
-            echo "$DRIFT"
+            if [ "$KEPT" = "0" ]; then
+              echo "dev's CHANGELOG.md will be byte-identical to main's once this merges."
+            else
+              echo "$KEPT entries landed on dev between the promotion and this release, so they did not ship in \`$TAG\`. They have been left under \`## [Unreleased]\` rather than filed under the new heading - nothing to move by hand."
+            fi
+            if [ "$MAIN_ONLY" != "0" ]; then
+              echo
+              echo "**$MAIN_ONLY entries are filed under \`$TAG\` on main but were not under dev's \`## [Unreleased]\`.** Either someone committed to main directly, or an entry was reworded on dev after the promotion. Check them before merging."
+            fi
             echo
-            echo "**Merge this with \`gh pr merge --merge --delete-branch\`, never \`--squash\`.** The branch merges main into dev deliberately; squashing discards that ancestry and re-creates #168, where the next promotion duplicates the version heading and files new entries under it. Merge it promptly too — until it lands, that promotion has the same broken merge base."
+            echo "**Merge this with \`gh pr merge --merge --delete-branch\`, never \`--squash\`.** The branch merges main into dev deliberately; squashing discards that ancestry and re-creates #168, where the next promotion duplicates the version heading and files new entries under it. Merge it promptly, too - until it lands, the promotion-guard job fails every PR into stage and main."
             echo
             echo "It gets CI like any other PR into dev: wait for the test workflow and the release-readiness verdict first."
           } > "$RUNNER_TEMP/pr-body.md"
-          git push origin "$BRANCH"
+          # No PR exists for this branch in any state, so if it is on the remote
+          # at all, an earlier attempt pushed it and died before `gh pr create`.
+          # That branch cannot be fast-forwarded onto: the re-run's commit has a
+          # later committer timestamp and so a different SHA even when its
+          # content is byte-identical, and a plain push is rejected as
+          # non-fast-forward every time, wedging the recovery path this ordering
+          # exists to provide. Replace it - but only when its tip is a commit
+          # this step made, so anything a human put there fails loudly instead
+          # of becoming unreachable.
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch --quiet origin "$BRANCH"
+            TIP=$(git rev-parse FETCH_HEAD)
+            if [ "$(git log -1 --format=%s "$TIP")" = "chore(changelog): sync $TAG heading to dev" ] \
+               && [ "$(git log -1 --format=%an "$TIP")" = "github-actions[bot]" ]; then
+              echo "$BRANCH is left over from an attempt that died before opening the PR - replacing it."
+              git push --force origin "$BRANCH"
+            else
+              echo "::error::$BRANCH exists on the remote with no pull request, and its tip $TIP (\"$(git log -1 --format=%s "$TIP")\" by $(git log -1 --format=%an "$TIP")) is not a commit this step created. Refusing to overwrite it. Inspect that branch, then delete it to let a re-run rebuild the sync from scratch."
+              exit 1
+            fi
+          else
+            git push origin "$BRANCH"
+          fi
           gh pr create --base dev --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
+
+      # Last, and only once the sync PR above exists. Idempotent so the re-run
+      # that recovers a failed sync does not trip over its own earlier release.
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG is already released - nothing to do."
+            exit 0
+          fi
+          gh release create "$TAG" --target main --generate-notes

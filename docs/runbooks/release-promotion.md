@@ -104,11 +104,23 @@ Confirm the tag's sha is on the branch and that no `lambda/` change is
 missing from it — the procedure is in
 [stale-lambda-recovery.md](stale-lambda-recovery.md#detect).
 
-On `main` only, a release is cut: a `chore(changelog): release vX.Y.Z` commit,
-a tag, a GitHub Release, and a `chore/changelog-sync-vX.Y.Z` PR back into
-`dev`. **Merge that sync PR.** Leaving it open means `main`'s `CHANGELOG.md`
-diverges from `dev`'s and the next promotion conflicts. It does get CI —
-review it like any other PR.
+On `main` only, a release is cut, in this order: a `chore(changelog): release
+vX.Y.Z` commit on `main`, a `chore/changelog-sync-vX.Y.Z` PR back into `dev`,
+and then the tag and GitHub Release. The tag is last on purpose — the sync step
+is fatal on failure, so a failure leaves nothing published and re-running the
+job is the recovery path.
+
+**Merge that sync PR, with `--merge` and never `--squash`.** Until it lands,
+`dev`'s history does not contain the release commit, and `promotion-guard`
+fails every PR into `stage` and `main` — correctly, because merging one would
+duplicate the version heading in `CHANGELOG.md` (#168). Squashing it breaks the
+same way, which is what happened to v1.5.1. It does get CI — review it like any
+other PR.
+
+Entries that landed on `dev` after the promotion are handled by the sync step
+itself: they stay under `## [Unreleased]` and nothing needs moving by hand. If
+the PR *title* says `main has N entries dev does not`, that one needs a look —
+it means a direct commit to `main` or an entry reworded on `dev`.
 
 ```bash
 gh release list --limit 3
