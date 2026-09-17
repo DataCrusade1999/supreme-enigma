@@ -379,14 +379,28 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin dev main
           BRANCH="chore/changelog-sync-$TAG"
-          # A PR already open means an earlier attempt got this far. Leave it
-          # alone: a human may have hand-corrected the branch, and force-pushing
-          # over that is worse than doing nothing.
-          OPEN=$(gh pr list --head "$BRANCH" --base dev --state open --json url --jq '.[0].url // ""')
-          if [ -n "$OPEN" ]; then
-            echo "sync PR for $BRANCH is already open: $OPEN"
-            exit 0
-          fi
+          # A sync PR in any state means an earlier attempt got this far, so
+          # this run must not touch the branch: a human may have corrected it,
+          # and making their commits unreachable is worse than doing nothing.
+          # Checking only `--state open` would miss a PR someone closed while
+          # leaving the branch alive, which is the case with commits worth the
+          # most.
+          # gh's own --jq, so this does not depend on a jq binary being present.
+          IFS=$'	' read -r PR_STATE PR_URL <<< "$(gh pr list --head "$BRANCH" --base dev --state all --json state,url --jq '[(.[0].state // ""), (.[0].url // "")] | @tsv')"
+          case "$PR_STATE" in
+            OPEN)
+              echo "sync PR for $BRANCH is already open: $PR_URL"
+              exit 0
+              ;;
+            MERGED)
+              echo "sync PR for $BRANCH has already merged: $PR_URL"
+              exit 0
+              ;;
+            CLOSED)
+              echo "::error::a sync PR for $BRANCH was closed without merging ($PR_URL), so $TAG is not reconciled onto dev and this step will not re-open it or push over the branch. Reopen that PR and merge it, or delete the branch to have the next run rebuild it from scratch."
+              exit 1
+              ;;
+          esac
           git checkout -b "$BRANCH" origin/dev
           git merge --no-ff --no-commit origin/main || true
           OTHER=$(git diff --name-only --diff-filter=U | grep -v '^CHANGELOG\.md$' || true)
@@ -451,7 +465,12 @@ jobs:
             echo
             echo "It gets CI like any other PR into dev: wait for the test workflow and the release-readiness verdict first."
           } > "$RUNNER_TEMP/pr-body.md"
-          git push --force origin "$BRANCH"
+          # Never --force. The checks above prove no PR exists for this branch,
+          # so the only way it exists on the remote is a previous run that died
+          # between this push and `gh pr create` - which fast-forwards. If it
+          # carries anything else, the push fails loudly instead of making those
+          # commits unreachable.
+          git push origin "$BRANCH"
           gh pr create --base dev --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
 
       # Last, and only once the sync PR above exists. Idempotent so the re-run

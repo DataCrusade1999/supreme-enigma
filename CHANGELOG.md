@@ -19,8 +19,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
   so a re-run on a later day inserted a second heading for the same version and
   filed the entries under the stale copy — the #168 shape, reachable through
   the new recovery path. The release creation is idempotent too, and the sync
-  step leaves an already-open sync PR alone rather than force-pushing over a
-  branch a human may have corrected. Closes #195.
+  step never force-pushes the sync branch and leaves it alone when a sync PR
+  for it exists in any state, so commits a human pushed to it cannot be made
+  unreachable; a sync PR closed without merging is a fatal error rather than
+  a silent skip, since the release it belongs to is then unreconciled.
+  Closes #195.
 - A `promotion-guard` job now fails any PR into `stage` or `main` whose head
   branch does not already contain the last release tag. That is exactly the
   state in which merging duplicates the version heading: it means the
