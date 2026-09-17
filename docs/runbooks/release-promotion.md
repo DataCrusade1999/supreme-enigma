@@ -89,7 +89,7 @@ before promoting again.
 ### 5. Verify the deployment
 
 Vercel deploys from the branch automatically, but only if the commit touches
-`app/` or `content/` — the `ignore_command` on `vercel_project.looper` is an
+`web/` or `content/` — the `ignore_command` on `vercel_project.looper` is an
 allowlist, so a promotion carrying only `lambda/` or `infra/` changes produces
 no new frontend deployment. That is correct behaviour, not a failed deploy.
 

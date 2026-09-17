@@ -1,4 +1,4 @@
-// app/lib/site/theme.ts
+// web/lib/site/theme.ts
 // Single place that writes the theme to the DOM + localStorage, so every
 // caller (the command bar's `theme dark`/`theme light` commands, the
 // ThemeToggle button) stays in sync. Callers that hold their own React state

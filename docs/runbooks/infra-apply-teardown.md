@@ -108,8 +108,10 @@ Read all of this before running it.
 
 The Vercel project, all three Lambdas, the ECR repo (`force_delete = true`,
 so images go with it), all three S3 audio buckets, and the IAM resources —
-including the `ci-deploy` user, so re-applying means refreshing the `AWS_CI_*`
-GitHub secrets before CI can deploy again.
+including both OIDC providers and the `bgm-looper-ci-deploy` and
+`bgm-looper-vercel` roles. Re-applying recreates them under the same names, so
+their ARNs are unchanged and neither CI nor the app needs anything copied by
+hand. `deploy.yml` hardcodes the CI role ARN, and that ARN survives a recreate.
 
 **The public portfolio goes down too.** The Vercel project serves the public
 site and the gated tools from one deployment; there is no way to destroy the
@@ -165,7 +167,8 @@ aws ecr describe-images --repository-name bgm-looper-lambda \
 ```
 
 Then re-add the hand-set Vercel variables and the analytics toggles from the
-table above, and refresh the `AWS_CI_*` GitHub secrets.
+table above. Nothing to do for credentials — both roles come back with their
+original ARNs, and there are no access keys or GitHub secrets in the loop.
 
 `infra/bootstrap` has no persisted state and is gitignored, so a bare
 `terraform apply` there proposes recreating the existing state bucket and

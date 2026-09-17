@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getReader } from "./keystatic-reader";
 
 describe("getReader", () => {
-  it("resolves content/blog relative to the repo root (not app/) and finds the seed post", async () => {
+  it("resolves content/blog relative to the repo root (not web/) and finds the seed post", async () => {
     const reader = getReader();
     const slugs = await reader.collections.blog.list();
     expect(slugs).toContain("hello-world");

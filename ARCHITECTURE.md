@@ -19,7 +19,7 @@ The IAM policies were already extended to make room for it.
 Browser
   │ (shared password → signed HttpOnly cookie)
   ▼
-Vercel (Next.js 15 + React 19, root_directory="app")
+Vercel (Next.js 15 + React 19, root_directory="web")
   │  proxy.ts gates /tools/bgm-looper, /api/looper/*, /keystatic, /api/keystatic/*
   │  (public site pages — home/about/projects/resume/contact — no auth)
   │
@@ -51,11 +51,18 @@ access blocked, CORS (PUT/GET, `*` origin), 1-day object lifecycle.
   (tightened 2026-08-05, was keep-5)
 - One `lambda_exec` IAM role, scoped to all 3 buckets, shared by all 3
   functions
-- One Vercel service-account IAM user (S3 put/get + Lambda invoke, scoped
-  to all 6 current functions/buckets — already includes the
-  not-yet-created Demucs ones, per the IAM policy extension already
-  applied)
-- One CI-deploy IAM user (ECR push + Lambda update-function-code)
+- Two OIDC identity providers (`token.actions.githubusercontent.com` and
+  `oidc.vercel.com/<team slug>`) and one federated role each. **No IAM users
+  and no long-lived access keys anywhere** — both replaced permanent key
+  pairs in #155, 2026-09-16.
+  - `bgm-looper-vercel`, assumed by the app at runtime (S3 put/get + Lambda
+    invoke, scoped to all 6 current functions/buckets — already includes the
+    not-yet-created Demucs ones, per the IAM policy extension already
+    applied). Trusts the `production` and `preview` Vercel environments.
+  - `bgm-looper-ci-deploy`, assumed by `deploy.yml` (ECR push + Lambda
+    update-function-code). Trusts only `refs/heads/{main,dev,stage}`, pinned
+    with `StringEquals` on GitHub's immutable ID-qualified subject, so a fork
+    PR cannot assume it.
 - One Vercel project, env vars overridden per branch via
   `git_branch`-scoped Terraform resources
 
@@ -64,7 +71,7 @@ access blocked, CORS (PUT/GET, `*` origin), 1-day object lifecycle.
 Single shared password (Vercel env var), constant-time compare in
 `/api/login`, HttpOnly signed cookie (`COOKIE_SECRET`, payload is just the
 literal string `"authenticated"`) — no accounts, no per-user state.
-`app/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth
+`web/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth
 for what's protected.
 
 ## CI/CD

@@ -155,7 +155,7 @@ back on the test profile URL — that configuration was tested and does not work
 
 **The agent's browser cannot resize the viewport**, so mobile-responsiveness
 test cases come back `Blocked` no matter what. Don't write intents that ask for
-them; Playwright's projects in `app/playwright.config.ts` are the right tool for
+them; Playwright's projects in `web/playwright.config.ts` are the right tool for
 viewport testing.
 
 Gotchas:
@@ -171,7 +171,7 @@ Gotchas:
   `bgm-looper-processor-stage` invocations. Objects expire after 1 day, so the
   cost is bounded but not zero.
 - **`/tools/bgm-looper` is not reachable by the agent.** The Vercel bypass gets
-  it past Vercel Authentication, but `app/lib/route-gate.ts` gates the tool,
+  it past Vercel Authentication, but `web/lib/route-gate.ts` gates the tool,
   `/api/looper`, and `/keystatic` behind `APP_PASSWORD` independently. Scope
   `test_requirement` to the public portfolio pages, or accept putting the app
   password into the requirement string — where it would land in Actions logs

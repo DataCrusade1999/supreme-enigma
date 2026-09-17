@@ -102,9 +102,9 @@ resource "aws_ecr_lifecycle_policy" "looper" {
   })
 }
 
-# --- IAM: one Lambda exec role shared by all three functions, and the two service-account
-#     users (Vercel's runtime creds, CI's deploy creds) — both scoped to all three envs'
-#     resources via the all_lambda_function_arns / all_audio_bucket_arns locals above ---
+# --- IAM: one Lambda exec role shared by all three functions. The Vercel runtime and CI
+#     deploy identities are federated roles, further down beside their OIDC providers —
+#     there are no IAM users and no long-lived access keys in this project ---
 
 resource "aws_iam_role" "lambda_exec" {
   name = "${var.project_name}-lambda-exec"
@@ -141,116 +141,15 @@ resource "aws_iam_role_policy" "lambda_s3" {
   })
 }
 
-resource "aws_iam_user" "vercel" {
-  name = "${var.project_name}-vercel-sa"
-}
-
-resource "aws_iam_access_key" "vercel" {
-  user = aws_iam_user.vercel.name
-}
-
 locals {
   # Only main's bucket holds resume data — dev/stage read and write it too, via the
   # env-agnostic RESUME_BUCKET_NAME. See the design spec §4.1.
   resume_bucket_arn = aws_s3_bucket.audio.arn
 }
 
-resource "aws_iam_user_policy" "vercel" {
-  name = "${var.project_name}-vercel-policy"
-  user = aws_iam_user.vercel.name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AudioScratchObjects"
-        Effect = "Allow"
-        Action = ["s3:PutObject", "s3:GetObject"]
-        Resource = flatten([
-          for arn in local.all_audio_bucket_arns : ["${arn}/uploads/*", "${arn}/outputs/*"]
-        ])
-      },
-      {
-        Sid      = "ResumeObjects"
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = ["${local.resume_bucket_arn}/resume/*"]
-      },
-      {
-        Sid      = "ResumeDraftCleanup"
-        Effect   = "Allow"
-        Action   = ["s3:DeleteObject"]
-        Resource = ["${local.resume_bucket_arn}/resume/drafts/*"]
-      },
-      {
-        # HeadObject on a key that does not exist returns 403, not 404, unless the
-        # caller holds s3:ListBucket on the bucket — so without this the app's
-        # objectExists() rethrows on every absent key and the first extraction and
-        # the first publish both 500. Deliberately unconditioned: S3 evaluates this
-        # for its 404-vs-403 decision with no s3:prefix in context, so an
-        # s3:prefix-scoped grant does not restore the 404. Bucket ARN only, so this
-        # grants listing key names in main's bucket and nothing else — GetObject
-        # stays scoped to uploads/, outputs/ and resume/ above.
-        Sid      = "ResumeHeadObjectNotFound"
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
-        Resource = [local.resume_bucket_arn]
-      },
-      {
-        Sid      = "InvokeProcessor"
-        Effect   = "Allow"
-        Action   = ["lambda:InvokeFunction"]
-        Resource = local.all_lambda_function_arns
-      }
-    ]
-  })
-}
-
-resource "aws_iam_user" "ci_deploy" {
-  name = "${var.project_name}-ci-deploy"
-}
-
-resource "aws_iam_access_key" "ci_deploy" {
-  user = aws_iam_user.ci_deploy.name
-}
-
-resource "aws_iam_user_policy" "ci_deploy" {
-  name = "${var.project_name}-ci-deploy-policy"
-  user = aws_iam_user.ci_deploy.name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["ecr:GetAuthorizationToken"]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:InitiateLayerUpload",
-          "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload",
-          "ecr:PutImage",
-          "ecr:BatchGetImage",
-          "ecr:DescribeImages",
-        ]
-        Resource = aws_ecr_repository.looper.arn
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["lambda:UpdateFunctionCode", "lambda:GetFunction"]
-        Resource = local.all_lambda_function_arns
-      }
-    ]
-  })
-}
-
-# --- GitHub Actions OIDC: the federated replacement for aws_iam_user.ci_deploy above.
-#     Added alongside it, not instead of it — deploy.yml still uses the static key until
-#     the workflow is switched over, and the user is only deleted once that is proven. ---
+# --- GitHub Actions OIDC: how deploy.yml authenticates to AWS. It replaced an IAM user
+#     with a permanent access key pair (#155); the user and its key were deleted once a
+#     real deploy had run on all three branches through this role. ---
 
 # No thumbprint_list: AWS validates token.actions.githubusercontent.com against its own
 # trusted-root CA library, so pinning a leaf thumbprint here only creates something that
@@ -288,8 +187,8 @@ resource "aws_iam_role" "ci_deploy" {
   })
 }
 
-# Same three statements as aws_iam_user_policy.ci_deploy, verbatim — this is a move of
-# the identity, not a change of permissions.
+# Carried over verbatim from the deleted ci-deploy user's inline policy — the migration
+# moved the identity, not the permissions.
 resource "aws_iam_role_policy" "ci_deploy" {
   name = "${var.project_name}-ci-deploy-policy"
   role = aws_iam_role.ci_deploy.id
@@ -324,9 +223,10 @@ resource "aws_iam_role_policy" "ci_deploy" {
   })
 }
 
-# --- Vercel OIDC: the federated replacement for aws_iam_user.vercel above. Same shape
-#     as the GitHub role — added alongside the user, and the app only starts using it
-#     once APP_AWS_ROLE_ARN is read at both client construction sites. ---
+# --- Vercel OIDC: how the app reaches S3 and Lambda at runtime, via awsCredentials() in
+#     web/lib/aws.ts reading APP_AWS_ROLE_ARN. It replaced an IAM user with a permanent
+#     access key pair (#155); the user and its key were deleted once production, stage
+#     and dev had each been exercised end to end through this role. ---
 
 resource "aws_iam_openid_connect_provider" "vercel" {
   # Team issuer mode, set on vercel_project.looper below — the issuer carries the
@@ -361,9 +261,11 @@ resource "aws_iam_role" "vercel" {
   })
 }
 
-# The five statements from aws_iam_user_policy.vercel, verbatim — a move of the
-# identity, not a change of permissions. ResumeHeadObjectNotFound in particular is
-# load-bearing; its comment explains why.
+# Carried over verbatim from the deleted vercel-sa user's inline policy — the migration
+# moved the identity, not the permissions. ResumeHeadObjectNotFound in particular is
+# load-bearing; its comment explains why. ResumeDraftCleanup, by contrast, has no caller:
+# nothing under web/ issues a DeleteObjectCommand. Left in place rather than dropped as a
+# drive-by, since removing it is its own change.
 resource "aws_iam_role_policy" "vercel" {
   name = "${var.project_name}-vercel-policy"
   role = aws_iam_role.vercel.id
@@ -425,7 +327,7 @@ resource "random_password" "cookie_secret" {
 resource "vercel_project" "looper" {
   name           = var.project_name
   framework      = "nextjs"
-  root_directory = "app"
+  root_directory = "web"
 
   # Only build when something the app actually builds from changed. Vercel's
   # contract is inverted from the usual reading: exit 0 skips the build, exit 1
@@ -434,7 +336,7 @@ resource "vercel_project" "looper" {
   # hand-rolled `git diff --quiet` as deploy.yml's `changes` job.
   #
   # An allowlist rather than a denylist of lambda/infra/docs: root_directory is
-  # "app", and the only other build input is content/ (the git-backed Keystatic
+  # "web", and the only other build input is content/ (the git-backed Keystatic
   # blog, which must keep triggering rebuilds). The failure mode to know about
   # is that a *new* top-level directory that becomes build-relevant would
   # silently stop deploying until it is added here.
@@ -444,7 +346,7 @@ resource "vercel_project" "looper" {
   # CHANGELOG-only commit to main right after each promotion merge — without
   # this, that commit is its own deployment and the single rollback step
   # reverts a markdown heading instead of the release.
-  ignore_command = "git diff --quiet HEAD^ HEAD -- app content"
+  ignore_command = "git diff --quiet HEAD^ HEAD -- web content"
 
   # The resume publish route refuses to run unless VERCEL_ENV is "production"
   # (spec §7.3), and VERCEL_ENV is a Vercel system variable. The provider
@@ -471,7 +373,7 @@ resource "vercel_project" "looper" {
   # never carried over, and the plan-generation step truncates the token when the
   # agent tries to re-add it itself. Execution 6d2c9593 blocked 12/12 test cases
   # on this. The gated parts of the app (/tools/bgm-looper, /api/looper,
-  # /keystatic) are protected by APP_PASSWORD in app/lib/route-gate.ts regardless,
+  # /keystatic) are protected by APP_PASSWORD in web/lib/route-gate.ts regardless,
   # so this exposes only the public portfolio pages, which are already public on
   # production.
   vercel_authentication = { deployment_type = "none" }
@@ -479,7 +381,7 @@ resource "vercel_project" "looper" {
 
 # --- Firewall ---
 
-# app/lib/rate-limit.ts caps /api/login at 5 attempts per 15 minutes, but its
+# web/lib/rate-limit.ts caps /api/login at 5 attempts per 15 minutes, but its
 # counter is a Map in serverless instance memory — its own header comment notes
 # that an attacker spread across cold starts gets more than that in total. This
 # rule is the edge-side backstop for exactly that case: it lives on the Edge
@@ -541,26 +443,13 @@ resource "vercel_project_environment_variable" "cookie_secret" {
   sensitive  = true
 }
 
-resource "vercel_project_environment_variable" "aws_access_key" {
-  project_id = vercel_project.looper.id
-  key        = "AWS_ACCESS_KEY_ID"
-  value      = aws_iam_access_key.vercel.id
-  target     = local.env_targets
-  sensitive  = true
-}
-
-resource "vercel_project_environment_variable" "aws_secret_key" {
-  project_id = vercel_project.looper.id
-  key        = "AWS_SECRET_ACCESS_KEY"
-  value      = aws_iam_access_key.vercel.secret
-  target     = local.env_targets
-  sensitive  = true
-}
-
 # APP_AWS_ROLE_ARN, not AWS_ROLE_ARN. The AWS SDK's default credential chain reads
 # AWS_ROLE_ARN itself and would try web-identity resolution from a token file that does
-# not exist on Vercel, breaking the fallback to the static keys. Same collision
-# APP_AWS_REGION exists to avoid.
+# not exist on Vercel. Same collision APP_AWS_REGION exists to avoid.
+#
+# This is now the app's only credential source — there is no AWS_ACCESS_KEY_ID to fall
+# back to. awsCredentials() in web/lib/aws.ts still treats the variable as optional, which
+# is what keeps the unit tests and local `npm run dev` working on their own static keys.
 resource "vercel_project_environment_variable" "aws_role_arn" {
   project_id = vercel_project.looper.id
   key        = "APP_AWS_ROLE_ARN"

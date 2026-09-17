@@ -1,4 +1,4 @@
-// app/components/site/CommandBar.test.tsx
+// web/components/site/CommandBar.test.tsx
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { CommandBar, openCommandBar } from "./CommandBar";
