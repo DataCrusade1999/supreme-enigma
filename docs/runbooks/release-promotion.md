@@ -114,8 +114,21 @@ job is the recovery path.
 `dev`'s history does not contain the release commit, and `promotion-guard`
 fails every PR into `stage` and `main` — correctly, because merging one would
 duplicate the version heading in `CHANGELOG.md` (#168). Squashing it breaks the
-same way, which is what happened to v1.5.1. It does get CI — review it like any
-other PR.
+same way, which is what happened to v1.5.1.
+
+It gets CI, but the run does not start on its own. Because the bot opens the
+PR, GitHub finishes the `pull_request` run as `completed/action_required`
+without running a job, so only Vercel reports and `gh pr checks` looks green
+while `test` and the readiness review are absent. Approve the run, then review
+it like any other PR:
+
+```bash
+RUN=$(gh run list --branch "chore/changelog-sync-vX.Y.Z" --limit 1 --json databaseId --jq '.[0].databaseId')
+gh api -X POST "repos/DataCrusade1999/supreme-enigma/actions/runs/$RUN/approve"
+```
+
+An absent `test` here means gated, not skipped. Never merge on a green Vercel
+check alone (#207).
 
 Entries that landed on `dev` after the promotion are handled by the sync step
 itself: they stay under `## [Unreleased]` and nothing needs moving by hand. If

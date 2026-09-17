@@ -7,6 +7,20 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Fixed
+
+- `CLAUDE.md` and the release-promotion runbook said the changelog-sync PR
+  "does get CI — review it like any other", and told the reader to wait for
+  those checks. The checks do run, but not unaided: because `github-actions[bot]`
+  opens the PR, GitHub finishes the `pull_request` run as `action_required`
+  without executing a job, so `test` and the readiness review are absent while
+  Vercel still reports green. Waiting never completes, and absent checks read as
+  "bot PRs don't get CI here" — the belief that wording existed to correct. Both
+  documents now say the run is gated, give the approve command, and state that an
+  absent `test` on a sync PR means gated rather than skipped. #144, cited as
+  proof the checks arrive unaided, carries the same manual-approval signature as
+  #206. Closes #207.
+
 ## [1.5.2] - 2026-09-17
 
 ### Fixed
