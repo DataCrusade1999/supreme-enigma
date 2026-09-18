@@ -72,19 +72,30 @@ minute, so six short jobs cost more than their wall-clock sum suggests:
 
 | Run shape | Quota minutes |
 |---|---|
-| Ordinary, Linux only: `unit` 2 + `lambda` 2 + `e2e` 3 + `security` 1 + `chromatic` 1 + `summary` 1 | ~10 |
-| Promotion PR or dispatch: the same minus `chromatic`, plus Windows 7m03s → 8 x2 and macOS 1m15s → 2 x10 | ~44 |
+| Ordinary: `unit` 2 + `lambda` 2 + `e2e` 3 + `security` 1 + `chromatic` 1 + `summary` 1 | ~10 |
+| Promotion PR: `unit` 2 + `lambda` 2 + `security` 1 + `summary` 1 + the matrix 38 + `promotion-guard` 1 | ~45 |
 
-`chromatic` is in the ordinary row and not the promotion row because it runs
-only on pushes to `dev` and PRs into `dev`; a promotion PR's head SHA was
-already snapshotted on `dev`.
+The matrix's 38 is ubuntu 1m47s → 2 x1, windows 7m03s → 8 x2, macos
+1m15s → 2 x10. A bare `workflow_dispatch` is the same minus
+`promotion-guard`, which is ~44 — that is the shape run `35361326872`
+actually billed.
 
-At 150 ordinary runs and 6 promotions a month that is about 1,750 of the
-2,000 — 88% of the quota, not the comfortable margin the pre-measurement
-estimate of ~1,300 implied. Ordinary runs dominate that total (1,500 of the
-1,750), so the lever that matters is how many runs a month, not the cross-OS
-legs. Cross-OS on every PR would be about 44 per run and exhaust the 2,000
-inside 50 runs.
+Two jobs move between the rows. `chromatic` is ordinary-only: it runs on
+pushes to `dev` and PRs into `dev`, and a promotion PR's head SHA was
+already snapshotted there. `promotion-guard` is the reverse, running only on
+PRs into `stage` or `main`.
+
+The Linux `e2e` leg bills 3 in the ordinary row and 2 inside the matrix.
+That is real run-to-run variance across the two measured runs, not a
+different workload — it straddles a minute boundary, and GitHub rounds each
+job up.
+
+At 150 ordinary runs and 6 promotions a month that is about 1,770 of the
+2,000, or 89% — not the comfortable margin the pre-measurement estimate of
+~1,300 implied. Ordinary runs dominate that total (1,500 of the 1,770), so
+the lever that matters is how many runs a month, not the cross-OS legs.
+Cross-OS on every PR would be about 45 per run and exhaust the 2,000 inside
+45 runs.
 
 A promotion PR's head is `dev`, so every push to `dev` while one is open
 re-triggers a cross-OS run. `cancel-in-progress` (§6) stops the superseded
