@@ -47,6 +47,12 @@ const preview: Preview = {
   // The site default, per app/layout.tsx.
   initialGlobals: { theme: "dark" },
   parameters: {
+    // Mounts the App Router context. The framework mocks both Next routers but
+    // defaults to the pages router, and CommandBar's useRouter from
+    // next/navigation throws "invariant expected app router to be mounted"
+    // without this — the story renders nothing and snapshots a blank frame.
+    // Global rather than per-story: every component here is rendered from app/.
+    nextjs: { appDirectory: true },
     // globals.css sets html { background-color: var(--color-bg) }, so the
     // canvas already tracks the theme. Storybook's own backgrounds addon would
     // paint over it.
