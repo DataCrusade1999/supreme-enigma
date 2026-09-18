@@ -12,36 +12,18 @@ env:
   ECR_REPOSITORY: bgm-looper-lambda
 
 jobs:
-  test:
+  unit:
+    name: Lint + unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
-      - name: Install Lambda test dependencies
-        working-directory: lambda
-        run: pip install -r requirements.txt pytest moto
-
-      - name: Run Lambda tests
-        working-directory: lambda
-        run: pytest -v
-
-      # The release job's changelog scripts. Cheap, and they are the only thing
-      # standing between a bad merge base and issue #168 coming back.
-      - name: Run CI script tests
-        run: pytest -q .github/scripts/test_changelog_sync.py
 
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
       - name: Install app dependencies
         working-directory: web
@@ -68,6 +50,74 @@ jobs:
         if: always()
         run: node .github/scripts/test-summary.mjs --kind vitest web/vitest-results.json
 
+      # The summary scripts this workflow's other jobs depend on.
+      - name: Run CI script tests (Node)
+        run: node --test ".github/scripts/*.test.mjs"
+
+      - name: Fail the job if lint or the unit suite failed
+        if: steps.lint.outputs.exit_code != '0' || steps.vitest.outputs.exit_code != '0'
+        run: exit 1
+
+  # Linux only on purpose: the tests need apt ffmpeg and the Lambda ships as
+  # a Linux container, so another OS would test a platform it never runs on.
+  lambda:
+    name: Lambda tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Lambda test dependencies
+        working-directory: lambda
+        run: pip install -r requirements.txt pytest moto
+
+      - name: Run Lambda tests
+        working-directory: lambda
+        run: pytest -v
+
+      # The release job's changelog scripts. Cheap, and they are the only thing
+      # standing between a bad merge base and issue #168 coming back.
+      - name: Run CI script tests (Python)
+        run: pytest -q .github/scripts/test_changelog_sync.py
+
+  # Ubuntu on every run. Windows and macOS only where the free-plan minute
+  # budget allows: promotion PRs into stage/main and manual dispatch. macOS
+  # costs about 10x Linux minutes and Windows about 2x, so running them on
+  # every PR would exhaust the 2,000 monthly minutes within days and stall
+  # `release` with them. Spec §2-3.
+  e2e:
+    name: E2E (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (github.base_ref == 'stage' || github.base_ref == 'main'))) && '["ubuntu-latest", "windows-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+    # Every step below is bash; windows-latest would otherwise run them in
+    # PowerShell, where `set -o pipefail` and `$GITHUB_OUTPUT` do not exist.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: web
+        run: npm install
+
       - name: Install Playwright browsers
         working-directory: web
         run: npx playwright install --with-deps chromium
@@ -83,10 +133,10 @@ jobs:
 
       - name: Playwright job summary
         if: always()
-        run: node .github/scripts/test-summary.mjs --kind playwright web/playwright-results.json
+        run: node .github/scripts/test-summary.mjs --kind playwright --label "${{ runner.os }}" web/playwright-results.json
 
-      - name: Fail the job if lint or any test suite failed
-        if: steps.lint.outputs.exit_code != '0' || steps.vitest.outputs.exit_code != '0' || steps.playwright.outputs.exit_code != '0'
+      - name: Fail the job if the e2e suite failed
+        if: steps.playwright.outputs.exit_code != '0'
         run: exit 1
 
   # Visual regression. Parallel to `test`, and deliberately absent from every
