@@ -1,8 +1,16 @@
 import { readFileSync, appendFileSync, existsSync } from "node:fs";
 
-const [, , flag, kind, filePath] = process.argv;
-if (flag !== "--kind" || (kind !== "vitest" && kind !== "playwright") || !filePath) {
-  console.error("Usage: node test-summary.mjs --kind <vitest|playwright> <results-file>");
+let kind;
+let label = "";
+let filePath;
+const argv = process.argv.slice(2);
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--kind") kind = argv[++i];
+  else if (argv[i] === "--label") label = argv[++i] ?? "";
+  else filePath = argv[i];
+}
+if ((kind !== "vitest" && kind !== "playwright") || !filePath) {
+  console.error("Usage: node test-summary.mjs --kind <vitest|playwright> [--label <text>] <results-file>");
   process.exit(1);
 }
 
@@ -15,8 +23,12 @@ function fence(body) {
   return "`".repeat(Math.max(3, longest + 1));
 }
 
+const baseHeading =
+  kind === "vitest" ? "## Unit tests (Vitest)" : "## E2E + accessibility tests (Playwright)";
+const heading = label ? `${baseHeading} — ${label}` : baseHeading;
+
 function summarizeVitest(data) {
-  const lines = ["## Unit tests (Vitest)", ""];
+  const lines = [heading, ""];
   lines.push(
     `**${data.numPassedTests} passed**, **${data.numFailedTests} failed**, ${data.numPendingTests} skipped, ${data.numTotalTests} total`,
   );
@@ -71,7 +83,7 @@ function summarizePlaywright(data) {
   for (const suite of data.suites ?? []) {
     walkPlaywrightSuite(suite, failureLines, counts);
   }
-  const lines = ["## E2E + accessibility tests (Playwright)", ""];
+  const lines = [heading, ""];
   lines.push(
     `**${counts.passed} passed**, **${counts.failed} failed**, ${counts.skipped} skipped, ${counts.total} total`,
   );
@@ -81,9 +93,6 @@ function summarizePlaywright(data) {
   }
   return lines;
 }
-
-const heading =
-  kind === "vitest" ? "## Unit tests (Vitest)" : "## E2E + accessibility tests (Playwright)";
 
 let summaryLines;
 if (!existsSync(filePath)) {
