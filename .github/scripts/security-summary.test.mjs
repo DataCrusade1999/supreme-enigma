@@ -283,6 +283,26 @@ test("a pipe in a Trivy message does not break the table columns", () => {
   assert.match(stdout, /a\\\|b/);
 });
 
+// GitHub exposes no API for reading a step summary back, so "the artifact is
+// what the step summary says" is otherwise an untestable claim about the
+// script's internals. This asserts it on the bytes.
+test("the artifact markdown is byte-identical to what the step summary receives", () => {
+  const file = tmpReport(CLEAN);
+  const stepSummary = join(dirname(file), "step-summary.md");
+  writeFileSync(stepSummary, "");
+  const r = spawnSync(process.execPath, [script, file, "success"], {
+    encoding: "utf8",
+    env: { ...process.env, GITHUB_STEP_SUMMARY: stepSummary, GITHUB_SERVER_URL: "", GITHUB_REPOSITORY: "", HEAD_SHA: "" },
+  });
+  assert.equal(r.status, 0);
+  const written = readFileSync(stepSummary, "utf8");
+  const artifact = readFileSync(join(dirname(file), "trivy-summary.md"), "utf8");
+  assert.equal(written, artifact);
+  assert.match(written, /### Coverage/);
+  // And nothing went to stdout instead of the summary file.
+  assert.equal(r.stdout, "");
+});
+
 test("usage error without both arguments", () => {
   assert.equal(run(["only-one.json"]).status, 1);
 });
