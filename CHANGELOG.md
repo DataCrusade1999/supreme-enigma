@@ -32,6 +32,16 @@ git tags / GitHub Releases cut automatically by the `release` job in
   rendered markdown — for 30). Nothing was downloadable from a run before
   this.
 
+### Fixed
+
+- The Trivy summary reports what was scanned, not only what was found. A clean
+  run used to render three lines beside a 240 KB report; it now carries a
+  Coverage table (target, type, `366 packages` / `28 checks`, per-target
+  finding count) and a `Trivy <version> · N targets · commit <sha>` footer. The
+  table renders under the finding tables too, and a report with no targets at
+  all now says so — "no findings" does not distinguish a scan that passed from
+  one that covered nothing.
+
 ### Changed
 
 - The three `e2e` matrix legs no longer write a summary each. They upload

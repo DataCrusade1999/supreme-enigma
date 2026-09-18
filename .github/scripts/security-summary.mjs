@@ -39,8 +39,27 @@ function collect(report) {
   const vulns = [];
   const misconfs = [];
   const secrets = [];
+  const targets = [];
   for (const result of report.Results ?? []) {
     const target = result.Target ?? "";
+    // What Trivy says it looked at. `Packages` is the dependency inventory for
+    // a lockfile target; `MisconfSummary` is the policy check tally for a
+    // Terraform or Dockerfile target. A target can legitimately carry neither
+    // - Trivy emits a per-file config result alongside the per-directory
+    // aggregate that holds the counts.
+    const packages = result.Packages?.length ?? 0;
+    const checks = result.MisconfSummary
+      ? (result.MisconfSummary.Successes ?? 0) + (result.MisconfSummary.Failures ?? 0)
+      : 0;
+    targets.push({
+      target,
+      type: result.Type ?? result.Class ?? "",
+      scanned: packages ? `${packages} package${packages === 1 ? "" : "s"}` : checks ? `${checks} check${checks === 1 ? "" : "s"}` : "",
+      findings:
+        (result.Vulnerabilities?.length ?? 0) +
+        (result.Misconfigurations ?? []).filter((m) => String(m.Status ?? "FAIL").toUpperCase() !== "PASS").length +
+        (result.Secrets?.length ?? 0),
+    });
     for (const v of result.Vulnerabilities ?? []) {
       vulns.push({ target, ...v, sev: severity(v.Severity) });
     }
@@ -58,7 +77,7 @@ function collect(report) {
   vulns.sort(order);
   misconfs.sort(order);
   secrets.sort(order);
-  return { vulns, misconfs, secrets, count: vulns.length + misconfs.length + secrets.length };
+  return { vulns, misconfs, secrets, targets, count: vulns.length + misconfs.length + secrets.length };
 }
 
 function link(url, text) {
@@ -108,6 +127,43 @@ function findingTables({ vulns, misconfs, secrets }) {
   return lines;
 }
 
+// Rendered whether or not anything was found. "No findings" on its own does
+// not distinguish a scan that passed from a scan that covered nothing, and
+// those two have very different consequences. The pass counts are the
+// evidence, and Trivy reports them for findings-free targets too - the first
+// version of this script omitted the list on the strength of a claim that it
+// did not, which is how a clean run came to render three lines beside a
+// 240 KB report.
+function coverageTable(targets) {
+  if (targets.length === 0) return [];
+  const lines = ["### Coverage", "", "| Target | Type | Scanned | Findings |", "|---|---|---|---|"];
+  for (const t of targets) {
+    lines.push(
+      `| \`${cellText(t.target)}\` | ${cellText(t.type) || "—"} | ${t.scanned || "—"} | ` +
+        `${t.findings ? `❌ ${t.findings}` : "✅ 0"} |`,
+    );
+  }
+  lines.push("");
+  return lines;
+}
+
+// Trivy emits a per-file config result next to the per-directory aggregate
+// that carries the tally, so an em dash in Scanned is normal rather than a
+// gap. Say so once instead of leaving the reader to wonder.
+function coverageNote(targets) {
+  return targets.some((t) => !t.scanned)
+    ? ["Targets showing — under Scanned were parsed but carry no count of their own; their checks are tallied on the directory-level row above.", ""]
+    : [];
+}
+
+function footer(report, targets) {
+  const bits = [];
+  if (report?.Trivy?.Version) bits.push(`Trivy ${report.Trivy.Version}`);
+  bits.push(`${targets.length} target${targets.length === 1 ? "" : "s"}`);
+  if (report?.Metadata?.Commit) bits.push(`commit \`${String(report.Metadata.Commit).slice(0, 7)}\``);
+  return bits.length ? [bits.join(" · ")] : [];
+}
+
 let report = null;
 let parseError = "";
 if (!existsSync(filePath)) {
@@ -136,13 +192,22 @@ if (found && found.count > 0) {
     `**${found.count} finding${found.count === 1 ? "" : "s"}** at HIGH or CRITICAL with a fix available.`,
     "",
     ...findingTables(found),
+    ...coverageTable(found.targets),
+    ...coverageNote(found.targets),
+    ...footer(report, found.targets),
   );
 } else if (found && outcome === "success") {
-  lines.push("✅ No HIGH or CRITICAL findings with a fix available.");
-  if (report.ArtifactName) {
-    // Not a list of clean targets: Trivy omits findings-free targets from the
-    // JSON entirely, so any such list would be a lie by omission.
-    lines.push("", `Scanned \`${report.ArtifactName}\` (${report.ArtifactType ?? "filesystem"}).`);
+  lines.push(
+    "✅ **No HIGH or CRITICAL findings with a fix available.**",
+    "",
+    ...coverageTable(found.targets),
+    ...coverageNote(found.targets),
+    ...footer(report, found.targets),
+  );
+  if (found.targets.length === 0) {
+    // A report with no targets at all is the one case where "no findings" is
+    // not reassuring: nothing was examined.
+    lines.push("", "⚠️ The report lists no scanned targets, so nothing was examined. Check the job log and the scan-ref.");
   }
 } else {
   lines.push(

@@ -212,8 +212,37 @@ a clean scan. Only the discriminator changes, from regex hits to parse result:
 Findings are still decided from the file, never from the step outcome, so
 flipping back to `exit-code: "0"` for a triage run still reports honestly.
 
-A clean run does **not** list the targets that were scanned. Trivy's JSON omits
-findings-free targets, so any such list would be a lie by omission.
+**Correction (2026-09-18, issue #222).** An earlier revision of this section
+said a clean run must not list the scanned targets, "because Trivy's JSON omits
+findings-free targets, so any such list would be a lie by omission." That is
+false, and it was written without being checked against real Trivy output. A
+clean report from Trivy 0.70.0 carries all seven targets:
+
+| Target | Class | Type | Carries |
+|---|---|---|---|
+| `web/package-lock.json` | lang-pkgs | npm | `Packages` — 366 entries |
+| `infra/bootstrap` | config | terraform | `MisconfSummary {Successes: 23, Failures: 0}` |
+| `infra/bootstrap/main.tf` | config | terraform | nothing |
+| `infra/main` | config | terraform | `MisconfSummary {Successes: 28, Failures: 0}` |
+| `infra/main/environments.tf` | config | terraform | nothing |
+| `infra/main/shared.tf` | config | terraform | nothing |
+| `lambda/Dockerfile` | config | dockerfile | `MisconfSummary {Successes: 19, Failures: 0}` |
+
+Trivy emits a per-directory aggregate that holds the tally *and* a per-file
+result that holds nothing, so a target with no counts of its own is normal, not
+a gap.
+
+Every run therefore renders a **Coverage** table — target, type, what was
+scanned (`366 packages` / `28 checks` / `—`) and that target's finding count —
+under the finding tables when there are findings, and on its own when there are
+not. A footer gives `Trivy <version> · N targets · commit <sha>` from the
+report.
+
+The reason is not decoration. "No findings" does not distinguish a scan that
+passed from a scan that covered nothing, and a scanner pointed at the wrong ref
+reports the second as the first. The 70 passing misconfiguration checks are the
+evidence that separates them. A report with *no* targets is the one case where
+a clean result is not reassuring, and it says so explicitly.
 
 ### Artifacts
 
