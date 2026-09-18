@@ -13,6 +13,38 @@ git tags / GitHub Releases cut automatically by the `release` job in
   requests into `dev`. Every story is snapshotted in both light and dark.
   Storybook is installed locally but never run by `npm test` or
   `npm run lint` — all build cost is on CI.
+- `deploy.yml` runs Playwright on Windows and macOS as well as Linux, on
+  promotion PRs into `stage`/`main` and on `workflow_dispatch` only. The repo
+  is private on GitHub Free (2,000 minutes/month) and macOS runners cost about
+  10x Linux against that quota, so cross-OS on every PR would stall CI, and
+  `release` with it, within days.
+- A `security` job runs Trivy over the tree (npm lockfile vulnerabilities,
+  Dockerfile and Terraform misconfiguration, secrets) at HIGH/CRITICAL with
+  `ignore-unfixed`, and fails the run on findings. Results go to the job
+  summary: SARIF upload, CodeQL and dependency review all need Advanced
+  Security, which is paid on private repos. `.trivyignore` holds accepted
+  findings with a reason each.
+- A `summary` job writes one status table for the whole run.
+- The `summary` job's table also reports the `chromatic` job (landed in
+  #215), as a reported row only — it gates nothing.
+
+### Changed
+
+- The single `test` job is now `unit`, `lambda`, `e2e` and `security`, run in
+  parallel; `deploy` and `release` gate on all four. Unit tests stay
+  Linux-only: Vitest runs under jsdom over pure logic and the Lambda ships as
+  a Linux container, so other OS legs would spend minutes for no signal.
+- Superseded PR runs are cancelled by a `concurrency` group; push runs never
+  are, so a cancellation cannot land mid-`deploy` or mid-`release`.
+- `e2e` carries `timeout-minutes: 20`, so a hung browser on a matrix leg
+  cannot burn the 6-hour default against the free-plan quota.
+- `deploy` now also requires `github.ref_name` to be `main`, `dev` or
+  `stage`. The `bgm-looper-ci-deploy` role's OIDC trust policy is
+  `StringEquals` on exactly those three refs, so a `workflow_dispatch` from a
+  feature branch previously ended in a red `deploy` that meant nothing. This
+  was a latent gap, not one the job split introduced.
+- `test-summary.mjs` takes `--label`, and the two new summary scripts are
+  covered by `node --test ".github/scripts/*.test.mjs"` in the `unit` job.
 
 ### Fixed
 
@@ -20,11 +52,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
   "does get CI — review it like any other", and told the reader to wait for
   those checks. The checks do run, but not unaided: because `github-actions[bot]`
   opens the PR, GitHub finishes the `pull_request` run as `action_required`
-  without executing a job, so `test` and the readiness review are absent while
+  without executing a job, so the test jobs and the readiness review are absent while
   Vercel still reports green. Waiting never completes, and absent checks read as
   "bot PRs don't get CI here" — the belief that wording existed to correct. Both
-  documents now say the run is gated, give the approve command, and state that an
-  absent `test` on a sync PR means gated rather than skipped. #144, cited as
+  documents now say the run is gated, give the approve command, and state that
+  absent test jobs on a sync PR mean gated rather than skipped. #144, cited as
   proof the checks arrive unaided, carries the same manual-approval signature as
   #206. Closes #207.
 

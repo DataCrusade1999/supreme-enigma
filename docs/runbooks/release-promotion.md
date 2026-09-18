@@ -119,7 +119,7 @@ same way, which is what happened to v1.5.1.
 It gets CI, but the run does not start on its own. Because the bot opens the
 PR, GitHub finishes the `pull_request` run as `completed/action_required`
 without running a job, so only Vercel reports and `gh pr checks` looks green
-while `test` and the readiness review are absent. Approve the run, then review
+while the test jobs and the readiness review are absent. Approve the run, then review
 it like any other PR:
 
 ```bash
@@ -127,7 +127,7 @@ RUN=$(gh run list --branch "chore/changelog-sync-vX.Y.Z" --limit 1 --json databa
 gh api -X POST "repos/DataCrusade1999/supreme-enigma/actions/runs/$RUN/approve"
 ```
 
-An absent `test` here means gated, not skipped. Never merge on a green Vercel
+Absent test jobs here mean gated, not skipped. Never merge on a green Vercel
 check alone (#207).
 
 Entries that landed on `dev` after the promotion are handled by the sync step

@@ -7,41 +7,33 @@ on:
     branches: [dev, stage, main]
   workflow_dispatch: {}
 
+# A new push to a PR cancels the run it supersedes. Push runs are keyed on
+# the SHA so no push run is ever cancelled, and two pushes never share a
+# group: cancelling one could kill `deploy` mid update-function-code or
+# `release` between the changelog commit and the tag. A `workflow_dispatch`
+# on a SHA that is also being pushed does share the group and waits its turn
+# - queued, not cancelled, which is the safe direction.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: bgm-looper-lambda
 
 jobs:
-  test:
+  unit:
+    name: Lint + unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
-      - name: Install Lambda test dependencies
-        working-directory: lambda
-        run: pip install -r requirements.txt pytest moto
-
-      - name: Run Lambda tests
-        working-directory: lambda
-        run: pytest -v
-
-      # The release job's changelog scripts. Cheap, and they are the only thing
-      # standing between a bad merge base and issue #168 coming back.
-      - name: Run CI script tests
-        run: pytest -q .github/scripts/test_changelog_sync.py
 
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
       - name: Install app dependencies
         working-directory: web
@@ -68,6 +60,80 @@ jobs:
         if: always()
         run: node .github/scripts/test-summary.mjs --kind vitest web/vitest-results.json
 
+      # The summary scripts this workflow's other jobs depend on.
+      - name: Run CI script tests (Node)
+        run: node --test ".github/scripts/*.test.mjs"
+
+      - name: Fail the job if lint or the unit suite failed
+        if: steps.lint.outputs.exit_code != '0' || steps.vitest.outputs.exit_code != '0'
+        run: exit 1
+
+  # Linux only on purpose: the tests need apt ffmpeg and the Lambda ships as
+  # a Linux container, so another OS would test a platform it never runs on.
+  lambda:
+    name: Lambda tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Lambda test dependencies
+        working-directory: lambda
+        run: pip install -r requirements.txt pytest moto
+
+      - name: Run Lambda tests
+        working-directory: lambda
+        run: pytest -v
+
+      # The release job's changelog scripts. Cheap, and they are the only thing
+      # standing between a bad merge base and issue #168 coming back.
+      - name: Run CI script tests (Python)
+        run: pytest -q .github/scripts/test_changelog_sync.py
+
+  # Ubuntu on every run. Windows and macOS only where the free-plan minute
+  # budget allows: promotion PRs into stage/main and manual dispatch. macOS
+  # costs about 10x Linux minutes and Windows about 2x, so running them on
+  # every PR would exhaust the 2,000 monthly minutes within days and stall
+  # `release` with them. Spec §2-3.
+  e2e:
+    name: E2E (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # GitHub's default job timeout is 360 minutes, and macOS bills at ~10x
+    # Linux minutes against the 2,000-minute/month free-plan quota - one hung
+    # macOS leg could burn the entire month's quota in a single run. Measured
+    # on run 35361326872: Linux 1m47s, Windows 7m03s, macOS 1m15s, so 20 is
+    # deliberate headroom, not a tight fit.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (github.base_ref == 'stage' || github.base_ref == 'main'))) && '["ubuntu-latest", "windows-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+    # Every step below is bash; windows-latest would otherwise run them in
+    # PowerShell, where `set -o pipefail` and `$GITHUB_OUTPUT` do not exist.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: web
+        run: npm install
+
       - name: Install Playwright browsers
         working-directory: web
         run: npx playwright install --with-deps chromium
@@ -83,13 +149,13 @@ jobs:
 
       - name: Playwright job summary
         if: always()
-        run: node .github/scripts/test-summary.mjs --kind playwright web/playwright-results.json
+        run: node .github/scripts/test-summary.mjs --kind playwright --label "${{ runner.os }}" web/playwright-results.json
 
-      - name: Fail the job if lint or any test suite failed
-        if: steps.lint.outputs.exit_code != '0' || steps.vitest.outputs.exit_code != '0' || steps.playwright.outputs.exit_code != '0'
+      - name: Fail the job if the e2e suite failed
+        if: steps.playwright.outputs.exit_code != '0'
         run: exit 1
 
-  # Visual regression. Parallel to `test`, and deliberately absent from every
+  # Visual regression. Parallel to the test jobs, and deliberately absent from every
   # other job's `needs:` - a visual diff must not block a deploy or a release.
   chromatic:
     runs-on: ubuntu-latest
@@ -140,6 +206,64 @@ jobs:
           # GitHub squash creates a commit unassociated with the merged branch,
           # so baselines do not carry over on their own.
           autoAcceptChanges: dev
+
+  # Free on a private repo: one open-source action, no account, no licence.
+  # CodeQL, dependency-review and SARIF upload all need Advanced Security,
+  # which this plan does not have, so findings go to the job summary instead
+  # of the Security tab. Dependabot alerts (free, already on) cover the rest.
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # `ignore-unfixed`: a CVE with no patched release cannot block an
+      # unrelated deploy; the only findings that fail the job are ones a
+      # dependency bump would clear. `.trivyignore` at the repo root is the
+      # escape hatch for accepted findings - one reason per entry.
+      - name: Trivy filesystem scan
+        id: trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          output: trivy-results.txt
+          # Inert today: this job's only step before Trivy is a plain checkout,
+          # no install or build, so none of these directories exist yet. Kept
+          # for the day this job scans after an install step is added.
+          skip-dirs: web/node_modules,web/.next,lambda/.venv
+        continue-on-error: true
+
+      - name: Security job summary
+        if: always()
+        run: node .github/scripts/security-summary.mjs trivy-results.txt "${{ steps.trivy.outcome }}"
+
+      - name: Fail the job if the scan found anything
+        if: steps.trivy.outcome != 'success'
+        run: exit 1
+
+  # Reports, never gates: absent from every other job's `needs:`. Step
+  # summaries are per job, so the only place a one-glance table can come
+  # from is a job that depends on all the others.
+  summary:
+    name: Summary
+    needs: [unit, lambda, e2e, security, chromatic]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write the run summary
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: node .github/scripts/run-summary.mjs
 
   # Refuses a promotion whose merge base predates the last release's changelog
   # heading. Merging in that state corrupts CHANGELOG.md: git sees the release
@@ -231,7 +355,7 @@ jobs:
           fi
 
   deploy:
-    needs: [test, changes]
+    needs: [unit, lambda, e2e, security, changes]
     runs-on: ubuntu-latest
     # Required for OIDC: id-token: write is what lets the job mint the token
     # aws-actions/configure-aws-credentials exchanges for the role. Declaring a
@@ -241,10 +365,17 @@ jobs:
       id-token: write
       contents: read
     # A custom `if:` replaces the default `if: success()` entirely, so
-    # test's success is checked explicitly here rather than assumed.
+    # each test job's success is checked explicitly here rather than assumed.
     # `changes` only runs (and is only needed) on push — on workflow_dispatch
     # it's skipped, and deploy proceeds anyway, ignoring its output.
-    if: always() && needs.test.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.lambda == 'true'))
+    # The branch clause exists for workflow_dispatch from a feature branch
+    # (the way the cross-OS e2e matrix is exercised before a promotion). The
+    # bgm-looper-ci-deploy role's OIDC trust policy is StringEquals on the
+    # three permanent branches' refs, so any other branch fails at
+    # configure-aws-credentials, and the `case` below has no default arm, so
+    # TAG_PREFIX would be empty even if it got that far. Skipping is the
+    # honest result; a red deploy on a branch that can never deploy is noise.
+    if: always() && contains(fromJSON('["main", "dev", "stage"]'), github.ref_name) && needs.unit.result == 'success' && needs.lambda.result == 'success' && needs.e2e.result == 'success' && needs.security.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.lambda == 'true'))
     steps:
       - uses: actions/checkout@v7
 
@@ -315,14 +446,14 @@ jobs:
           fi
 
   release:
-    needs: [test, deploy, changes]
+    needs: [unit, lambda, e2e, security, deploy, changes]
     runs-on: ubuntu-latest
     # deploy is legitimately skipped (not failed) on a main push that touches
     # no lambda/ files — release must still run in that case, so this can't
     # rely on the default `if: success()` gating, which treats a skipped
-    # `needs` job the same as a failed one. test.result is checked
+    # `needs` job the same as a failed one. the four test jobs' results are checked
     # explicitly too: deploy.result == 'skipped' is ambiguous on its own
-    # between "no lambda changes" (fine, release should run) and "test
+    # between "no lambda changes" (fine, release should run) and "a test job
     # failed so deploy's own condition never ran" (must not release).
     #
     # The changes half is split by event_name the same way deploy's is, and
@@ -333,7 +464,7 @@ jobs:
     # runner or checkout failure would cut a release. Testing
     # `== 'true'` alone would be fail-CLOSED but would also kill the
     # workflow_dispatch escape hatch. Branching on the event does both.
-    if: always() && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.releasable == 'true'))
+    if: always() && github.ref == 'refs/heads/main' && needs.unit.result == 'success' && needs.lambda.result == 'success' && needs.e2e.result == 'success' && needs.security.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.releasable == 'true'))
     permissions:
       contents: write
       pull-requests: write
