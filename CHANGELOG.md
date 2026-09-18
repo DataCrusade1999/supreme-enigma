@@ -38,6 +38,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
   are, so a cancellation cannot land mid-`deploy` or mid-`release`.
 - `e2e` carries `timeout-minutes: 20`, so a hung browser on a matrix leg
   cannot burn the 6-hour default against the free-plan quota.
+- `deploy` now also requires `github.ref_name` to be `main`, `dev` or
+  `stage`. The `bgm-looper-ci-deploy` role's OIDC trust policy is
+  `StringEquals` on exactly those three refs, so a `workflow_dispatch` from a
+  feature branch previously ended in a red `deploy` that meant nothing. This
+  was a latent gap, not one the job split introduced.
 - `test-summary.mjs` takes `--label`, and the two new summary scripts are
   covered by `node --test ".github/scripts/*.test.mjs"` in the `unit` job.
 

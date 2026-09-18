@@ -8,9 +8,11 @@ on:
   workflow_dispatch: {}
 
 # A new push to a PR cancels the run it supersedes. Push runs are keyed on
-# the SHA so they are never cancelled and never queue behind each other:
-# cancelling one could kill `deploy` mid update-function-code or `release`
-# between the changelog commit and the tag.
+# the SHA so no push run is ever cancelled, and two pushes never share a
+# group: cancelling one could kill `deploy` mid update-function-code or
+# `release` between the changelog commit and the tag. A `workflow_dispatch`
+# on a SHA that is also being pushed does share the group and waits its turn
+# - queued, not cancelled, which is the safe direction.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -106,8 +108,8 @@ jobs:
     # GitHub's default job timeout is 360 minutes, and macOS bills at ~10x
     # Linux minutes against the 2,000-minute/month free-plan quota - one hung
     # macOS leg could burn the entire month's quota in a single run. Measured
-    # Linux e2e is ~3min, and the Windows/macOS estimates are ~6min/~5min, so
-    # 20 is deliberate headroom, not a tight fit.
+    # on run 35361326872: Linux 1m47s, Windows 7m03s, macOS 1m15s, so 20 is
+    # deliberate headroom, not a tight fit.
     timeout-minutes: 20
     strategy:
       fail-fast: false

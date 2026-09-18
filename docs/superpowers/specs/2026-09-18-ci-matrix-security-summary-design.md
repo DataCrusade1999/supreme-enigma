@@ -66,17 +66,25 @@ The ternary chooses between two JSON *strings* inside `fromJSON`, because
 string truthiness is defined in GitHub's expression language and array
 truthiness is not documented.
 
-Quota cost per run:
+Quota cost per run, measured on run `35364989861` (PR into `dev`) and run
+`35361326872` (cross-OS dispatch). GitHub bills per job, rounded up to the
+minute, so six short jobs cost more than their wall-clock sum suggests:
 
 | Run shape | Quota minutes |
 |---|---|
-| Ordinary (Linux only, 5 jobs) | ~6 |
-| Promotion PR (adds Windows 7m03s → 8 min x2, macOS 1m15s → 2 min x10) | ~42 |
+| Ordinary, Linux only: `unit` 2 + `lambda` 2 + `e2e` 3 + `security` 1 + `chromatic` 1 + `summary` 1 | ~10 |
+| Promotion PR or dispatch: the same minus `chromatic`, plus Windows 7m03s → 8 x2 and macOS 1m15s → 2 x10 | ~44 |
 
-At 150 ordinary runs and 6 promotions a month that is about 1,150 minutes,
-inside the 2,000 quota. Cross-OS on every PR would be about 42 per run, which
-exhausts the 2,000 in under 50 runs. The first dispatched run after the change
-measured real Windows/macOS wall-clock, on run `35361326872`.
+`chromatic` is in the ordinary row and not the promotion row because it runs
+only on pushes to `dev` and PRs into `dev`; a promotion PR's head SHA was
+already snapshotted on `dev`.
+
+At 150 ordinary runs and 6 promotions a month that is about 1,750 of the
+2,000 — 88% of the quota, not the comfortable margin the pre-measurement
+estimate of ~1,300 implied. Ordinary runs dominate that total (1,500 of the
+1,750), so the lever that matters is how many runs a month, not the cross-OS
+legs. Cross-OS on every PR would be about 44 per run and exhaust the 2,000
+inside 50 runs.
 
 A promotion PR's head is `dev`, so every push to `dev` while one is open
 re-triggers a cross-OS run. `cancel-in-progress` (§6) stops the superseded
