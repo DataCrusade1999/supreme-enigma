@@ -32,6 +32,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
   rendered markdown — for 30). Nothing was downloadable from a run before
   this.
 
+### Fixed
+
+- `trivy-results.json` and `trivy-summary.md` are gitignored. The `security`
+  job writes both to the repo root, so running the scan locally left two
+  untracked files — one a 240 KB SBOM — in `git status`, where a `git add -A`
+  would sweep them into the tree.
+
 ### Changed
 
 - The three `e2e` matrix legs no longer write a summary each. They upload
