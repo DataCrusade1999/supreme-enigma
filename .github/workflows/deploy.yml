@@ -219,8 +219,6 @@ jobs:
       # unrelated deploy; the only findings that fail the job are ones a
       # dependency bump would clear. `.trivyignore` at the repo root is the
       # escape hatch for accepted findings - one reason per entry.
-      # exit-code is "0" until the first dispatched run's findings have been
-      # triaged (see the plan); "1" after that.
       - name: Trivy filesystem scan
         id: trivy
         uses: aquasecurity/trivy-action@v0.36.0
@@ -230,7 +228,7 @@ jobs:
           scanners: vuln,misconfig,secret
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: "0"
+          exit-code: "1"
           format: table
           output: trivy-results.txt
           # Inert today: this job's only step before Trivy is a plain checkout,
