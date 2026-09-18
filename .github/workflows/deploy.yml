@@ -139,7 +139,7 @@ jobs:
         if: steps.playwright.outputs.exit_code != '0'
         run: exit 1
 
-  # Visual regression. Parallel to `test`, and deliberately absent from every
+  # Visual regression. Parallel to the test jobs, and deliberately absent from every
   # other job's `needs:` - a visual diff must not block a deploy or a release.
   chromatic:
     runs-on: ubuntu-latest
@@ -190,6 +190,63 @@ jobs:
           # GitHub squash creates a commit unassociated with the merged branch,
           # so baselines do not carry over on their own.
           autoAcceptChanges: dev
+
+  # Free on a private repo: one open-source action, no account, no licence.
+  # CodeQL, dependency-review and SARIF upload all need Advanced Security,
+  # which this plan does not have, so findings go to the job summary instead
+  # of the Security tab. Dependabot alerts (free, already on) cover the rest.
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # `ignore-unfixed`: a CVE with no patched release cannot block an
+      # unrelated deploy; the only findings that fail the job are ones a
+      # dependency bump would clear. `.trivyignore` at the repo root is the
+      # escape hatch for accepted findings - one reason per entry.
+      # exit-code is "0" until the first dispatched run's findings have been
+      # triaged (see the plan); "1" after that.
+      - name: Trivy filesystem scan
+        id: trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+          format: table
+          output: trivy-results.txt
+          skip-dirs: web/node_modules,web/.next,lambda/.venv
+        continue-on-error: true
+
+      - name: Security job summary
+        if: always()
+        run: node .github/scripts/security-summary.mjs trivy-results.txt "${{ steps.trivy.outcome }}"
+
+      - name: Fail the job if the scan found anything
+        if: steps.trivy.outcome != 'success'
+        run: exit 1
+
+  # Reports, never gates: absent from every other job's `needs:`. Step
+  # summaries are per job, so the only place a one-glance table can come
+  # from is a job that depends on all the others.
+  summary:
+    name: Summary
+    needs: [unit, lambda, e2e, security, chromatic]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write the run summary
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: node .github/scripts/run-summary.mjs
 
   # Refuses a promotion whose merge base predates the last release's changelog
   # heading. Merging in that state corrupts CHANGELOG.md: git sees the release
