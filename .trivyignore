@@ -1,10 +1,17 @@
-# AVD-AWS-0132: S3 bucket not encrypted with a customer-managed key. Covers the
-# infra/bootstrap/main.tf state bucket and the infra/main/environments.tf audio
-# buckets (main/dev/stage). SSE-S3 already encrypts every object by default
-# since January 2023, so data at rest is covered; this check wants a
-# customer-managed KMS key specifically, which adds ~$1/month per key plus
-# per-request charges, and the audio objects expire after 1 day anyway.
-# Accepted 2026-09-18.
+# AVD-AWS-0132: S3 bucket not encrypted with a customer-managed key. Fires on
+# four buckets; one entry covers all four since .trivyignore matches by check
+# ID, not location, so the state bucket can't be gated separately here.
+# Accepted for the three audio buckets (infra/main/environments.tf,
+# main/dev/stage): objects expire after 1 day, SSE-S3 already covers them,
+# and a customer-managed key would add ~$1/month per key plus per-request
+# charges for no real gain. Accepted 2026-09-18.
+# Deferred for the Terraform state bucket (infra/bootstrap/main.tf), tracked
+# in #217: it holds infra/main's remote state with app_password,
+# openrouter_api_key and vercel_api_token in plaintext, so an AWS-managed key
+# lets any s3:GetObject principal read them; a CMK would add a KMS-grant
+# layer and CloudTrail auditability. Deferred, not accepted, since it needs
+# KMS grants for every state reader (or plan/apply locks itself out), which
+# doesn't belong in a CI-refactor PR. Deferred 2026-09-18.
 AVD-AWS-0132
 
 # AVD-AWS-0095: SNS topic not encrypted. infra/main/shared.tf's budget_alerts
