@@ -24,7 +24,7 @@ Per-resource detail and the reasoning behind each quirk is in
 ## Plan before every merge
 
 **CI validates nothing under `infra/`** — `deploy.yml` has no `validate`, no
-`fmt -check`, no `plan`. A green `test` job says nothing about whether a
+`fmt -check`, no `plan`. Green test jobs say nothing about whether a
 Terraform change applies. For any PR touching `infra/`, plan against real
 state before merging:
 

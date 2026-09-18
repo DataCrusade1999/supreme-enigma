@@ -1,6 +1,6 @@
 """Tests for changelog-sync.py and changelog-release.py.
 
-Run in CI by deploy.yml's `test` job. The scripts are invoked as subprocesses
+Run in CI by deploy.yml's `unit` job. The scripts are invoked as subprocesses
 rather than imported: their hyphenated filenames are not importable, and the
 exit codes are part of what deploy.yml relies on.
 """

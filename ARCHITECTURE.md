@@ -76,10 +76,10 @@ for what's protected.
 
 ## CI/CD
 
-`.github/workflows/deploy.yml`: `test` job (Lambda pytest + app vitest) on
-every push/PR → `changes` job (path-filters whether `lambda/` changed) →
-`deploy` job (build/push image, `update-function-code`) → `release` job
-(main-only: auto-version from Conventional Commits, updates
+`.github/workflows/deploy.yml`: `unit`, `lambda`, `e2e` and `security` jobs
+run in parallel on every push/PR → `changes` job (path-filters whether
+`lambda/` changed) → `deploy` job (build/push image, `update-function-code`)
+→ `release` job (main-only: auto-version from Conventional Commits, updates
 `CHANGELOG.md`, creates GitHub Release, opens changelog-sync PR to `dev`).
 Vercel's own git integration deploys the app independently of GitHub
 Actions.

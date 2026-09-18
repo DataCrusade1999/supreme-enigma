@@ -71,13 +71,12 @@ Estimated quota cost per run, from the measured baseline:
 | Run shape | Quota minutes |
 |---|---|
 | Ordinary (Linux only, 5 jobs) | ~6 |
-| Promotion PR (adds Windows ~6 min x2, macOS ~5 min x10) | ~68 |
+| Promotion PR (adds Windows 7m03s x2, macOS 1m15s x10) | ~42 |
 
 At 150 ordinary runs and 6 promotions a month that is about 1,300 minutes,
-inside the 2,000 quota. Cross-OS on every PR would be about 67 per run and
+inside the 2,000 quota. Cross-OS on every PR would be about 42 per run and
 exhaust the quota within days. The first dispatched run after the change
-measures real Windows/macOS wall-clock; the numbers above are estimates
-until then.
+measured real Windows/macOS wall-clock, on run `35361326872`.
 
 A promotion PR's head is `dev`, so every push to `dev` while one is open
 re-triggers a cross-OS run. `cancel-in-progress` (§6) stops the superseded
