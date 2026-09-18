@@ -34,6 +34,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Fixed
 
+- `trivy-results.json` and `trivy-summary.md` are gitignored. The `security`
+  job writes both to the repo root, so running the scan locally left two
+  untracked files — one a 240 KB SBOM — in `git status`, where a `git add -A`
+  would sweep them into the tree.
 - The Trivy summary reports what was scanned, not only what was found. A clean
   run used to render three lines beside a 240 KB report; it now carries a
   Coverage table (target, type, `366 packages` / `28 checks`, per-target
@@ -41,6 +45,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
   table renders under the finding tables too, and a report with no targets at
   all now says so — "no findings" does not distinguish a scan that passed from
   one that covered nothing.
+- Two summaries appended to the same job's step summary are separated by a
+  blank line. The `summary` job writes both the run table and the e2e table,
+  and the second one's heading used to land directly under the first's closing
+  paragraph.
 
 ### Changed
 
