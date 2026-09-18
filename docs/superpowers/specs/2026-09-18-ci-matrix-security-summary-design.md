@@ -71,7 +71,7 @@ Estimated quota cost per run, from the measured baseline:
 | Run shape | Quota minutes |
 |---|---|
 | Ordinary (Linux only, 5 jobs) | ~6 |
-| Promotion PR (adds Windows 7m03s x2, macOS 1m15s x10) | ~42 |
+| Promotion PR (adds Windows 7m03s → 8 min x2, macOS 1m15s → 2 min x10) | ~42 |
 
 At 150 ordinary runs and 6 promotions a month that is about 1,300 minutes,
 inside the 2,000 quota. Cross-OS on every PR would be about 42 per run and

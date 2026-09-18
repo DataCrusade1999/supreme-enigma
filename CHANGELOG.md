@@ -24,9 +24,9 @@ git tags / GitHub Releases cut automatically by the `release` job in
   summary: SARIF upload, CodeQL and dependency review all need Advanced
   Security, which is paid on private repos. `.trivyignore` holds accepted
   findings with a reason each.
+- A `summary` job writes one status table for the whole run.
 - The `summary` job's table also reports the `chromatic` job (landed in
   #215), as a reported row only — it gates nothing.
-- A `summary` job writes one status table for the whole run.
 
 ### Changed
 
