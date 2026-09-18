@@ -1,0 +1,21 @@
+# AVD-AWS-0132: S3 bucket not encrypted with a customer-managed key. Covers the
+# infra/bootstrap/main.tf state bucket and the infra/main/environments.tf audio
+# buckets (main/dev/stage). SSE-S3 already encrypts every object by default
+# since January 2023, so data at rest is covered; this check wants a
+# customer-managed KMS key specifically, which adds ~$1/month per key plus
+# per-request charges, and the audio objects expire after 1 day anyway.
+# Accepted 2026-09-18.
+AVD-AWS-0132
+
+# AVD-AWS-0095: SNS topic not encrypted. infra/main/shared.tf's budget_alerts
+# topic only carries AWS Budgets threshold notifications, no sensitive
+# payload. Encrypting it needs a KMS customer-managed key, adding standing
+# cost to a topic whose whole purpose is controlling cost. Accepted 2026-09-18.
+AVD-AWS-0095
+
+# AVD-DS-0002: no USER in the Dockerfile. lambda/Dockerfile builds on
+# public.ecr.aws/lambda/python, which runs as root by design; Lambda's
+# isolation boundary is the per-invocation microVM, not the container user, so
+# the container-escape scenario this check targets doesn't apply here.
+# Accepted 2026-09-18.
+AVD-DS-0002
