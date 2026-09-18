@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fence, stripAnsi, blobLink, formatDuration, ICONS } from "./summary-lib.mjs";
+import { fence, stripAnsi, blobLink, formatDuration, ICONS, emit } from "./summary-lib.mjs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const ESC = String.fromCharCode(27);
 
@@ -65,4 +68,28 @@ test("ICONS covers every job result the rollup can see", () => {
   for (const key of ["success", "failure", "skipped", "cancelled", "flaky"]) {
     assert.ok(ICONS[key], `missing icon for ${key}`);
   }
+});
+
+// The `summary` job appends two summaries to the same file. Without a blank
+// line between them the second `##` heading sits under the first's closing
+// paragraph, which is what the cross-OS run actually rendered.
+test("emit separates consecutive summaries with a blank line", () => {
+  const file = join(mkdtempSync(join(tmpdir(), "emit-")), "step.md");
+  writeFileSync(file, "");
+  const saved = process.env.GITHUB_STEP_SUMMARY;
+  process.env.GITHUB_STEP_SUMMARY = file;
+  emit(["## CI summary", "", "Cross-OS e2e: no."]);
+  emit(["## E2E + accessibility tests (Playwright)", "", "43 passed."]);
+  if (saved === undefined) delete process.env.GITHUB_STEP_SUMMARY;
+  else process.env.GITHUB_STEP_SUMMARY = saved;
+  const written = readFileSync(file, "utf8");
+  assert.equal(written, "## CI summary\n\nCross-OS e2e: no.\n\n## E2E + accessibility tests (Playwright)\n\n43 passed.\n\n");
+});
+
+test("emit collapses trailing blank lines rather than stacking them", () => {
+  const saved = process.env.GITHUB_STEP_SUMMARY;
+  delete process.env.GITHUB_STEP_SUMMARY;
+  const out = emit(["## Heading", "", "body", "", ""]);
+  if (saved !== undefined) process.env.GITHUB_STEP_SUMMARY = saved;
+  assert.equal(out, "## Heading\n\nbody\n\n");
 });

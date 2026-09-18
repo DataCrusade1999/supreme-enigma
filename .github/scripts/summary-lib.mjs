@@ -56,8 +56,11 @@ export function formatDuration(ms) {
 
 // GITHUB_STEP_SUMMARY is set to "" by the test suites, which is falsy, so a
 // local run prints instead of trying to append to a file named "".
+// Terminates with a blank line, not just a newline: the `summary` job appends
+// two summaries to the same $GITHUB_STEP_SUMMARY, and without it the second
+// one's `##` heading lands directly under the first one's closing paragraph.
 export function emit(lines) {
-  const output = lines.join("\n") + "\n";
+  const output = lines.join("\n").replace(/\n+$/, "") + "\n\n";
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, output);
   } else {
