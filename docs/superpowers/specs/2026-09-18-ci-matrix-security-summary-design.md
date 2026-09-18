@@ -66,16 +66,16 @@ The ternary chooses between two JSON *strings* inside `fromJSON`, because
 string truthiness is defined in GitHub's expression language and array
 truthiness is not documented.
 
-Estimated quota cost per run, from the measured baseline:
+Quota cost per run:
 
 | Run shape | Quota minutes |
 |---|---|
 | Ordinary (Linux only, 5 jobs) | ~6 |
 | Promotion PR (adds Windows 7m03s → 8 min x2, macOS 1m15s → 2 min x10) | ~42 |
 
-At 150 ordinary runs and 6 promotions a month that is about 1,300 minutes,
-inside the 2,000 quota. Cross-OS on every PR would be about 42 per run and
-exhaust the quota within days. The first dispatched run after the change
+At 150 ordinary runs and 6 promotions a month that is about 1,150 minutes,
+inside the 2,000 quota. Cross-OS on every PR would be about 42 per run, which
+exhausts the 2,000 in under 50 runs. The first dispatched run after the change
 measured real Windows/macOS wall-clock, on run `35361326872`.
 
 A promotion PR's head is `dev`, so every push to `dev` while one is open
