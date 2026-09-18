@@ -53,6 +53,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - `.github/scripts/test-summary.mjs` is now `unit-summary.mjs` (Vitest only)
   alongside a new `e2e-summary.mjs`, with the shared helpers in
   `summary-lib.mjs`.
+- Spec paths in the e2e table are derived from each leg's own
+  `config.rootDir` rather than assuming `playwright.config.ts`'s directory.
+  Playwright sets `rootDir` to the project's `testDir`, so the assumed prefix
+  produced `web/a11y.spec.ts` for a file at `web/e2e/a11y.spec.ts` and every
+  link 404'd.
 
 - The single `test` job is now `unit`, `lambda`, `e2e` and `security`, run in
   parallel; `deploy` and `release` gate on all four. Unit tests stay

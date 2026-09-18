@@ -14,12 +14,30 @@ const RESULTS_FILE = "playwright-results.json";
 const ARTIFACT_PREFIX = "playwright-results-";
 const SLOWEST = 5;
 
-// spec.file is relative to config.rootDir, which is `web/` because that is
-// where playwright.config.ts lives. Deriving it instead would need the leg's
-// own GITHUB_WORKSPACE, and this script runs in a different job on a
-// different runner — the Windows leg's path does not even have the same
-// shape as this one's.
-const SPEC_ROOT = "web/";
+// spec.file is relative to config.rootDir, and Playwright sets rootDir to the
+// project's *testDir* - `web/e2e` here - not to the directory holding
+// playwright.config.ts. Verified against a real CI artifact, after the first
+// version assumed the config directory and mislinked every row.
+//
+// Derived per leg rather than hardcoded so that changing testDir cannot
+// silently break the links again. This script runs in the `summary` job, on a
+// different runner from every leg, so its own GITHUB_WORKSPACE is no help for
+// the Windows and macOS legs - but a runner's checkout root is always
+// <...>/<repo>/<repo>, so the last `/<repo>/` in the leg's own rootDir ends
+// the prefix whatever the OS. Off a runner (a local render, the test suite)
+// there is no such marker and the fallback stands in.
+const SPEC_ROOT_FALLBACK = "web/e2e";
+
+function specRoot(data) {
+  const rootDir = String(data?.config?.rootDir ?? "").replace(/\\/g, "/").replace(/\/$/, "");
+  const repo = (process.env.GITHUB_REPOSITORY ?? "").split("/")[1];
+  if (rootDir && repo) {
+    const marker = `/${repo}/`;
+    const i = rootDir.lastIndexOf(marker);
+    if (i !== -1 && rootDir.slice(i + marker.length)) return rootDir.slice(i + marker.length);
+  }
+  return SPEC_ROOT_FALLBACK;
+}
 
 // runner.os values, in the order the matrix declares them.
 const OS_ORDER = ["Linux", "Windows", "macOS"];
@@ -67,7 +85,7 @@ function discoverLegs(root) {
 // `flaky`, which results[] cannot express at all.
 function walkSuite(suite, leg) {
   for (const spec of suite.specs ?? []) {
-    const path = SPEC_ROOT + spec.file;
+    const path = `${leg.specRoot}/${spec.file}`;
     const cell = leg.specs.get(path) ?? { expected: 0, unexpected: 0, flaky: 0, skipped: 0, total: 0 };
     for (const t of spec.tests ?? []) {
       cell.total += 1;
@@ -101,6 +119,7 @@ function analyse(legs) {
     leg.failures = [];
     leg.slowest = [];
     if (!leg.data) continue;
+    leg.specRoot = specRoot(leg.data);
     for (const suite of leg.data.suites) walkSuite(suite, leg);
   }
   return legs;

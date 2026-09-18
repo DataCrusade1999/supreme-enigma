@@ -107,8 +107,8 @@ the right outcome is a summary that says so, not a red job.
 
 | Spec | 🐧 Linux | 🪟 Windows | 🍎 macOS |
 |---|---|---|---|
-| [`e2e/a11y.spec.ts`](…) | ✅ 8 | ✅ 8 | ✅ 8 |
-| [`e2e/pages.spec.ts`](…) | ✅ 6 | ❌ 1/6 | ✅ 6 |
+| [`web/e2e/a11y.spec.ts`](…) | ✅ 8 | ✅ 8 | ✅ 8 |
+| [`web/e2e/pages.spec.ts`](…) | ✅ 6 | ❌ 1/6 | ✅ 6 |
 | **Total** | **✅ 42** | **❌ 1/42** | **✅ 42** |
 | **Duration** | 1m 47s | 7m 03s | 1m 15s |
 ```
@@ -143,11 +143,23 @@ today because `playwright.config.ts` sets no `retries`, but the rewrite gets it
 right for free and `status` carries `flaky` as a first-class value, which
 `results[]` cannot express at all.
 
-`spec.file` is relative to `config.rootDir`, which is `web/`, so repo-relative
-paths are `web/` + `spec.file`. That prefix is a constant in the script with a
-comment: deriving it from `config.rootDir` would need the leg's own
-`GITHUB_WORKSPACE`, which the `summary` job does not have (its workspace belongs
-to a different runner, and the Windows leg's is a different shape entirely).
+`spec.file` is relative to `config.rootDir`, and **Playwright sets `rootDir` to
+the project's `testDir`** — `web/e2e` here — not to the directory holding
+`playwright.config.ts`. The first implementation assumed the config directory,
+which produced `web/a11y.spec.ts` for a file that lives at
+`web/e2e/a11y.spec.ts`: every row's link 404'd. Caught by reading the artifact
+from this change's own PR run rather than by any test, because the fixtures
+encoded the same wrong assumption.
+
+The prefix is therefore derived per leg from that leg's own `config.rootDir`
+(`/home/runner/work/supreme-enigma/supreme-enigma/web/e2e` on Linux,
+`D:\\a\\supreme-enigma\\supreme-enigma\\web\\e2e` on Windows). A runner's
+checkout root is always `<…>/<repo>/<repo>`, so the last `/<repo>/` in the
+normalised path ends the prefix on any OS — which matters because the `summary`
+job's own `GITHUB_WORKSPACE` belongs to a different runner and is no help for
+the Windows and macOS legs. Off a runner there is no such marker and a
+documented `web/e2e` fallback stands in; the test suite covers both paths, plus
+a `testDir` moved one level deeper.
 
 ## 3. Security scan: JSON in, markdown out, both kept
 

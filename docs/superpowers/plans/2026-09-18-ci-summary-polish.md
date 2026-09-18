@@ -76,7 +76,10 @@
 - [ ] Per leg, read top-level `stats` for counts and duration. Walk `suites[]` recursively for per-spec cells, reading `tests[].status` (`expected`/`unexpected`/`skipped`/`flaky`) — **not** `tests[].results[]`.
 - [ ] Render: heading, one-line totals across runners, the spec × OS table with `Total` and `Duration` rows, failures grouped OS → spec as `<details>` with ANSI-stripped messages, and a collapsed slowest-5 across all runners.
   - Cells: `✅ N`, `❌ a/b`, `⚠️ a/b` (flaky), `⏭️ N`, `–` for a spec that did not run on that OS.
-  - Spec paths are `web/` + `spec.file`; the prefix is a documented constant (see spec §2).
+  - Spec paths are `<repo-relative rootDir>/` + `spec.file`. **`config.rootDir` is the project's `testDir`** (`web/e2e`),
+    not the directory holding `playwright.config.ts` — derive the prefix per leg by cutting the leg's own `rootDir` at
+    the last `/<repo>/`, with a `web/e2e` fallback off-runner (see spec §2). Do not hardcode `web/`; that was the first
+    implementation's bug and it 404'd every link.
 - [ ] Handle: no directory at all, directory with no matching subdirectories, a leg whose JSON is missing or unparseable (that column reads `⚠️`, a note says which leg and why, the others still render).
 - [ ] Create `e2e-summary.test.mjs` covering each of those, plus a three-leg run where one spec fails on Windows only.
 - [ ] **Verify:** `node --test ".github/scripts/e2e-summary.test.mjs"` passes.

@@ -34,25 +34,27 @@ function spec(file, line, title, status, duration, errorMessage) {
 // exercised rather than assumed.
 function report(specs, stats) {
   return {
-    config: { rootDir: "/x/web" },
+    // Playwright sets rootDir to the project testDir, not to the directory
+    // holding playwright.config.ts. Real value from a CI artifact.
+    config: { rootDir: "/home/runner/work/supreme-enigma/supreme-enigma/web/e2e" },
     errors: [],
     stats,
     suites: [
-      { title: "a11y.spec.ts", file: "e2e/a11y.spec.ts", specs: [specs[0]], suites: [] },
+      { title: "a11y.spec.ts", file: "a11y.spec.ts", specs: [specs[0]], suites: [] },
       {
         title: "pages.spec.ts",
-        file: "e2e/pages.spec.ts",
+        file: "pages.spec.ts",
         specs: [specs[1]],
-        suites: [{ title: "nested", file: "e2e/pages.spec.ts", specs: [specs[2]], suites: [] }],
+        suites: [{ title: "nested", file: "pages.spec.ts", specs: [specs[2]], suites: [] }],
       },
     ],
   };
 }
 
 const PASSING = [
-  spec("e2e/a11y.spec.ts", 4, "home has no violations", "expected", 3100),
-  spec("e2e/pages.spec.ts", 6, "about renders", "expected", 900),
-  spec("e2e/pages.spec.ts", 15, "resume renders", "skipped", 0),
+  spec("a11y.spec.ts", 4, "home has no violations", "expected", 3100),
+  spec("pages.spec.ts", 6, "about renders", "expected", 900),
+  spec("pages.spec.ts", 15, "resume renders", "skipped", 0),
 ];
 const PASSING_STATS = { duration: 107_000, expected: 2, unexpected: 0, skipped: 1, flaky: 0 };
 
@@ -93,7 +95,7 @@ test("a spec failing on one OS only shows per-column and groups the failure unde
   const failMsg = `Error: ${ESC}[31mreceived${ESC}[39m did not match`;
   const winSpecs = [
     PASSING[0],
-    spec("e2e/pages.spec.ts", 6, "about renders", "unexpected", 12_400, failMsg),
+    spec("pages.spec.ts", 6, "about renders", "unexpected", 12_400, failMsg),
     PASSING[2],
   ];
   const root = download({
@@ -113,7 +115,7 @@ test("a spec failing on one OS only shows per-column and groups the failure unde
 test("a flaky test is reported as flaky, not as a pass and a failure", () => {
   const flakySpec = {
     title: "retried once",
-    file: "e2e/pages.spec.ts",
+    file: "pages.spec.ts",
     line: 6,
     column: 1,
     ok: true,
@@ -139,7 +141,7 @@ test("a flaky test is reported as flaky, not as a pass and a failure", () => {
 test("skipped-only spec renders the skip icon", () => {
   const root = download({
     Linux: report(
-      [spec("e2e/a11y.spec.ts", 4, "skipped one", "skipped", 0), PASSING[1], PASSING[2]],
+      [spec("a11y.spec.ts", 4, "skipped one", "skipped", 0), PASSING[1], PASSING[2]],
       { duration: 1000, expected: 1, unexpected: 0, skipped: 2, flaky: 0 },
     ),
   });
@@ -189,6 +191,36 @@ test("a download directory that does not exist is handled like no artifacts", ()
   const { status, stdout } = run("/nope/not-a-dir");
   assert.equal(status, 0);
   assert.match(stdout, /No Playwright result artifacts found/);
+});
+
+test("the spec root is derived from the leg's own rootDir, not assumed", () => {
+  // Without GITHUB_REPOSITORY there is no marker to cut on, so the fallback
+  // stands in - which is what every other test in this file exercises.
+  const { stdout } = run(download({ Linux: report(PASSING, PASSING_STATS) }), {
+    GITHUB_REPOSITORY: "DataCrusade1999/supreme-enigma",
+  });
+  assert.match(stdout, /\| `web\/e2e\/a11y\.spec\.ts` \|/);
+  assert.doesNotMatch(stdout, /`web\/a11y\.spec\.ts`/);
+  assert.doesNotMatch(stdout, /e2e\/e2e/);
+});
+
+test("a Windows leg's backslash rootDir resolves to the same repo-relative root", () => {
+  const win = report(PASSING, PASSING_STATS);
+  win.config.rootDir = "D:\\a\\supreme-enigma\\supreme-enigma\\web\\e2e";
+  const { stdout } = run(download({ Windows: win }), {
+    GITHUB_REPOSITORY: "DataCrusade1999/supreme-enigma",
+  });
+  assert.match(stdout, /\| `web\/e2e\/a11y\.spec\.ts` \|/);
+  assert.ok(!stdout.includes("\\"), "backslashes must be normalised out of the rendered paths");
+});
+
+test("a testDir one level deeper is followed rather than hardcoded", () => {
+  const deeper = report(PASSING, PASSING_STATS);
+  deeper.config.rootDir = "/home/runner/work/supreme-enigma/supreme-enigma/web/tests/browser";
+  const { stdout } = run(download({ Linux: deeper }), {
+    GITHUB_REPOSITORY: "DataCrusade1999/supreme-enigma",
+  });
+  assert.match(stdout, /\| `web\/tests\/browser\/a11y\.spec\.ts` \|/);
 });
 
 test("usage error without a directory argument", () => {
