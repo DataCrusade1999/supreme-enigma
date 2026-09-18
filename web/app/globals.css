@@ -15,7 +15,7 @@
   /* The 2px rules. Full-strength ink on paper; dialled back on the dark ground,
    * where a 2px rule at full strength vibrates. See lib/portfolio-tokens.test.ts. */
   --color-rule-heavy: #111110;
-  --color-accent: #7a2f8f;
+  --color-accent: #146b64;
   --color-peak: #a8362a;
 
   /* Both faces are loaded by next/font/google in app/layout.tsx, which owns the
