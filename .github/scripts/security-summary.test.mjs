@@ -174,17 +174,73 @@ test("findings are read from the report even when the outcome is success (report
   assert.doesNotMatch(stdout, /did not complete/);
 });
 
-test("clean: empty Results and outcome success", () => {
-  const { status, stdout } = run([tmpReport({ ArtifactName: ".", ArtifactType: "filesystem", Results: [] }), "success"]);
+// The shape a real clean run produces: every target present with its counts,
+// no findings arrays at all. Taken from an actual CI report (Trivy 0.70.0).
+const CLEAN = {
+  SchemaVersion: 2,
+  Trivy: { Version: "0.70.0" },
+  ArtifactName: ".",
+  ArtifactType: "repository",
+  Metadata: { Commit: "2ecd7b0a918622a5d16a66836f7833b2ae8015da" },
+  Results: [
+    { Target: "web/package-lock.json", Class: "lang-pkgs", Type: "npm", Packages: Array.from({ length: 366 }, (_, i) => ({ Name: `pkg-${i}` })) },
+    { Target: "infra/main", Class: "config", Type: "terraform", MisconfSummary: { Successes: 28, Failures: 0 } },
+    { Target: "infra/main/shared.tf", Class: "config", Type: "terraform" },
+    { Target: "lambda/Dockerfile", Class: "config", Type: "dockerfile", MisconfSummary: { Successes: 19, Failures: 0 } },
+  ],
+};
+
+test("clean: a real clean report reports what was scanned, not just that nothing was found", () => {
+  const { status, stdout } = run([tmpReport(CLEAN), "success"]);
   assert.equal(status, 0);
   assert.match(stdout, /No HIGH or CRITICAL findings with a fix available\./);
-  assert.match(stdout, /Scanned `\.` \(filesystem\)\./);
-  assert.doesNotMatch(stdout, /### /);
+  assert.match(stdout, /### Coverage/);
+  assert.match(stdout, /\| `web\/package-lock\.json` \| npm \| 366 packages \| ✅ 0 \|/);
+  assert.match(stdout, /\| `infra\/main` \| terraform \| 28 checks \| ✅ 0 \|/);
+  assert.match(stdout, /\| `lambda\/Dockerfile` \| dockerfile \| 19 checks \| ✅ 0 \|/);
+  assert.match(stdout, /Trivy 0\.70\.0 · 4 targets · commit `2ecd7b0`/);
 });
 
-test("clean: Results absent entirely and outcome success", () => {
+test("clean: a target with no count of its own renders an em dash and is explained", () => {
+  const { stdout } = run([tmpReport(CLEAN), "success"]);
+  assert.match(stdout, /\| `infra\/main\/shared\.tf` \| terraform \| — \| ✅ 0 \|/);
+  assert.match(stdout, /carry no count of their own/);
+});
+
+test("clean: singular package and check counts", () => {
+  const one = {
+    Trivy: { Version: "0.70.0" },
+    Results: [
+      { Target: "a/package-lock.json", Type: "npm", Packages: [{ Name: "only" }] },
+      { Target: "b", Type: "terraform", MisconfSummary: { Successes: 1, Failures: 0 } },
+    ],
+  };
+  const { stdout } = run([tmpReport(one), "success"]);
+  assert.match(stdout, /1 package \|/);
+  assert.match(stdout, /1 check \|/);
+  assert.match(stdout, /Trivy 0\.70\.0 · 2 targets/);
+});
+
+test("clean: Results absent entirely warns that nothing was examined", () => {
   const { stdout } = run([tmpReport({ SchemaVersion: 2, ArtifactName: "." }), "success"]);
   assert.match(stdout, /No HIGH or CRITICAL findings with a fix available\./);
+  assert.match(stdout, /⚠️ The report lists no scanned targets, so nothing was examined\./);
+  assert.doesNotMatch(stdout, /### Coverage/);
+});
+
+test("clean: an empty Results array warns the same way", () => {
+  const { stdout } = run([tmpReport({ ArtifactName: ".", Results: [] }), "success"]);
+  assert.match(stdout, /nothing was examined/);
+});
+
+test("the coverage table is rendered alongside findings, not instead of them", () => {
+  const withFindings = { ...CLEAN, Results: [...CLEAN.Results, ...MISCONF.Results] };
+  const { stdout } = run([tmpReport(withFindings), "failure"]);
+  assert.match(stdout, /### Misconfiguration/);
+  assert.match(stdout, /### Coverage/);
+  assert.match(stdout, /\| `infra\/main\/shared\.tf` \| terraform \| 39 checks \| ❌ 1 \|/);
+  // Findings come first; coverage is context underneath.
+  assert.ok(stdout.indexOf("### Misconfiguration") < stdout.indexOf("### Coverage"));
 });
 
 test("a single finding is singular", () => {
@@ -225,6 +281,26 @@ test("a pipe in a Trivy message does not break the table columns", () => {
   piped.Results[0].Misconfigurations[0].Message = "value is `a|b` which is wrong";
   const { stdout } = run([tmpReport(piped), "failure"]);
   assert.match(stdout, /a\\\|b/);
+});
+
+// GitHub exposes no API for reading a step summary back, so "the artifact is
+// what the step summary says" is otherwise an untestable claim about the
+// script's internals. This asserts it on the bytes.
+test("the artifact markdown is byte-identical to what the step summary receives", () => {
+  const file = tmpReport(CLEAN);
+  const stepSummary = join(dirname(file), "step-summary.md");
+  writeFileSync(stepSummary, "");
+  const r = spawnSync(process.execPath, [script, file, "success"], {
+    encoding: "utf8",
+    env: { ...process.env, GITHUB_STEP_SUMMARY: stepSummary, GITHUB_SERVER_URL: "", GITHUB_REPOSITORY: "", HEAD_SHA: "" },
+  });
+  assert.equal(r.status, 0);
+  const written = readFileSync(stepSummary, "utf8");
+  const artifact = readFileSync(join(dirname(file), "trivy-summary.md"), "utf8");
+  assert.equal(written, artifact);
+  assert.match(written, /### Coverage/);
+  // And nothing went to stdout instead of the summary file.
+  assert.equal(r.stdout, "");
 });
 
 test("usage error without both arguments", () => {
