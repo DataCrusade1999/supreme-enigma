@@ -17,6 +17,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Every `runs-on` below pins `ubuntu-24.04` rather than `ubuntu-latest`.
+# `ubuntu-latest` resolves to 24.04 today, so the pin is behaviour-neutral,
+# but the label migrates to Ubuntu 26.04 starting 2026-10-19
+# (https://github.com/actions/runner-images/issues/14748) and every job was
+# emitting a migration notice on every run. Pinning trades that notice for a
+# manual bump: this repo stays on 24.04 until someone changes these lines.
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: bgm-looper-lambda
@@ -24,7 +30,7 @@ env:
 jobs:
   unit:
     name: Lint + unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -77,7 +83,7 @@ jobs:
   # a Linux container, so another OS would test a platform it never runs on.
   lambda:
     name: Lambda tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -119,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (github.base_ref == 'stage' || github.base_ref == 'main'))) && '["ubuntu-latest", "windows-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (github.base_ref == 'stage' || github.base_ref == 'main'))) && '["ubuntu-24.04", "windows-latest", "macos-latest"]' || '["ubuntu-24.04"]') }}
     # Every step below is bash; windows-latest would otherwise run them in
     # PowerShell, where `set -o pipefail` and `$GITHUB_OUTPUT` do not exist.
     defaults:
@@ -157,14 +163,14 @@ jobs:
       # `summary` job downloads all of these and renders them together.
       #
       # `if: always()` because the leg that failed is the one worth reading.
-      # `overwrite: true` because v4 artifacts are immutable and
+      # `overwrite: true` because uploaded artifacts are immutable and
       # `gh run rerun --failed` - this repo's documented recovery path - would
       # otherwise fail on the retry. `if-no-files-found: warn` so a leg that
       # died before the reporter wrote anything shows up as a gap in the table
       # instead of a second red step on top of the first.
       - name: Upload Playwright results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-results-${{ runner.os }}
           path: web/playwright-results.json
@@ -179,7 +185,7 @@ jobs:
   # Visual regression. Parallel to the test jobs, and deliberately absent from every
   # other job's `needs:` - a visual diff must not block a deploy or a release.
   chromatic:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # dev is the baseline branch. Promotion PRs (dev -> stage, stage -> main)
     # and stage/main pushes are skipped: their head SHA was already snapshotted
     # on dev, so re-running only spends snapshot budget.
@@ -234,7 +240,7 @@ jobs:
   # of the Security tab. Dependabot alerts (free, already on) cover the rest.
   security:
     name: Security scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -278,7 +284,7 @@ jobs:
       # the summary cannot disagree.
       - name: Upload scan results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trivy-results
           path: |
@@ -299,7 +305,7 @@ jobs:
     name: Summary
     needs: [unit, lambda, e2e, security, chromatic]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -321,7 +327,7 @@ jobs:
       # summary saying so, not a red job.
       - name: Download Playwright results
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: playwright-results-*
           path: e2e-results
@@ -353,7 +359,7 @@ jobs:
   # Branch protection is not enforced on this repo (private, no Pro), so this
   # is a red X rather than a hard block. Do not merge past it.
   promotion-guard:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request' && (github.base_ref == 'stage' || github.base_ref == 'main')
     steps:
       - uses: actions/checkout@v7
@@ -383,7 +389,7 @@ jobs:
           exit 1
 
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'push'
     outputs:
       lambda: ${{ steps.check.outputs.lambda }}
@@ -422,7 +428,7 @@ jobs:
 
   deploy:
     needs: [unit, lambda, e2e, security, changes]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Required for OIDC: id-token: write is what lets the job mint the token
     # aws-actions/configure-aws-credentials exchanges for the role. Declaring a
     # permissions block replaces the repo default outright rather than adding to
@@ -513,7 +519,7 @@ jobs:
 
   release:
     needs: [unit, lambda, e2e, security, deploy, changes]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # deploy is legitimately skipped (not failed) on a main push that touches
     # no lambda/ files — release must still run in that case, so this can't
     # rely on the default `if: success()` gating, which treats a skipped

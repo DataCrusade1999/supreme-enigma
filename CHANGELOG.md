@@ -32,6 +32,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
   rendered markdown — for 30). Nothing was downloadable from a run before
   this.
 
+### Changed
+
+- CI no longer emits Node 20 deprecation warnings or Ubuntu migration notices.
+  `actions/upload-artifact` moves v4 to v7 and `actions/download-artifact` v4
+  to v8 (both now run natively on Node 24 instead of being forced onto it),
+  and every `runs-on` pins `ubuntu-24.04` instead of `ubuntu-latest`. The pin
+  is behaviour-neutral today but has to be bumped by hand once Ubuntu 26.04
+  is wanted.
+
 ### Fixed
 
 - `trivy-results.json` and `trivy-summary.md` are gitignored. The `security`
