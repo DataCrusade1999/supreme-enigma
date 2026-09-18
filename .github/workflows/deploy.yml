@@ -58,7 +58,12 @@ jobs:
 
       - name: Vitest job summary
         if: always()
-        run: node .github/scripts/test-summary.mjs --kind vitest web/vitest-results.json
+        # HEAD_SHA, not github.sha: on a pull_request event github.sha is the
+        # synthetic merge commit, and blob links built from it are not
+        # reachable from the PR.
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node .github/scripts/unit-summary.mjs web/vitest-results.json
 
       # The summary scripts this workflow's other jobs depend on.
       - name: Run CI script tests (Node)
@@ -147,9 +152,25 @@ jobs:
           npx playwright test || EXIT_CODE=$?
           echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-      - name: Playwright job summary
+      # Uploaded rather than summarised here: $GITHUB_STEP_SUMMARY is per job
+      # and a matrix leg is a job, so three legs cannot write one table. The
+      # `summary` job downloads all of these and renders them together.
+      #
+      # `if: always()` because the leg that failed is the one worth reading.
+      # `overwrite: true` because v4 artifacts are immutable and
+      # `gh run rerun --failed` - this repo's documented recovery path - would
+      # otherwise fail on the retry. `if-no-files-found: warn` so a leg that
+      # died before the reporter wrote anything shows up as a gap in the table
+      # instead of a second red step on top of the first.
+      - name: Upload Playwright results
         if: always()
-        run: node .github/scripts/test-summary.mjs --kind playwright --label "${{ runner.os }}" web/playwright-results.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-${{ runner.os }}
+          path: web/playwright-results.json
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
 
       - name: Fail the job if the e2e suite failed
         if: steps.playwright.outputs.exit_code != '0'
@@ -231,8 +252,13 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
-          format: table
-          output: trivy-results.txt
+          # JSON, not table: the first version counted findings by matching
+          # `^(?:Total|Failures): (\d+) \(` over Trivy's ASCII output, which
+          # is a presentation detail that differs per scanner type and is
+          # absent entirely for a clean target. The JSON also carries
+          # PrimaryURL and CauseMetadata.StartLine, which the table drops.
+          format: json
+          output: trivy-results.json
           # Inert today: this job's only step before Trivy is a plain checkout,
           # no install or build, so none of these directories exist yet. Kept
           # for the day this job scans after an install step is added.
@@ -241,7 +267,26 @@ jobs:
 
       - name: Security job summary
         if: always()
-        run: node .github/scripts/security-summary.mjs trivy-results.txt "${{ steps.trivy.outcome }}"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node .github/scripts/security-summary.mjs trivy-results.json "${{ steps.trivy.outcome }}"
+
+      # 30 days rather than the 7 used for test results: a scan result is what
+      # someone asks about weeks later ("when did this CVE first appear?"), and
+      # both files are kilobytes. trivy-summary.md is written by the step above
+      # from the same lines it appends to the job summary, so the artifact and
+      # the summary cannot disagree.
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results
+          path: |
+            trivy-results.json
+            trivy-summary.md
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: warn
 
       - name: Fail the job if the scan found anything
         if: steps.trivy.outcome != 'success'
@@ -264,6 +309,27 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
         run: node .github/scripts/run-summary.mjs
+
+      # No `merge-multiple`: all three artifacts hold a file called
+      # playwright-results.json, so merging them into one directory would have
+      # the legs overwrite each other and report one OS three times. Left
+      # unset, each lands in its own playwright-results-<OS>/ directory, which
+      # is where the script reads the OS label from.
+      #
+      # `continue-on-error` because this job reports and gates nothing: if
+      # `e2e` was cancelled before any leg uploaded, the right outcome is a
+      # summary saying so, not a red job.
+      - name: Download Playwright results
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: playwright-results-*
+          path: e2e-results
+
+      - name: Write the combined e2e summary
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node .github/scripts/e2e-summary.mjs e2e-results
 
   # Refuses a promotion whose merge base predates the last release's changelog
   # heading. Merging in that state corrupts CHANGELOG.md: git sees the release
