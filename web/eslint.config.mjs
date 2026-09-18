@@ -5,7 +5,7 @@ const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
-    ignores: ["next-env.d.ts", ".next/**"],
+    ignores: ["next-env.d.ts", ".next/**", "storybook-static/**"],
   },
 ];
 

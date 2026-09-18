@@ -89,6 +89,58 @@ jobs:
         if: steps.lint.outputs.exit_code != '0' || steps.vitest.outputs.exit_code != '0' || steps.playwright.outputs.exit_code != '0'
         run: exit 1
 
+  # Visual regression. Parallel to `test`, and deliberately absent from every
+  # other job's `needs:` - a visual diff must not block a deploy or a release.
+  chromatic:
+    runs-on: ubuntu-latest
+    # dev is the baseline branch. Promotion PRs (dev -> stage, stage -> main)
+    # and stage/main pushes are skipped: their head SHA was already snapshotted
+    # on dev, so re-running only spends snapshot budget.
+    #
+    # Dependabot is excluded because Actions secrets are not exposed to its
+    # runs - CHROMATIC_PROJECT_TOKEN would be empty and the job would fail red
+    # on every bump. A missing token is an error, not a "change", so
+    # exitZeroOnChanges does not absorb it.
+    if: >-
+      github.actor != 'dependabot[bot]' && (
+        (github.event_name == 'push' && github.ref_name == 'dev') ||
+        (github.event_name == 'pull_request' && github.base_ref == 'dev')
+      )
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # TurboSnap resolves which stories changed from git history and
+          # silently falls back to a full build without it.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install app dependencies
+        working-directory: web
+        run: npm install
+
+      - name: Publish to Chromatic
+        uses: chromaui/action@v18
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          workingDir: web
+          # TurboSnap: snapshot only the stories the diff can reach.
+          onlyChanged: true
+          # Advisory gate. This is the action's default, set explicitly: the
+          # diff is reviewed through Chromatic's own UI Tests PR check, and CI
+          # stays green either way.
+          exitZeroOnChanges: true
+          # Return as soon as the build is uploaded rather than waiting for the
+          # comparison - Chromatic reports the result on its own check.
+          exitOnceUploaded: true
+          # Required, not tidy: feature PRs are squash-merged into dev, and
+          # GitHub squash creates a commit unassociated with the merged branch,
+          # so baselines do not carry over on their own.
+          autoAcceptChanges: dev
+
   # Refuses a promotion whose merge base predates the last release's changelog
   # heading. Merging in that state corrupts CHANGELOG.md: git sees the release
   # transform as one side's change and the branch's new entries as the other's,
