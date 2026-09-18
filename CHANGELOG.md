@@ -7,6 +7,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Storybook for `web/components/`, and Chromatic visual regression on pull
+  requests into `dev`. Every story is snapshotted in both light and dark.
+  Storybook is installed locally but never run by `npm test` or
+  `npm run lint` — all build cost is on CI.
+
 ### Fixed
 
 - `CLAUDE.md` and the release-promotion runbook said the changelog-sync PR
