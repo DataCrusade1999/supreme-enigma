@@ -2,20 +2,13 @@
 // job, so the only place a single overview can come from is a job that
 // depends on every other one - that is the `summary` job in deploy.yml,
 // which runs `if: always()` and hands us `toJSON(needs)`.
-import { appendFileSync } from "node:fs";
+import { ICONS, emit } from "./summary-lib.mjs";
 
 const LABELS = {
   unit: "Lint + unit tests",
   lambda: "Lambda tests",
   e2e: "E2E (Playwright)",
   security: "Security scan",
-};
-
-const ICONS = {
-  success: "✅",
-  failure: "❌",
-  skipped: "⏭️",
-  cancelled: "🚫",
 };
 
 let needs;
@@ -47,9 +40,4 @@ lines.push(
   `Cross-OS e2e: ${crossOs ? "yes" : "no"} (${where}). Runs on promotion PRs and workflow_dispatch.`,
 );
 
-const output = lines.join("\n") + "\n";
-if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, output);
-} else {
-  console.log(output);
-}
+emit(lines);

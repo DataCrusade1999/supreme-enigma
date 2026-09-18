@@ -27,8 +27,37 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - A `summary` job writes one status table for the whole run.
 - The `summary` job's table also reports the `chromatic` job (landed in
   #215), as a reported row only — it gates nothing.
+- Playwright results and Trivy scan results are uploaded as artifacts
+  (`playwright-results-<OS>` for 7 days, `trivy-results` — the JSON plus the
+  rendered markdown — for 30). Nothing was downloadable from a run before
+  this.
 
 ### Changed
+
+- The three `e2e` matrix legs no longer write a summary each. They upload
+  their reports and the `summary` job renders one spec × OS table, with a
+  per-OS duration row — the first time CI has reported a duration anywhere,
+  despite the minute budget being what shaped the matrix.
+- Playwright results are read from `tests[].status` rather than
+  `tests[].results[]`, so a retried test counts once instead of as both a
+  pass and a failure, and a flake is labelled as one.
+- The Trivy job emits JSON instead of an ASCII table, and the summary renders
+  findings as three tables (vulnerabilities, misconfiguration, secrets) with
+  advisory links and file/line links at the commit under test. Counting
+  findings no longer means matching `Total:`/`Failures:` lines out of Trivy's
+  own formatting. Secret findings report file and line only; Trivy's `Match`
+  field is never printed.
+- Summaries report counts as tables, list the five slowest tests, group
+  failures by file, link to source, and strip the ANSI escapes Playwright
+  puts in its error messages.
+- `.github/scripts/test-summary.mjs` is now `unit-summary.mjs` (Vitest only)
+  alongside a new `e2e-summary.mjs`, with the shared helpers in
+  `summary-lib.mjs`.
+- Spec paths in the e2e table are derived from each leg's own
+  `config.rootDir` rather than assuming `playwright.config.ts`'s directory.
+  Playwright sets `rootDir` to the project's `testDir`, so the assumed prefix
+  produced `web/a11y.spec.ts` for a file at `web/e2e/a11y.spec.ts` and every
+  link 404'd.
 
 - The single `test` job is now `unit`, `lambda`, `e2e` and `security`, run in
   parallel; `deploy` and `release` gate on all four. Unit tests stay
