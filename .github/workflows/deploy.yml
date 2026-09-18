@@ -158,6 +158,21 @@ jobs:
           npx playwright test || EXIT_CODE=$?
           echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
+      # The OS lives in a directory *inside* the zip, not only in the artifact
+      # name. `download-artifact` extracts a pattern download flat whenever it
+      # matches exactly one artifact (v5+), which is every PR into `dev`, so
+      # the artifact name alone does not survive the round trip - an OS-named
+      # directory in the zip does, with `merge-multiple: true` on the other
+      # side. `[ -f ]` rather than a bare `cp` so a leg that died before the
+      # reporter wrote anything leaves `staging` empty and produces no
+      # artifact, which is what `if-no-files-found: warn` below expects.
+      - name: Stage the Playwright report under its OS
+        if: always()
+        working-directory: web
+        run: |
+          mkdir -p "staging/playwright-results-${{ runner.os }}"
+          [ -f playwright-results.json ] && cp playwright-results.json "staging/playwright-results-${{ runner.os }}/" || true
+
       # Uploaded rather than summarised here: $GITHUB_STEP_SUMMARY is per job
       # and a matrix leg is a job, so three legs cannot write one table. The
       # `summary` job downloads all of these and renders them together.
@@ -173,7 +188,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-results-${{ runner.os }}
-          path: web/playwright-results.json
+          path: web/staging
           retention-days: 7
           overwrite: true
           if-no-files-found: warn
@@ -325,11 +340,18 @@ jobs:
       # `continue-on-error` because this job reports and gates nothing: if
       # `e2e` was cancelled before any leg uploaded, the right outcome is a
       # summary saying so, not a red job.
+      # `merge-multiple: true` extracts every matched zip straight into
+      # `e2e-results`, so the layout is the same whether one leg ran or three:
+      # each zip carries its own `playwright-results-<OS>/` directory, and
+      # nothing collides. Without it the action nests per artifact name on a
+      # multi-artifact match but flattens a single-artifact one (v5+), which
+      # is two different layouts for `e2e-summary.mjs` to read.
       - name: Download Playwright results
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           pattern: playwright-results-*
+          merge-multiple: true
           path: e2e-results
 
       - name: Write the combined e2e summary
