@@ -48,6 +48,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Fixed
 
+- `promotion-guard` and the release version bump resolve the last release
+  with `git describe --match 'v[0-9]*'` rather than `'v*'`, so a stray
+  non-release tag (`vtest`, `vnext`) reachable from `main` can no longer be
+  returned as the last tag — which would have made the guard assert against
+  the wrong tag and the bump compute its range from the wrong point.
+
 - Vercel builds again on a `web/`-touching commit. The `ignore_command` on
   `vercel_project.looper` runs with the working directory set to
   `root_directory` (`web`), so its bare `web content` pathspecs resolved to
