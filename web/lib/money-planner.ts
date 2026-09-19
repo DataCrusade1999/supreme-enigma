@@ -3,6 +3,7 @@ import {
   compareIso,
   dueDatesBetween,
   nextOccurrenceOnOrAfter,
+  parseIso,
   payDatesBetween,
   type IsoDate,
 } from "./money-planner-dates";
@@ -15,7 +16,17 @@ export type Expense = {
   amount: Money;
   everyMonths: number;
   nextDue: IsoDate;
+  // The original, never-clamped day of month `nextDue` is anchored to. Absent
+  // on a plan stored before this field existed — derived from `nextDue`'s own
+  // day in that case. Without it, a `nextDue` that rollForward clamped (31
+  // January into 28 February) would become the new anchor day for every
+  // occurrence after it.
+  anchorDay?: number;
 };
+
+function anchorDayOf(expense: Expense): number {
+  return expense.anchorDay ?? parseIso(expense.nextDue).day;
+}
 
 export type Plan = {
   v: 1;
@@ -60,6 +71,12 @@ export function validatePlan(plan: Plan): string[] {
     if (!ISO_DATE.test(expense.nextDue)) {
       problems.push(`${label}: next due must be a date`);
     }
+    if (
+      expense.anchorDay !== undefined &&
+      (!isWholeAtLeast(expense.anchorDay, 1) || expense.anchorDay > 31)
+    ) {
+      problems.push(`${label}: anchor day must be a whole day between 1 and 31`);
+    }
   });
 
   return problems;
@@ -87,7 +104,13 @@ export function buildEvents(plan: Plan, from: IsoDate, until: IsoDate): RawEvent
   const events: RawEvent[] = [];
 
   for (const expense of plan.expenses) {
-    for (const date of dueDatesBetween(expense.nextDue, expense.everyMonths, from, until)) {
+    for (const date of dueDatesBetween(
+      expense.nextDue,
+      expense.everyMonths,
+      from,
+      until,
+      anchorDayOf(expense),
+    )) {
       events.push({
         date,
         label: expense.name.trim() || "Expense",
@@ -121,10 +144,14 @@ export function rollForward(plan: Plan, today: IsoDate): Plan {
   }
   return {
     ...plan,
-    expenses: plan.expenses.map((expense) => ({
-      ...expense,
-      nextDue: nextOccurrenceOnOrAfter(expense.nextDue, expense.everyMonths, today),
-    })),
+    expenses: plan.expenses.map((expense) => {
+      const anchorDay = anchorDayOf(expense);
+      return {
+        ...expense,
+        anchorDay,
+        nextDue: nextOccurrenceOnOrAfter(expense.nextDue, expense.everyMonths, today, anchorDay),
+      };
+    }),
   };
 }
 

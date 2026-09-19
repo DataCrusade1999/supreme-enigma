@@ -66,6 +66,16 @@ describe("validatePlan", () => {
     );
   });
 
+  it("accepts a plan with anchorDay absent — an old stored plan derives one", () => {
+    expect(validatePlan(plan({ expenses: [expense({ anchorDay: undefined })] }))).toEqual([]);
+  });
+
+  it.each([0, -1, 32, 1.5, Number.NaN])("rejects an anchor day of %s", (anchorDay) => {
+    expect(validatePlan(plan({ expenses: [expense({ anchorDay })] }))).toContain(
+      "Rent: anchor day must be a whole day between 1 and 31",
+    );
+  });
+
   it("names an unnamed expense by position", () => {
     expect(validatePlan(plan({ expenses: [expense({ name: "", everyMonths: 0 })] }))).toContain(
       "Expense 1: repeat must be a whole number of months, 1 or more",
@@ -191,6 +201,26 @@ describe("rollForward", () => {
     const original = plan({ expenses: [expense({ everyMonths: 3, nextDue: "2026-04-10" })] });
     rollForward(original, "2026-09-19");
     expect(original.expenses[0].nextDue).toBe("2026-04-10");
+  });
+
+  it("never lets a clamped nextDue become the persisted anchor", () => {
+    // Reopening the app once a month, each time saving rollForward's result
+    // back as the stored plan — exactly what the page does on load. A rent
+    // due the 31st must come back to the 31st every month that has one,
+    // never settle at the 28th just because February clamped it once.
+    let current = plan({ expenses: [expense({ everyMonths: 1, nextDue: "2026-01-31" })] });
+    const seen: string[] = [];
+    for (const today of ["2026-02-01", "2026-03-01", "2026-04-01", "2026-05-01", "2026-06-01"]) {
+      current = rollForward(current, today);
+      seen.push(current.expenses[0].nextDue);
+    }
+    expect(seen).toEqual([
+      "2026-02-28",
+      "2026-03-31",
+      "2026-04-30",
+      "2026-05-31",
+      "2026-06-30",
+    ]);
   });
 });
 
@@ -357,6 +387,31 @@ describe("computeAffordDate", () => {
       "2026-09-19",
     );
     expect(result).toMatchObject({ kind: "unreachable", reason: "horizon", monthlyNet: 1_000 });
+  });
+
+  it("never lets a persisted anchor drift push the answer too early", () => {
+    // Same drift as the rollForward regression test, carried into a real
+    // affordability calculation: reopening monthly for a year with a rent due
+    // the 31st, then asking when a 60,000 purchase is safe. Un-drifted, rent
+    // keeps landing on the real last day of each month and the answer is
+    // 2026-10-01. The reviewer's report of the unfixed code: it settles the
+    // anchor at the 28th after the first February and answers 2026-07-01 —
+    // three months early, misleading the user into buying before they can.
+    let current = plan({
+      balance: 0,
+      salary: 40_000,
+      payDay: 1,
+      expenses: [expense({ amount: 30_000, everyMonths: 1, nextDue: "2025-01-31" })],
+      target: { name: "Thing", price: 60_000 },
+    });
+    for (const today of [
+      "2025-02-01", "2025-03-01", "2025-04-01", "2025-05-01", "2025-06-01", "2025-07-01",
+      "2025-08-01", "2025-09-01", "2025-10-01", "2025-11-01", "2025-12-01", "2026-01-01",
+    ]) {
+      current = rollForward(current, today);
+    }
+    const result = computeAffordDate(current, "2026-01-29");
+    expect(result).toMatchObject({ kind: "date", date: "2026-10-01", balanceThen: 90_000 });
   });
 
   it("respects a shorter horizon", () => {
