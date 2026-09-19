@@ -341,12 +341,18 @@ resource "vercel_project" "looper" {
   # is that a *new* top-level directory that becomes build-relevant would
   # silently stop deploying until it is added here.
   #
+  # Vercel runs this with the working directory set to root_directory, and git
+  # pathspecs resolve relative to the cwd — so a bare `web content` would look
+  # for web/web and web/content, never match, always exit 0 and skip every
+  # build (#229). The `:(top)` magic prefix anchors each pathspec to the repo
+  # root, which holds whatever root_directory is set to.
+  #
   # This also makes Instant Rollback usable. On Hobby it only reaches the
   # immediately previous production deployment, and the release job pushes a
   # CHANGELOG-only commit to main right after each promotion merge — without
   # this, that commit is its own deployment and the single rollback step
   # reverts a markdown heading instead of the release.
-  ignore_command = "git diff --quiet HEAD^ HEAD -- web content"
+  ignore_command = "git diff --quiet HEAD^ HEAD -- ':(top)web' ':(top)content'"
 
   # The resume publish route refuses to run unless VERCEL_ENV is "production"
   # (spec §7.3), and VERCEL_ENV is a Vercel system variable. The provider

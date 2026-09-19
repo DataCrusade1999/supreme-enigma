@@ -48,6 +48,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Fixed
 
+- Vercel builds again on a `web/`-touching commit. The `ignore_command` on
+  `vercel_project.looper` runs with the working directory set to
+  `root_directory` (`web`), so its bare `web content` pathspecs resolved to
+  `web/web` and `web/content`, never matched, and exited 0 — which Vercel
+  reads as "skip". Every deployment on all three branches was silently
+  canceled from the `app/` → `web/` rename onwards. The pathspecs now carry
+  the `:(top)` prefix, anchoring them to the repo root.
 - `trivy-results.json` and `trivy-summary.md` are gitignored. The `security`
   job writes both to the repo root, so running the scan locally left two
   untracked files — one a 240 KB SBOM — in `git status`, where a `git add -A`
