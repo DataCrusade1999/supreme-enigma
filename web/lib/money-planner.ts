@@ -1,4 +1,10 @@
-import type { IsoDate } from "./money-planner-dates";
+import {
+  compareIso,
+  dueDatesBetween,
+  nextOccurrenceOnOrAfter,
+  payDatesBetween,
+  type IsoDate,
+} from "./money-planner-dates";
 
 export type Money = number;
 
@@ -67,4 +73,56 @@ export function monthlyNet(plan: Plan): number {
     0,
   );
   return plan.salary - load;
+}
+
+export type RawEvent = {
+  date: IsoDate;
+  label: string;
+  delta: Money;
+  kind: "expense" | "salary";
+};
+
+export function buildEvents(plan: Plan, from: IsoDate, until: IsoDate): RawEvent[] {
+  const events: RawEvent[] = [];
+
+  for (const expense of plan.expenses) {
+    for (const date of dueDatesBetween(expense.nextDue, expense.everyMonths, from, until)) {
+      events.push({
+        date,
+        label: expense.name.trim() || "Expense",
+        delta: -expense.amount,
+        kind: "expense",
+      });
+    }
+  }
+
+  for (const date of payDatesBetween(plan.payDay, from, until)) {
+    events.push({ date, label: "Salary", delta: plan.salary, kind: "salary" });
+  }
+
+  // Expenses before salary on a shared date: the pessimistic order, so the
+  // answer is never a date that a same-day debit would have broken.
+  return events.sort((a, b) => {
+    const byDate = compareIso(a.date, b.date);
+    if (byDate !== 0) {
+      return byDate;
+    }
+    return a.kind === b.kind ? 0 : a.kind === "expense" ? -1 : 1;
+  });
+}
+
+// A plan reopened weeks later has every nextDue in the past. Those occurrences
+// are gone and their money with them — already missing from the balance the
+// user typed — so they roll forward rather than replay.
+export function rollForward(plan: Plan, today: IsoDate): Plan {
+  if (validatePlan(plan).length > 0) {
+    return plan;
+  }
+  return {
+    ...plan,
+    expenses: plan.expenses.map((expense) => ({
+      ...expense,
+      nextDue: nextOccurrenceOnOrAfter(expense.nextDue, expense.everyMonths, today),
+    })),
+  };
 }

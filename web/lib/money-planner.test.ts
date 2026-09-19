@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monthlyNet, validatePlan, type Expense, type Plan } from "./money-planner";
+import { buildEvents, monthlyNet, rollForward, validatePlan, type Expense, type Plan } from "./money-planner";
 
 function expense(over: Partial<Expense> = {}): Expense {
   return { id: "e1", name: "Rent", amount: 20_000, everyMonths: 1, nextDue: "2026-10-01", ...over };
@@ -89,5 +89,99 @@ describe("monthlyNet", () => {
 
   it("goes negative when the expenses outrun the salary", () => {
     expect(monthlyNet(plan({ salary: 10_000 }))).toBe(-10_000);
+  });
+});
+
+describe("buildEvents", () => {
+  it("emits a salary credit on each pay day in the window", () => {
+    const events = buildEvents(plan({ payDay: 1, expenses: [] }), "2026-09-19", "2026-12-01");
+    expect(events).toEqual([
+      { date: "2026-10-01", label: "Salary", delta: 80_000, kind: "salary" },
+      { date: "2026-11-01", label: "Salary", delta: 80_000, kind: "salary" },
+      { date: "2026-12-01", label: "Salary", delta: 80_000, kind: "salary" },
+    ]);
+  });
+
+  it("emits each expense as a negative delta on its own cadence", () => {
+    const events = buildEvents(
+      plan({
+        payDay: 1,
+        expenses: [expense({ name: "Wifi", amount: 1_800, everyMonths: 3, nextDue: "2026-10-04" })],
+      }),
+      "2026-09-19",
+      "2027-01-05",
+    );
+    expect(events.filter((event) => event.kind === "expense")).toEqual([
+      { date: "2026-10-04", label: "Wifi", delta: -1_800, kind: "expense" },
+      { date: "2027-01-04", label: "Wifi", delta: -1_800, kind: "expense" },
+    ]);
+  });
+
+  it("settles an expense before the salary when they share a date", () => {
+    const events = buildEvents(
+      plan({ payDay: 1, expenses: [expense({ name: "Rent", nextDue: "2026-10-01" })] }),
+      "2026-09-19",
+      "2026-10-01",
+    );
+    expect(events.map((event) => event.label)).toEqual(["Rent", "Salary"]);
+  });
+
+  it("includes events dated today — they are upcoming, not settled", () => {
+    const events = buildEvents(
+      plan({ payDay: 19, expenses: [expense({ name: "Rent", nextDue: "2026-09-19" })] }),
+      "2026-09-19",
+      "2026-09-19",
+    );
+    expect(events.map((event) => event.label)).toEqual(["Rent", "Salary"]);
+  });
+
+  it("does not replay the occurrences of a stale next-due", () => {
+    // Opened again in September with an expense last set up for April.
+    const events = buildEvents(
+      plan({
+        payDay: 1,
+        expenses: [expense({ name: "Wifi", everyMonths: 3, nextDue: "2026-04-10" })],
+      }),
+      "2026-09-19",
+      "2026-11-30",
+    );
+    expect(events.filter((event) => event.kind === "expense")).toEqual([
+      { date: "2026-10-10", label: "Wifi", delta: -20_000, kind: "expense" },
+    ]);
+  });
+});
+
+describe("rollForward", () => {
+  it("advances a stale next-due to the next real occurrence", () => {
+    const rolled = rollForward(
+      plan({ expenses: [expense({ everyMonths: 3, nextDue: "2026-04-10" })] }),
+      "2026-09-19",
+    );
+    expect(rolled.expenses[0].nextDue).toBe("2026-10-10");
+  });
+
+  it("leaves a next-due that has not passed alone", () => {
+    const rolled = rollForward(
+      plan({ expenses: [expense({ everyMonths: 3, nextDue: "2026-10-10" })] }),
+      "2026-09-19",
+    );
+    expect(rolled.expenses[0].nextDue).toBe("2026-10-10");
+  });
+
+  it("keeps a next-due falling today", () => {
+    const rolled = rollForward(plan({ expenses: [expense({ nextDue: "2026-09-19" })] }), "2026-09-19");
+    expect(rolled.expenses[0].nextDue).toBe("2026-09-19");
+  });
+
+  it("returns the plan untouched when it is invalid", () => {
+    // A cadence of 0 would loop forever in the date helpers.
+    const broken = plan({ expenses: [expense({ everyMonths: 0, nextDue: "2020-01-01" })] });
+    expect(rollForward(broken, "2026-09-19")).toEqual(broken);
+  });
+
+  it("does not mutate the plan it was given", () => {
+    const original = plan({ expenses: [expense({ everyMonths: 3, nextDue: "2026-04-10" })] });
+    rollForward(original, "2026-09-19");
+    expect(original.expenses[0].nextDue).toBe("2026-04-10");
   });
 });
