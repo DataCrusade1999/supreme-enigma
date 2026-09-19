@@ -174,7 +174,9 @@ export default function MoneyPlannerPage() {
               <>
                 <ResultPanel result={result} targetName={plan.target.name} today={today} />
                 {/* The number that explains every answer above. */}
-                <p className="text-sm text-muted">{formatInr(net)} spare a month, on average.</p>
+                {Number.isFinite(net) && (
+                  <p className="text-sm text-muted">{formatInr(net)} spare a month, on average.</p>
+                )}
               </>
             )}
           </div>

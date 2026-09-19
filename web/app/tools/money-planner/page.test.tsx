@@ -87,6 +87,21 @@ describe("Money Planner page", () => {
     });
   });
 
+  it("hides the spare-a-month readout instead of showing ₹NaN while a field is cleared", async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(SAVED));
+    render(<MoneyPlannerPage />);
+    await waitFor(() =>
+      expect(screen.getByText(/spare a month, on average\./)).toBeInTheDocument(),
+    );
+
+    fireEvent.change(screen.getByLabelText("Expense 1 repeats every"), { target: { value: "" } });
+
+    await waitFor(() =>
+      expect(screen.queryByText(/spare a month, on average\./)).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/₹NaN/)).not.toBeInTheDocument();
+  });
+
   it("keeps a way back to the public site", () => {
     render(<MoneyPlannerPage />);
     expect(screen.getByRole("link", { name: "Ashutosh Pandey" })).toHaveAttribute("href", "/");
