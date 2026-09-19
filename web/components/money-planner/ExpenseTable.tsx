@@ -10,6 +10,16 @@ function toNumber(value: string): number {
   return value.trim() === "" ? Number.NaN : Number(value);
 }
 
+// crypto.randomUUID is undefined outside a secure context (plain http:// on a
+// LAN), so Add would throw. The fallback only needs to be unique within this
+// browser tab's list, not cryptographically strong.
+function newId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function ExpenseTable({
   expenses,
   today,
@@ -73,7 +83,15 @@ export function ExpenseTable({
                   type="date"
                   className="border border-line bg-transparent px-3 py-2 text-base tracking-normal text-fg"
                   value={expense.nextDue}
-                  onChange={(event) => replace(index, { nextDue: event.target.value })}
+                  onChange={(event) => {
+                    const nextDue = event.target.value;
+                    // A directly edited next-due is a new anchor chosen on
+                    // purpose, not a rollForward clamp — the anchor day moves
+                    // with it.
+                    const anchorDay =
+                      nextDue.length === 10 ? Number(nextDue.slice(8, 10)) : expense.anchorDay;
+                    replace(index, { nextDue, anchorDay });
+                  }}
                 />
               </label>
 
@@ -96,7 +114,14 @@ export function ExpenseTable({
         onClick={() =>
           onChange([
             ...expenses,
-            { id: crypto.randomUUID(), name: "", amount: 0, everyMonths: 1, nextDue: today },
+            {
+              id: newId(),
+              name: "",
+              amount: 0,
+              everyMonths: 1,
+              nextDue: today,
+              anchorDay: Number(today.slice(8, 10)),
+            },
           ])
         }
       >

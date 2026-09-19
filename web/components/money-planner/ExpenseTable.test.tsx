@@ -63,8 +63,41 @@ describe("ExpenseTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add expense" }));
     expect(onChange).toHaveBeenCalledTimes(1);
     const added = onChange.mock.calls[0][0][0];
-    expect(added).toMatchObject({ name: "", amount: 0, everyMonths: 1, nextDue: TODAY });
+    expect(added).toMatchObject({
+      name: "",
+      amount: 0,
+      everyMonths: 1,
+      nextDue: TODAY,
+      anchorDay: 19,
+    });
     expect(added.id).not.toBe("");
+  });
+
+  it("still adds a row when crypto.randomUUID is unavailable", () => {
+    // Unguarded, this throws on plain http:// off localhost — not a secure
+    // context, so crypto.randomUUID is undefined there.
+    const original = crypto.randomUUID;
+    // @ts-expect-error -- simulating an insecure context, where the method is absent
+    delete crypto.randomUUID;
+    try {
+      const onChange = vi.fn();
+      render(<ExpenseTable expenses={[]} today={TODAY} onChange={onChange} />);
+      fireEvent.click(screen.getByRole("button", { name: "Add expense" }));
+      const added = onChange.mock.calls[0][0][0];
+      expect(typeof added.id).toBe("string");
+      expect(added.id.length).toBeGreaterThan(0);
+    } finally {
+      crypto.randomUUID = original;
+    }
+  });
+
+  it("moves the anchor day with a directly edited next due", () => {
+    const onChange = vi.fn();
+    render(<ExpenseTable expenses={[RENT]} today={TODAY} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText("Expense 1 next due"), {
+      target: { value: "2026-11-30" },
+    });
+    expect(onChange).toHaveBeenCalledWith([{ ...RENT, nextDue: "2026-11-30", anchorDay: 30 }]);
   });
 
   it("removes the row it was asked to remove", () => {
