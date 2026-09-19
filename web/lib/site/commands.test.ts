@@ -20,6 +20,7 @@ describe("COMMANDS", () => {
       "open-bgm-looper",
       "open-resume-admin",
       "open-newsletter-admin",
+      "open-money-planner",
       "open-content-editor",
       "theme-dark",
       "theme-light",
@@ -40,6 +41,7 @@ describe("COMMANDS", () => {
     ["open-bgm-looper", "/tools/bgm-looper"],
     ["open-resume-admin", "/tools/resume-admin"],
     ["open-newsletter-admin", "/tools/newsletter-admin"],
+    ["open-money-planner", "/tools/money-planner"],
     ["open-content-editor", "/keystatic"],
   ])("%s pushes %s", (id, href) => {
     const push = vi.fn();

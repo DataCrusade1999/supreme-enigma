@@ -24,6 +24,7 @@ test("the hub links to every gated tool", async ({ page }) => {
     ["BGM Looper", "/tools/bgm-looper"],
     ["Resume admin", "/tools/resume-admin"],
     ["Newsletter admin", "/tools/newsletter-admin"],
+    ["Money Planner", "/tools/money-planner"],
     ["Content editor", "/keystatic"],
   ]) {
     await expect(page.getByRole("link", { name: new RegExp(name) })).toHaveAttribute(
