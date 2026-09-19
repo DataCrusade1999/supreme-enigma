@@ -55,6 +55,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
   returned as the last tag — which would have made the guard assert against
   the wrong tag and the bump compute its range from the wrong point.
 
+- `changelog-sync.py` keys entries on their enclosing `###` heading as well
+  as their text. Keying on text alone meant an entry recategorized on `dev`
+  after a promotion matched the copy that shipped under a different heading
+  on `main` and was dropped from `[Unreleased]` entirely. It now survives,
+  and `main_only` goes non-zero so the sync PR title flags it for review.
+
 - Vercel builds again on a `web/`-touching commit. The `ignore_command` on
   `vercel_project.looper` runs with the working directory set to
   `root_directory` (`web`), so its bare `web content` pathspecs resolved to
