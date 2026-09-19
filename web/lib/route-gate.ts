@@ -33,6 +33,13 @@ export const TOOLS: Tool[] = [
       "Review an archived newsletter issue and send it to subscribers through Buttondown.",
   },
   {
+    href: "/tools/money-planner",
+    name: "Money Planner",
+    kind: "Money",
+    blurb:
+      "Work out the date a purchase becomes affordable, from a balance, a salary and expenses on their own cadences.",
+  },
+  {
     href: "/keystatic",
     name: "Content editor",
     kind: "Site",

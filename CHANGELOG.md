@@ -9,6 +9,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- Money Planner tool at `/tools/money-planner`: from a balance, a monthly salary and itemized expenses on their own cadences, the date a purchase becomes affordable without leaving the next pay cycle short.
 - Storybook for `web/components/`, and Chromatic visual regression on pull
   requests into `dev`. Every story is snapshotted in both light and dark.
   Storybook is installed locally but never run by `npm test` or

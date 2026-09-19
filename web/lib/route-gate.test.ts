@@ -93,6 +93,7 @@ describe("TOOLS", () => {
       "/tools/bgm-looper",
       "/tools/resume-admin",
       "/tools/newsletter-admin",
+      "/tools/money-planner",
       "/keystatic",
     ]);
   });
