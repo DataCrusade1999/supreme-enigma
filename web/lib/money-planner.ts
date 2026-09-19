@@ -1,4 +1,5 @@
 import {
+  addYears,
   compareIso,
   dueDatesBetween,
   nextOccurrenceOnOrAfter,
@@ -125,4 +126,68 @@ export function rollForward(plan: Plan, today: IsoDate): Plan {
       nextDue: nextOccurrenceOnOrAfter(expense.nextDue, expense.everyMonths, today),
     })),
   };
+}
+
+export type PlanEvent = {
+  date: IsoDate;
+  label: string;
+  delta: Money;
+  balanceAfter: Money;
+};
+
+export type AffordResult =
+  | { kind: "invalid"; problems: string[] }
+  | { kind: "already" }
+  | { kind: "date"; date: IsoDate; balanceThen: Money; timeline: PlanEvent[] }
+  | { kind: "unreachable"; reason: "negative" | "horizon"; monthlyNet: number };
+
+// Everything that has to be paid between this point in the stream and the next
+// salary credit. Expenses sort before salary on a shared date, so stopping at
+// the salary event counts the bills due on pay day itself — they settle first.
+function dueBeforeNextSalary(events: RawEvent[], cursor: number): Money {
+  let owed = 0;
+  for (let i = cursor + 1; i < events.length; i += 1) {
+    if (events[i].kind === "salary") {
+      return owed;
+    }
+    owed -= events[i].delta;
+  }
+  return owed;
+}
+
+export function computeAffordDate(plan: Plan, today: IsoDate, horizonYears = 10): AffordResult {
+  const problems = validatePlan(plan);
+  if (problems.length > 0) {
+    return { kind: "invalid", problems };
+  }
+
+  const events = buildEvents(plan, today, addYears(today, horizonYears));
+  const price = plan.target.price;
+
+  // Checkpoint zero: nothing has settled. Events dated today are still ahead.
+  if (plan.balance - price >= dueBeforeNextSalary(events, -1)) {
+    return { kind: "already" };
+  }
+
+  const timeline: PlanEvent[] = [];
+  let balance = plan.balance;
+
+  for (let i = 0; i < events.length; i += 1) {
+    const event = events[i];
+    balance += event.delta;
+    timeline.push({
+      date: event.date,
+      label: event.label,
+      delta: event.delta,
+      balanceAfter: balance,
+    });
+
+    const lastOfDate = i + 1 === events.length || events[i + 1].date !== event.date;
+    if (lastOfDate && balance - price >= dueBeforeNextSalary(events, i)) {
+      return { kind: "date", date: event.date, balanceThen: balance, timeline };
+    }
+  }
+
+  const net = monthlyNet(plan);
+  return { kind: "unreachable", reason: net <= 0 ? "negative" : "horizon", monthlyNet: net };
 }

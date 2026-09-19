@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildEvents, monthlyNet, rollForward, validatePlan, type Expense, type Plan } from "./money-planner";
+import {
+  buildEvents,
+  computeAffordDate,
+  monthlyNet,
+  rollForward,
+  validatePlan,
+  type Expense,
+  type Plan,
+} from "./money-planner";
 
 function expense(over: Partial<Expense> = {}): Expense {
   return { id: "e1", name: "Rent", amount: 20_000, everyMonths: 1, nextDue: "2026-10-01", ...over };
@@ -183,5 +191,186 @@ describe("rollForward", () => {
     const original = plan({ expenses: [expense({ everyMonths: 3, nextDue: "2026-04-10" })] });
     rollForward(original, "2026-09-19");
     expect(original.expenses[0].nextDue).toBe("2026-04-10");
+  });
+});
+
+describe("computeAffordDate", () => {
+  it("refuses to compute an invalid plan", () => {
+    const result = computeAffordDate(plan({ payDay: 0 }), "2026-09-19");
+    expect(result).toEqual({
+      kind: "invalid",
+      problems: ["Pay day must be a whole day between 1 and 31"],
+    });
+  });
+
+  it("says already when the balance covers the price and the cycle ahead", () => {
+    const result = computeAffordDate(
+      plan({ balance: 200_000, expenses: [], target: { name: "Camera", price: 90_000 } }),
+      "2026-09-19",
+    );
+    expect(result).toEqual({ kind: "already" });
+  });
+
+  it("is not already when the purchase would leave the next bill unpayable", () => {
+    // 95,000 in hand, a 90,000 camera, and 20,000 of rent due before pay day.
+    const result = computeAffordDate(
+      plan({
+        balance: 95_000,
+        payDay: 1,
+        expenses: [expense({ name: "Rent", amount: 20_000, nextDue: "2026-10-01" })],
+        target: { name: "Camera", price: 90_000 },
+      }),
+      "2026-09-19",
+    );
+    expect(result.kind).toBe("date");
+  });
+
+  it("counts today's salary as upcoming, not as money in hand", () => {
+    // Pay day is today. The balance typed in is what the account holds now, so
+    // today's credit may not have landed — it must not be spent in advance.
+    const result = computeAffordDate(
+      plan({
+        balance: 10_000,
+        salary: 80_000,
+        payDay: 19,
+        expenses: [],
+        target: { name: "Camera", price: 85_000 },
+      }),
+      "2026-09-19",
+    );
+    expect(result).toMatchObject({ kind: "date", date: "2026-09-19", balanceThen: 90_000 });
+  });
+
+  it("names the first pay day the money is there", () => {
+    const result = computeAffordDate(
+      plan({
+        balance: 0,
+        salary: 80_000,
+        payDay: 1,
+        expenses: [expense({ name: "Rent", amount: 50_000, nextDue: "2026-10-02" })],
+        target: { name: "Camera", price: 60_000 },
+      }),
+      "2026-09-19",
+    );
+    // Oct 1 salary 80,000; Oct 2 rent 50,000 leaves 30,000. Nov 1 salary takes
+    // it to 110,000, and 110,000 − 60,000 covers the 50,000 rent due Nov 2.
+    expect(result).toMatchObject({ kind: "date", date: "2026-11-01", balanceThen: 110_000 });
+  });
+
+  it("pushes the date past a quarterly bill that lands just before it", () => {
+    const withoutWifi = computeAffordDate(
+      plan({
+        balance: 0,
+        salary: 30_000,
+        payDay: 1,
+        expenses: [],
+        target: { name: "Phone", price: 60_000 },
+      }),
+      "2026-09-19",
+    );
+    const withWifi = computeAffordDate(
+      plan({
+        balance: 0,
+        salary: 30_000,
+        payDay: 1,
+        expenses: [expense({ name: "Wifi", amount: 18_000, everyMonths: 3, nextDue: "2026-10-20" })],
+        target: { name: "Phone", price: 60_000 },
+      }),
+      "2026-09-19",
+    );
+    expect(withoutWifi).toMatchObject({ kind: "date", date: "2026-11-01" });
+    expect(withWifi).toMatchObject({ kind: "date", date: "2026-12-01" });
+  });
+
+  it("tests only at the end of a date, never between two events sharing one", () => {
+    // Salary and rent both land on the 1st. Mid-date the balance briefly looks
+    // short; the answer must be the date, not the event.
+    const result = computeAffordDate(
+      plan({
+        balance: 0,
+        salary: 80_000,
+        payDay: 1,
+        expenses: [expense({ name: "Rent", amount: 10_000, nextDue: "2026-10-01" })],
+        target: { name: "Camera", price: 60_000 },
+      }),
+      "2026-09-19",
+    );
+    expect(result).toMatchObject({ kind: "date", date: "2026-10-01", balanceThen: 70_000 });
+  });
+
+  it("returns the events that led to the answer", () => {
+    const result = computeAffordDate(
+      plan({
+        balance: 0,
+        salary: 80_000,
+        payDay: 1,
+        expenses: [],
+        target: { name: "Camera", price: 90_000 },
+      }),
+      "2026-09-19",
+    );
+    expect(result).toMatchObject({ kind: "date", date: "2026-11-01" });
+    if (result.kind !== "date") throw new Error("expected a date");
+    expect(result.timeline).toEqual([
+      { date: "2026-10-01", label: "Salary", delta: 80_000, balanceAfter: 80_000 },
+      { date: "2026-11-01", label: "Salary", delta: 80_000, balanceAfter: 160_000 },
+    ]);
+  });
+
+  it("reports a shortfall rather than a date when nothing is left over", () => {
+    const result = computeAffordDate(
+      plan({
+        balance: 0,
+        salary: 30_000,
+        payDay: 1,
+        expenses: [expense({ name: "Rent", amount: 34_200, nextDue: "2026-10-02" })],
+        target: { name: "Camera", price: 90_000 },
+      }),
+      "2026-09-19",
+    );
+    expect(result).toEqual({ kind: "unreachable", reason: "negative", monthlyNet: -4_200 });
+  });
+
+  it("calls a net of exactly zero unreachable", () => {
+    const result = computeAffordDate(
+      plan({
+        balance: 0,
+        salary: 30_000,
+        payDay: 1,
+        expenses: [expense({ name: "Rent", amount: 30_000, nextDue: "2026-10-02" })],
+        target: { name: "Camera", price: 90_000 },
+      }),
+      "2026-09-19",
+    );
+    expect(result).toMatchObject({ kind: "unreachable", reason: "negative" });
+  });
+
+  it("distinguishes a positive net that misses the horizon", () => {
+    const result = computeAffordDate(
+      plan({
+        balance: 0,
+        salary: 1_000,
+        payDay: 1,
+        expenses: [],
+        target: { name: "House", price: 10_000_000 },
+      }),
+      "2026-09-19",
+    );
+    expect(result).toMatchObject({ kind: "unreachable", reason: "horizon", monthlyNet: 1_000 });
+  });
+
+  it("respects a shorter horizon", () => {
+    const reachable = plan({
+      balance: 0,
+      salary: 10_000,
+      payDay: 1,
+      expenses: [],
+      target: { name: "Laptop", price: 300_000 },
+    });
+    expect(computeAffordDate(reachable, "2026-09-19", 10).kind).toBe("date");
+    expect(computeAffordDate(reachable, "2026-09-19", 1)).toMatchObject({
+      kind: "unreachable",
+      reason: "horizon",
+    });
   });
 });
