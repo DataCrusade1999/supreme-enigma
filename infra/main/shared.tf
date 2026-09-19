@@ -261,11 +261,11 @@ resource "aws_iam_role" "vercel" {
   })
 }
 
-# Carried over verbatim from the deleted vercel-sa user's inline policy — the migration
-# moved the identity, not the permissions. ResumeHeadObjectNotFound in particular is
-# load-bearing; its comment explains why. ResumeDraftCleanup, by contrast, has no caller:
-# nothing under web/ issues a DeleteObjectCommand. Left in place rather than dropped as a
-# drive-by, since removing it is its own change.
+# Carried over from the deleted vercel-sa user's inline policy — the migration moved the
+# identity, not the permissions. ResumeHeadObjectNotFound in particular is load-bearing;
+# its comment explains why. The s3:DeleteObject grant that came across with it is gone:
+# nothing under web/ issues a DeleteObjectCommand, and deleting drafts is the job of the
+# resume/drafts/ lifecycle rule in environments.tf, not the app's.
 resource "aws_iam_role_policy" "vercel" {
   name = "${var.project_name}-vercel-policy"
   role = aws_iam_role.vercel.id
@@ -286,12 +286,6 @@ resource "aws_iam_role_policy" "vercel" {
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject"]
         Resource = ["${local.resume_bucket_arn}/resume/*"]
-      },
-      {
-        Sid      = "ResumeDraftCleanup"
-        Effect   = "Allow"
-        Action   = ["s3:DeleteObject"]
-        Resource = ["${local.resume_bucket_arn}/resume/drafts/*"]
       },
       {
         # HeadObject on a key that does not exist returns 403, not 404, unless the
