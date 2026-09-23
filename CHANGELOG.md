@@ -36,6 +36,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- The ⌘K command bar opens with six pinned commands (`cd projects`, `cd resume`, `cd blog`, `cd contact`, `cd tools`, `theme`) and a count of the rest; typing still searches every command. `theme dark` and `theme light` are now one `theme` toggle.
 - CI no longer emits Node 20 deprecation warnings or Ubuntu migration notices.
   `actions/upload-artifact` moves v4 to v7 and `actions/download-artifact` v4
   to v8 (both now run natively on Node 24 instead of being forced onto it),

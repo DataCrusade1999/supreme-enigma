@@ -22,7 +22,7 @@ of the first tool that lived here).
 | `/contact` | Contact |
 
 Press <kbd>⌘K</kbd> / <kbd>Ctrl-K</kbd> anywhere on the public site for a
-terminal-style command bar (`cd about`, `open bgm-looper`, `theme dark`, …).
+terminal-style command bar (`cd about`, `open bgm-looper`, `theme`, …).
 
 **Password-gated**
 

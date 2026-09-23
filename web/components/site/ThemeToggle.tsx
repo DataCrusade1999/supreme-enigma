@@ -15,7 +15,7 @@ export function ThemeToggle() {
 
   useEffect(() => {
     // Keep this button's state in sync when the theme is changed from
-    // outside (e.g. the command bar's `theme dark`/`theme light` commands),
+    // outside (e.g. the command bar's `theme` command),
     // not just from this button's own click.
     function handleThemeChange() {
       setIsDark(document.documentElement.classList.contains("dark"));

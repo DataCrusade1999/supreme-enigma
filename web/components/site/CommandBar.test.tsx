@@ -51,11 +51,32 @@ describe("CommandBar", () => {
     act(() => openCommandBar());
 
     const input = screen.getByLabelText("Command");
-    // First command is "cd home" (-> "/"); one ArrowDown selects "cd about".
+    // First pinned command is "cd projects"; one ArrowDown selects "cd resume".
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(pushMock).toHaveBeenCalledWith("/about");
+    expect(pushMock).toHaveBeenCalledWith("/resume");
+  });
+
+  it("shows only the pinned commands until something is typed", () => {
+    render(<CommandBar />);
+    act(() => openCommandBar());
+
+    expect(screen.getByText("cd projects")).toBeInTheDocument();
+    expect(screen.queryByText("cd about")).not.toBeInTheDocument();
+    expect(screen.queryByText("open bgm-looper")).not.toBeInTheDocument();
+    expect(screen.getByText("8 more — type to search")).toBeInTheDocument();
+  });
+
+  it("searches every command, not just the pinned ones", () => {
+    render(<CommandBar />);
+    act(() => openCommandBar());
+
+    fireEvent.change(screen.getByLabelText("Command"), { target: { value: "open" } });
+
+    expect(screen.getByText("open bgm-looper")).toBeInTheDocument();
+    expect(screen.getByText("open content-editor")).toBeInTheDocument();
+    expect(screen.queryByText(/more — type to search/)).not.toBeInTheDocument();
   });
 
   it("closes on Escape and returns focus to whatever was focused before opening", () => {
