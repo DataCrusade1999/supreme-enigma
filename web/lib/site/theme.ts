@@ -1,6 +1,6 @@
 // web/lib/site/theme.ts
 // Single place that writes the theme to the DOM + localStorage, so every
-// caller (the command bar's `theme dark`/`theme light` commands, the
+// caller (the command bar's `theme` command, the
 // ThemeToggle button) stays in sync. Callers that hold their own React state
 // mirroring the DOM (ThemeToggle) should subscribe to THEME_CHANGE_EVENT
 // rather than writing the DOM directly.

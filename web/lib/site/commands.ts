@@ -8,6 +8,8 @@ export type Command = {
   id: string;
   label: string;
   hint: string;
+  // Shown with an empty query. Everything else only appears once typed for.
+  pinned?: boolean;
   run: (ctx: CommandContext) => void;
 };
 
@@ -18,10 +20,17 @@ export const COMMANDS: Command[] = [
     id: "cd-projects",
     label: "cd projects",
     hint: "Browse projects",
+    pinned: true,
     run: (ctx) => ctx.push("/projects"),
   },
-  { id: "cd-resume", label: "cd resume", hint: "View resume", run: (ctx) => ctx.push("/resume") },
-  { id: "cd-blog", label: "cd blog", hint: "Read the blog", run: (ctx) => ctx.push("/blog") },
+  {
+    id: "cd-resume",
+    label: "cd resume",
+    hint: "View resume",
+    pinned: true,
+    run: (ctx) => ctx.push("/resume"),
+  },
+  { id: "cd-blog", label: "cd blog", hint: "Read the blog", pinned: true, run: (ctx) => ctx.push("/blog") },
   {
     id: "cd-newsletter",
     label: "cd newsletter",
@@ -32,9 +41,16 @@ export const COMMANDS: Command[] = [
     id: "cd-contact",
     label: "cd contact",
     hint: "Get in touch",
+    pinned: true,
     run: (ctx) => ctx.push("/contact"),
   },
-  { id: "cd-tools", label: "cd tools", hint: "Every tool behind the gate", run: (ctx) => ctx.push("/tools") },
+  {
+    id: "cd-tools",
+    label: "cd tools",
+    hint: "Every tool behind the gate",
+    pinned: true,
+    run: (ctx) => ctx.push("/tools"),
+  },
   {
     id: "open-bgm-looper",
     label: "open bgm-looper",
@@ -69,15 +85,10 @@ export const COMMANDS: Command[] = [
     run: (ctx) => ctx.push("/keystatic"),
   },
   {
-    id: "theme-dark",
-    label: "theme dark",
-    hint: "Switch to dark mode",
-    run: () => setTheme("dark"),
-  },
-  {
-    id: "theme-light",
-    label: "theme light",
-    hint: "Switch to light mode",
-    run: () => setTheme("light"),
+    id: "theme",
+    label: "theme",
+    hint: "Switch light / dark",
+    pinned: true,
+    run: () => setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark"),
   },
 ];
