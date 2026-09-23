@@ -95,6 +95,23 @@ def test_reflowed_entry_counts_as_shipped(tmp_path):
     )
 
 
+def test_same_text_under_a_different_heading_is_not_shipped(tmp_path):
+    """An entry recategorized on dev is matched per subsection, not globally.
+    Keying on text alone let main's `### Added` copy shadow dev's identical
+    `### Fixed` one, emptying [Unreleased] with kept=0. It now stays, and
+    main_only goes non-zero so the sync PR title tells a human to look."""
+    text = "- the same sentence filed under two different headings\n"
+    proc, out = sync(
+        tmp_path, released(f"### Added\n\n{text}"), dev(f"### Fixed\n\n{text}")
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "kept=1" in proc.stdout
+    assert "main_only=1" in proc.stdout
+    assert f"## [Unreleased]\n\n### Fixed\n\n{text}\n## [1.1.0]" in out.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_multi_line_raced_entry_is_preserved_verbatim(tmp_path):
     raced = "- a raced entry whose text\n  wraps across three\n  separate lines\n"
     proc, out = sync(tmp_path, released(BODY), dev(f"### Added\n\n- shipped entry\n{raced}"))
