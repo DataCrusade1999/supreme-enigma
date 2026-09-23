@@ -9,6 +9,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- `/robots.txt`: disallows AI training and AI-scraping crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot and others) from the whole site, and keeps every crawler out of `/tools`, `/api/`, `/keystatic` and `/login`. Search engines can still index the public pages. It is advisory — crawlers that ignore robots.txt are not stopped.
 - Money Planner tool at `/tools/money-planner`: from a balance, a monthly salary and itemized expenses on their own cadences, the date a purchase becomes affordable without leaving the next pay cycle short.
 - Storybook for `web/components/`, and Chromatic visual regression on pull
   requests into `dev`. Every story is snapshotted in both light and dark.
