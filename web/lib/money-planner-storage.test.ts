@@ -44,4 +44,39 @@ describe("money planner storage", () => {
     expect(EMPTY_PLAN.expenses).toEqual([]);
     expect(EMPTY_PLAN.v).toBe(1);
   });
+
+  it("starts every number field blank", () => {
+    expect(EMPTY_PLAN.balance).toBeNaN();
+    expect(EMPTY_PLAN.salary).toBeNaN();
+    expect(EMPTY_PLAN.payDay).toBeNaN();
+    expect(EMPTY_PLAN.target.price).toBeNaN();
+  });
+
+  it("round-trips blank fields as NaN rather than the null JSON stores", () => {
+    savePlan({
+      ...SAVED,
+      balance: Number.NaN,
+      expenses: [{ ...SAVED.expenses[0], amount: Number.NaN, everyMonths: Number.NaN }],
+      target: { name: "Camera", price: Number.NaN },
+    });
+    const loaded = loadPlan() as Plan;
+    expect(loaded.balance).toBeNaN();
+    expect(loaded.salary).toBe(80_000);
+    expect(loaded.target.price).toBeNaN();
+    expect(loaded.expenses[0].amount).toBeNaN();
+    expect(loaded.expenses[0].everyMonths).toBeNaN();
+  });
+
+  it("treats the all-zero plan earlier versions saved on every visit as nothing saved", () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ v: 1, balance: 0, salary: 0, payDay: 1, expenses: [], target: { name: "", price: 0 } }),
+    );
+    expect(loadPlan()).toBeNull();
+  });
+
+  it("keeps a plan whose zeros were typed alongside something else", () => {
+    savePlan({ ...SAVED, balance: 0 });
+    expect(loadPlan()?.balance).toBe(0);
+  });
 });

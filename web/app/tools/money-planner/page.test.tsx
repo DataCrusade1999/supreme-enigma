@@ -31,11 +31,40 @@ describe("Money Planner page", () => {
 
   it("shows no result at all until something has been entered", () => {
     render(<MoneyPlannerPage />);
-    expect(screen.getByLabelText("Balance today")).toHaveValue(0);
     // Not "Price must be more than zero" either — an untouched form has no
     // answer and nothing to complain about.
     expect(screen.queryByText("Not ready")).not.toBeInTheDocument();
     expect(screen.queryByText(/(months?|days?) away/)).not.toBeInTheDocument();
+  });
+
+  it("starts every number field blank, so what is typed is the whole value", () => {
+    render(<MoneyPlannerPage />);
+    for (const label of ["Balance today", "Monthly salary", "Pay day", "Price"]) {
+      expect(screen.getByLabelText(label)).toHaveValue(null);
+    }
+    fireEvent.change(screen.getByLabelText("Monthly salary"), { target: { value: "5000" } });
+    expect(screen.getByLabelText("Monthly salary")).toHaveValue(5000);
+  });
+
+  it("asks for the fields still blank once something has been entered", async () => {
+    render(<MoneyPlannerPage />);
+    fireEvent.change(screen.getByLabelText("Price"), { target: { value: "90000" } });
+    await waitFor(() =>
+      expect(
+        screen.getByText("Balance must be a whole number of rupees, zero or more"),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("shows the blank form over the all-zero plan earlier versions saved", async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ v: 1, balance: 0, salary: 0, payDay: 1, expenses: [], target: { name: "", price: 0 } }),
+    );
+    render(<MoneyPlannerPage />);
+    // Let the post-mount load run before asserting nothing came of it.
+    await waitFor(() => expect(screen.getByLabelText("Balance today")).toHaveValue(null));
+    expect(screen.getByLabelText("Pay day")).toHaveValue(null);
   });
 
   it("loads a saved plan after mount", async () => {

@@ -50,6 +50,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Fixed
 
+- Money Planner's number fields (balance, salary, pay day, price, expense
+  amount) start blank with a greyed hint instead of a prefilled `0` or `1`,
+  so what is typed is the whole value rather than landing after the default.
+  A plan saved by an earlier version with nothing typed into it loads as the
+  blank form. Blank fields now survive a reload as blank instead of `null`.
 - `promotion-guard` and the release version bump resolve the last release
   with `git describe --match 'v[0-9]*'` rather than `'v*'`, so a stray
   non-release tag (`vtest`, `vnext`) reachable from `main` can no longer be

@@ -57,15 +57,15 @@ describe("ExpenseTable", () => {
     expect(onChange.mock.calls[0][0][0].everyMonths).toBeNaN();
   });
 
-  it("adds a row that is due today by default", () => {
+  it("adds a row that is due today, with a blank amount", () => {
     const onChange = vi.fn();
     render(<ExpenseTable expenses={[]} today={TODAY} onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: "Add expense" }));
     expect(onChange).toHaveBeenCalledTimes(1);
     const added = onChange.mock.calls[0][0][0];
+    expect(added.amount).toBeNaN();
     expect(added).toMatchObject({
       name: "",
-      amount: 0,
       everyMonths: 1,
       nextDue: TODAY,
       anchorDay: 19,
