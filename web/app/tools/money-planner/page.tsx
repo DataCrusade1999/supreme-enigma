@@ -173,7 +173,11 @@ export default function MoneyPlannerPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-4">
+          {/* min-w-0: a grid item will not shrink below its content by default, so
+            * an open breakdown table would widen the one-column phone layout
+            * (and the form beside it) past the screen. This keeps it at the
+            * track width and lets the table scroll inside its own box. */}
+          <div className="flex min-w-0 flex-col gap-4">
             {isUntouched(plan) ? null : (
               <>
                 <ResultPanel result={result} targetName={plan.target.name} today={today} />

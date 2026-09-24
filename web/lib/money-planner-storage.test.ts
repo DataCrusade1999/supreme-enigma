@@ -67,6 +67,26 @@ describe("money planner storage", () => {
     expect(loaded.expenses[0].everyMonths).toBeNaN();
   });
 
+  it("gives a missing target or expense name a blank one rather than undefined", () => {
+    // Not written by the app itself; a hand-edited blob. Undefined names reach
+    // .trim() in the page and crash it.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        v: 1,
+        balance: 100,
+        salary: 100,
+        payDay: 5,
+        expenses: [{ id: "e1", amount: 10, everyMonths: 1, nextDue: "2026-10-01" }],
+      }),
+    );
+    const loaded = loadPlan() as Plan;
+    expect(loaded.target.name).toBe("");
+    expect(loaded.target.price).toBeNaN();
+    expect(loaded.expenses[0].name).toBe("");
+    expect(loaded.balance).toBe(100);
+  });
+
   it("treats the all-zero plan earlier versions saved on every visit as nothing saved", () => {
     localStorage.setItem(
       STORAGE_KEY,

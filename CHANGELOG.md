@@ -50,6 +50,14 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Fixed
 
+- Money Planner says a budget that breaks even does exactly that, instead of
+  "you are ₹0 short each month". A monthly average that rounds to ₹0 counts
+  as breaking even, so it no longer reads as "₹0 short" or "₹0 spare" either.
+- Money Planner's "How this adds up" breakdown is a real table: Date, Item,
+  Amount and Balance columns under a header, right-aligned tabular figures,
+  and each date shown once for the events that share it. It scrolls inside
+  the panel with the header pinned, and fits a phone-width screen without
+  widening the page.
 - Money Planner's number fields (balance, salary, pay day, price, expense
   amount) start blank with a greyed hint instead of a prefilled `0` or `1`,
   so what is typed is the whole value rather than landing after the default.

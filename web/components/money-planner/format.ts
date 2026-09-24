@@ -35,6 +35,13 @@ export function formatLongDate(date: IsoDate): string {
   return `${day} ${MONTHS[month - 1]} ${year}`;
 }
 
+// The breakdown table's date column: the three-letter month keeps all four
+// columns inside a phone-width panel.
+export function formatShortDate(date: IsoDate): string {
+  const { year, month, day } = parseIso(date);
+  return `${day} ${MONTHS[month - 1].slice(0, 3)} ${year}`;
+}
+
 export function formatAway(from: IsoDate, to: IsoDate): string {
   if (from === to) {
     return "today";
