@@ -8,10 +8,8 @@ __pycache__/
 *.tfstate.*
 .terraform/
 *.tfvars
+.claude/settings.local.json
 .claude/worktrees/
-# Committed on purpose so cloud sessions get it; overrides the global
-# ~/.config/git/ignore rule that ignores it in every repo.
-!.claude/settings.local.json
 .worktrees/
 
 # Downloaded AWS DevOps Agent webhook credential exports — never commit

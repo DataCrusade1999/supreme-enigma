@@ -2,5 +2,17 @@
   "env": {
     "CLAUDE_CODE_NEW_INIT": "1",
     "AWS_PROFILE": "personal"
+  },
+  "outputStyle": "Concise",
+  "attribution": {
+    "commit": "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>",
+    "pr": "",
+    "sessionUrl": false
+  },
+  "permissions": {
+    "allow": [
+      "mcp__plugin_context-mode_context-mode__ctx_execute",
+      "Bash(terraform plan:*)"
+    ]
   }
 }
