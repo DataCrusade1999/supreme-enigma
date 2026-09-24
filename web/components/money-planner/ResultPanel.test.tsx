@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { ResultPanel } from "./ResultPanel";
 import type { AffordResult } from "../../lib/money-planner";
 
@@ -35,8 +35,50 @@ describe("ResultPanel", () => {
       ],
     });
     fireEvent.click(screen.getByRole("button", { name: /how this adds up/i }));
-    expect(screen.getByText("1 October 2026")).toBeInTheDocument();
+    expect(screen.getByText("1 Oct 2026")).toBeInTheDocument();
     expect(screen.getByText("Wifi")).toBeInTheDocument();
+  });
+
+  it("lays the events out as a table with a header per column", () => {
+    panel({
+      kind: "date",
+      date: "2026-11-01",
+      balanceThen: 160_000,
+      timeline: [
+        { date: "2026-10-01", label: "Salary", delta: 80_000, balanceAfter: 80_000 },
+        { date: "2026-10-04", label: "Wifi", delta: -1_800, balanceAfter: 78_200 },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: /how this adds up/i }));
+    const table = screen.getByRole("table");
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Date", "Item", "Amount", "Balance"]);
+    const [, salary, wifi] = within(table).getAllByRole("row");
+    expect(
+      within(wifi)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["4 Oct 2026", "Wifi", "-₹1,800", "₹78,200"]);
+    expect(within(salary).getByText("₹80,000", { selector: "td.text-accent" })).toBeInTheDocument();
+  });
+
+  it("shows a shared date once, but keeps it on every row for screen readers", () => {
+    panel({
+      kind: "date",
+      date: "2026-11-01",
+      balanceThen: 160_000,
+      timeline: [
+        { date: "2026-10-01", label: "Netflix", delta: -199, balanceAfter: 39_801 },
+        { date: "2026-10-01", label: "Apple", delta: -99, balanceAfter: 39_702 },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: /how this adds up/i }));
+    const [first, second] = screen.getAllByText("1 Oct 2026");
+    expect(first).not.toHaveClass("sr-only");
+    expect(second).toHaveClass("sr-only");
   });
 
   it("says the money is already there", () => {

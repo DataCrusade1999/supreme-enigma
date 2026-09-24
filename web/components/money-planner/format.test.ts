@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAway, formatInr, formatLongDate } from "./format";
+import { formatAway, formatInr, formatLongDate, formatShortDate } from "./format";
 
 const groupsIndian = new Intl.NumberFormat("en-IN").format(125_000).includes("1,25,000");
 
@@ -20,6 +20,13 @@ describe("formatInr", () => {
 
   it("rounds a fractional average to whole rupees", () => {
     expect(formatInr(58_400.5)).not.toContain(".");
+  });
+});
+
+describe("formatShortDate", () => {
+  it("uses a three-letter month and keeps the year", () => {
+    expect(formatShortDate("2027-03-04")).toBe("4 Mar 2027");
+    expect(formatShortDate("2026-09-30")).toBe("30 Sep 2026");
   });
 });
 
