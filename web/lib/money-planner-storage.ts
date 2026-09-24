@@ -4,14 +4,54 @@ import type { Plan } from "./money-planner";
 // null for the old data rather than handing the page a half-read plan.
 export const STORAGE_KEY = "money-planner";
 
+// Number fields start as NaN, which the inputs render as blank. A prefilled 0
+// has to be deleted before typing, or "5000" becomes "05000"; a prefilled pay
+// day of 1 turns a typed 5 into 15.
 export const EMPTY_PLAN: Plan = {
   v: 1,
-  balance: 0,
-  salary: 0,
-  payDay: 1,
+  balance: Number.NaN,
+  salary: Number.NaN,
+  payDay: Number.NaN,
   expenses: [],
-  target: { name: "", price: 0 },
+  target: { name: "", price: Number.NaN },
 };
+
+// JSON has no NaN: a blank field is stored as null. Turn it back into NaN so
+// the inputs render blank and validation reports it, rather than null reaching
+// an input's value.
+function reviveNumber(value: unknown): number {
+  return typeof value === "number" ? value : Number.NaN;
+}
+
+function revive(plan: Plan): Plan {
+  return {
+    ...plan,
+    balance: reviveNumber(plan.balance),
+    salary: reviveNumber(plan.salary),
+    payDay: reviveNumber(plan.payDay),
+    expenses: plan.expenses.map((expense) => ({
+      ...expense,
+      amount: reviveNumber(expense.amount),
+      everyMonths: reviveNumber(expense.everyMonths),
+    })),
+    target: { ...plan.target, price: reviveNumber(plan.target?.price) },
+  };
+}
+
+// The empty plan as it was before fields started blank. The page used to save
+// it on every visit, so most browsers hold it without anyone having typed a
+// thing. Reading it as "nothing saved" is what makes the blank form show up
+// there too.
+function isOldEmptyPlan(plan: Plan): boolean {
+  return (
+    plan.balance === 0 &&
+    plan.salary === 0 &&
+    plan.payDay === 1 &&
+    plan.expenses.length === 0 &&
+    plan.target?.name === "" &&
+    plan.target?.price === 0
+  );
+}
 
 export function loadPlan(): Plan | null {
   let raw: string | null = null;
@@ -30,7 +70,10 @@ export function loadPlan(): Plan | null {
       return null;
     }
     const plan = parsed as Plan;
-    return plan.v === 1 && Array.isArray(plan.expenses) ? plan : null;
+    if (plan.v !== 1 || !Array.isArray(plan.expenses) || isOldEmptyPlan(plan)) {
+      return null;
+    }
+    return revive(plan);
   } catch {
     return null;
   }

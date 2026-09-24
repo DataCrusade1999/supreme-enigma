@@ -21,12 +21,12 @@ function toNumber(value: string): number {
 // plan loaded from storage is a different object with the same contents.
 function isUntouched(plan: Plan): boolean {
   return (
-    plan.balance === 0 &&
-    plan.salary === 0 &&
-    plan.payDay === 1 &&
+    Number.isNaN(plan.balance) &&
+    Number.isNaN(plan.salary) &&
+    Number.isNaN(plan.payDay) &&
     plan.expenses.length === 0 &&
     plan.target.name === "" &&
-    plan.target.price === 0
+    Number.isNaN(plan.target.price)
   );
 }
 
@@ -92,6 +92,7 @@ export default function MoneyPlannerPage() {
                 <input
                   aria-label="Balance today"
                   type="number"
+                  placeholder="0"
                   inputMode="numeric"
                   className="border border-line bg-transparent px-3 py-2 text-base tracking-normal text-fg"
                   value={Number.isNaN(plan.balance) ? "" : plan.balance}
@@ -104,6 +105,7 @@ export default function MoneyPlannerPage() {
                 <input
                   aria-label="Monthly salary"
                   type="number"
+                  placeholder="0"
                   inputMode="numeric"
                   className="border border-line bg-transparent px-3 py-2 text-base tracking-normal text-fg"
                   value={Number.isNaN(plan.salary) ? "" : plan.salary}
@@ -116,6 +118,7 @@ export default function MoneyPlannerPage() {
                 <input
                   aria-label="Pay day"
                   type="number"
+                  placeholder="1"
                   inputMode="numeric"
                   min={1}
                   max={31}
@@ -144,6 +147,7 @@ export default function MoneyPlannerPage() {
                 <input
                   aria-label="Price"
                   type="number"
+                  placeholder="0"
                   inputMode="numeric"
                   className="border border-line bg-transparent px-3 py-2 text-base tracking-normal text-fg"
                   value={Number.isNaN(plan.target.price) ? "" : plan.target.price}

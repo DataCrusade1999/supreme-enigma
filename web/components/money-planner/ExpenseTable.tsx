@@ -56,6 +56,7 @@ export function ExpenseTable({
                 <input
                   aria-label={`Expense ${index + 1} amount`}
                   type="number"
+                  placeholder="0"
                   inputMode="numeric"
                   className="border border-line bg-transparent px-3 py-2 text-base tracking-normal text-fg"
                   value={Number.isNaN(expense.amount) ? "" : expense.amount}
@@ -117,7 +118,8 @@ export function ExpenseTable({
             {
               id: newId(),
               name: "",
-              amount: 0,
+              // Blank rather than 0, for the same reason as the page's fields.
+              amount: Number.NaN,
               everyMonths: 1,
               nextDue: today,
               anchorDay: Number(today.slice(8, 10)),
