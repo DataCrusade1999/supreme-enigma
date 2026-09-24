@@ -46,7 +46,9 @@ export function ResultPanel({
         <p className="mt-3 font-display text-4xl leading-tight">
           {result.reason === "negative"
             ? `Not on this budget — you are ${formatInr(Math.abs(result.monthlyNet))} short each month.`
-            : `More than ten years away at ${formatInr(result.monthlyNet)} spare a month.`}
+            : result.reason === "break-even"
+              ? "Not on this budget — it breaks even, with nothing left over to save."
+              : `More than ten years away at ${formatInr(result.monthlyNet)} spare a month.`}
         </p>
       </div>
     );

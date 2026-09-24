@@ -50,6 +50,9 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Fixed
 
+- Money Planner says a budget that breaks even does exactly that, instead of
+  "you are ₹0 short each month". A monthly average that rounds to ₹0 counts
+  as breaking even, so it no longer reads as "₹0 short" or "₹0 spare" either.
 - Money Planner's "How this adds up" breakdown is a real table: Date, Item,
   Amount and Balance columns under a header, right-aligned tabular figures,
   and each date shown once for the events that share it. It scrolls inside

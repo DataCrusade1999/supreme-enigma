@@ -166,7 +166,7 @@ export type AffordResult =
   | { kind: "invalid"; problems: string[] }
   | { kind: "already" }
   | { kind: "date"; date: IsoDate; balanceThen: Money; timeline: PlanEvent[] }
-  | { kind: "unreachable"; reason: "negative" | "horizon"; monthlyNet: number };
+  | { kind: "unreachable"; reason: "negative" | "break-even" | "horizon"; monthlyNet: number };
 
 // Everything that has to be paid between this point in the stream and the next
 // salary credit. Expenses sort before salary on a shared date, so stopping at
@@ -216,5 +216,10 @@ export function computeAffordDate(plan: Plan, today: IsoDate, horizonYears = 10)
   }
 
   const net = monthlyNet(plan);
-  return { kind: "unreachable", reason: net <= 0 ? "negative" : "horizon", monthlyNet: net };
+  // Classified on the rupee figure the page shows, not the raw average: a
+  // quarterly bill can leave a net of -0.3 or +0.3 a month, and "₹0 short" or
+  // "₹0 spare" both misdescribe a budget that simply breaks even.
+  const shown = Math.round(net);
+  const reason = shown < 0 ? "negative" : shown === 0 ? "break-even" : "horizon";
+  return { kind: "unreachable", reason, monthlyNet: net };
 }

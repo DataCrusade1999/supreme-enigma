@@ -361,7 +361,7 @@ describe("computeAffordDate", () => {
     expect(result).toEqual({ kind: "unreachable", reason: "negative", monthlyNet: -4_200 });
   });
 
-  it("calls a net of exactly zero unreachable", () => {
+  it("calls a net of exactly zero break-even, not a shortfall", () => {
     const result = computeAffordDate(
       plan({
         balance: 0,
@@ -372,7 +372,26 @@ describe("computeAffordDate", () => {
       }),
       "2026-09-19",
     );
-    expect(result).toMatchObject({ kind: "unreachable", reason: "negative" });
+    expect(result).toMatchObject({ kind: "unreachable", reason: "break-even", monthlyNet: 0 });
+  });
+
+  it("calls a net that rounds to zero rupees break-even", () => {
+    // Salary and rent cancel out, and a 1-rupee fee every 3 months leaves an
+    // average of -0.33 a month: the page would show "₹0 short".
+    const result = computeAffordDate(
+      plan({
+        balance: 0,
+        salary: 300,
+        payDay: 1,
+        expenses: [
+          expense({ name: "Rent", amount: 300, nextDue: "2026-10-02" }),
+          expense({ id: "e2", name: "Fee", amount: 1, everyMonths: 3, nextDue: "2026-10-02" }),
+        ],
+        target: { name: "Camera", price: 90_000 },
+      }),
+      "2026-09-19",
+    );
+    expect(result).toMatchObject({ kind: "unreachable", reason: "break-even" });
   });
 
   it("distinguishes a positive net that misses the horizon", () => {

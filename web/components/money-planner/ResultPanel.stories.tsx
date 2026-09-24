@@ -32,6 +32,10 @@ export const Short: Story = {
   args: { result: { kind: "unreachable", reason: "negative", monthlyNet: -4200 } },
 };
 
+export const BreakEven: Story = {
+  args: { result: { kind: "unreachable", reason: "break-even", monthlyNet: 0 } },
+};
+
 export const PastTheHorizon: Story = {
   args: { result: { kind: "unreachable", reason: "horizon", monthlyNet: 1000 } },
 };

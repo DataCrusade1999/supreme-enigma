@@ -91,6 +91,13 @@ describe("ResultPanel", () => {
     expect(screen.getByText(/4,200 short each month/)).toBeInTheDocument();
   });
 
+  it("says it breaks even rather than ₹0 short when nothing is left over", () => {
+    panel({ kind: "unreachable", reason: "break-even", monthlyNet: 0 });
+    expect(screen.getByText(/breaks even, with nothing left over/)).toBeInTheDocument();
+    expect(screen.queryByText(/short each month/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/₹0/)).not.toBeInTheDocument();
+  });
+
   it("says more than ten years rather than never when the net is positive", () => {
     panel({ kind: "unreachable", reason: "horizon", monthlyNet: 1_000 });
     expect(screen.getByText(/more than ten years/i)).toBeInTheDocument();
