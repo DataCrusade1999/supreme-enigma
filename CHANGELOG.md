@@ -50,6 +50,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Fixed
 
+- The Money Planner e2e test "remembers a plan across a reload" waits for the
+  login redirect before navigating to the planner. It used to navigate before
+  the session cookie was set and intermittently landed on the sign-in page.
+  Closes #247.
 - Money Planner says a budget that breaks even does exactly that, instead of
   "you are ₹0 short each month". A monthly average that rounds to ₹0 counts
   as breaking even, so it no longer reads as "₹0 short" or "₹0 spare" either.

@@ -27,6 +27,7 @@ test("the planner remembers a plan across a reload", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel(/password/i).fill("test123");
   await page.getByRole("button", { name: /log in/i }).click();
+  await expect(page).toHaveURL(/\/tools$/);
   await page.goto("/tools/money-planner");
 
   await page.getByLabel("Monthly salary").fill("80000");
