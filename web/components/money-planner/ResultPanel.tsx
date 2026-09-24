@@ -73,8 +73,9 @@ export function ResultPanel({
       {showTimeline ? (
         // Scrolls inside the panel: ten years of monthly events is hundreds of
         // rows, and the answer above should stay in reach. The header sticks to
-        // the top of this box, not the page.
-        <div className="mt-4 max-h-[28rem] overflow-auto border-t border-line">
+        // the top of this box, not the page. The scrollbar is hidden; wheel,
+        // touch and keyboard scrolling still work.
+        <div className="mt-4 max-h-[28rem] overflow-auto border-t border-line [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <table className="w-full border-collapse text-sm">
             <caption className="sr-only">How the balance reaches the price, event by event</caption>
             <thead className="sticky top-0 bg-bg">
