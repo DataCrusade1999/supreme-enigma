@@ -67,6 +67,17 @@ describe("Money Planner page", () => {
     expect(screen.getByLabelText("Pay day")).toHaveValue(null);
   });
 
+  it("renders a hand-edited saved plan that has no target instead of crashing", async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ v: 1, balance: 100, salary: 100, payDay: 5, expenses: [] }),
+    );
+    render(<MoneyPlannerPage />);
+    await waitFor(() => expect(screen.getByLabelText("Balance today")).toHaveValue(100));
+    expect(screen.getByLabelText("What are you buying")).toHaveValue("");
+    expect(screen.getByText("Not ready")).toBeInTheDocument();
+  });
+
   it("loads a saved plan after mount", async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(SAVED));
     render(<MoneyPlannerPage />);

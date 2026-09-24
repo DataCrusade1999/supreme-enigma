@@ -23,6 +23,13 @@ function reviveNumber(value: unknown): number {
   return typeof value === "number" ? value : Number.NaN;
 }
 
+// No shipped writer leaves a name out, but a hand-edited or half-migrated blob
+// can, and a missing name is not harmless: the page and the result panel call
+// .trim() on it and the whole tool throws. Blank is what an unnamed field is.
+function reviveName(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 function revive(plan: Plan): Plan {
   return {
     ...plan,
@@ -31,10 +38,15 @@ function revive(plan: Plan): Plan {
     payDay: reviveNumber(plan.payDay),
     expenses: plan.expenses.map((expense) => ({
       ...expense,
+      name: reviveName(expense.name),
       amount: reviveNumber(expense.amount),
       everyMonths: reviveNumber(expense.everyMonths),
     })),
-    target: { ...plan.target, price: reviveNumber(plan.target?.price) },
+    target: {
+      ...plan.target,
+      name: reviveName(plan.target?.name),
+      price: reviveNumber(plan.target?.price),
+    },
   };
 }
 
