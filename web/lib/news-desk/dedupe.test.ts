@@ -63,6 +63,31 @@ describe("mergeHeadlines", () => {
     expect(merged[0].url).toBe("https://www.livemint.com/economy/bit");
   });
 
+  it("keeps one item when the Google News copy lands on the next UTC day", () => {
+    // Google News can stamp its index time rather than the publisher's, which
+    // pushes a story published near IST midnight onto a different UTC date.
+    const direct = item({
+      title: "Cabinet approves BIT template",
+      url: "https://www.livemint.com/economy/bit",
+      publishedAt: "2026-09-25T18:35:00.000Z",
+      direct: true,
+    });
+    const viaGoogle = item({ title: "Cabinet approves BIT template", publishedAt: "2026-09-26T02:00:00.000Z" });
+    const merged = mergeHeadlines([viaGoogle], [direct], new Date("2026-09-26T12:00:00.000Z"));
+    expect(merged).toHaveLength(1);
+    expect(merged[0].url).toBe("https://www.livemint.com/economy/bit");
+  });
+
+  it("keeps a daily release with the same title as a separate item each day", () => {
+    const title = "Money Market Operations";
+    const merged = mergeHeadlines(
+      [item({ title, publishedAt: "2026-09-24T12:30:00.000Z", direct: true })],
+      [item({ title, publishedAt: "2026-09-25T12:00:00.000Z", direct: true })],
+      new Date("2026-09-25T13:00:00.000Z"),
+    );
+    expect(merged).toHaveLength(2);
+  });
+
   it("keeps an existing item over a new non-direct copy of it", () => {
     const stored = item({ url: "https://stored.example/1", direct: true });
     const again = item({ url: "https://news.google.com/other" });

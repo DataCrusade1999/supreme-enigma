@@ -39,6 +39,10 @@ describe("parsePubDate", () => {
     expect(parsePubDate("24 Sep, 2026 +0530")).toBe("2026-09-23T18:30:00.000Z");
   });
 
+  it("treats an ISO 8601 date-time with no zone as IST", () => {
+    expect(parsePubDate("2026-09-25T14:05:00")).toBe("2026-09-25T08:35:00.000Z");
+  });
+
   it("returns null for missing or unparseable input", () => {
     expect(parsePubDate(undefined)).toBeNull();
     expect(parsePubDate("")).toBeNull();

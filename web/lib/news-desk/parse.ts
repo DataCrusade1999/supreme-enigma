@@ -21,7 +21,8 @@ export function parsePubDate(raw: string | undefined): string | null {
   // V8's fallback parser accepts almost anything ("sometime last week +0530" is
   // the year 529), so demand a four-digit year before trusting it.
   if (!/\b(19|20)\d{2}\b/.test(text)) return null;
-  if (!HAS_ZONE.test(text)) text += " +0530";
+  // An ISO date-time takes the offset attached; V8 rejects it after a space.
+  if (!HAS_ZONE.test(text)) text += /^\d{4}-\d{2}-\d{2}T/.test(text) ? "+05:30" : " +0530";
   // V8 rejects a date with a zone but no time ("24 Sep 2026 +0530").
   if (!text.includes(":")) text = text.replace(/\s+([+-]\d{4})$/, " 00:00:00 $1");
   const ms = Date.parse(text);

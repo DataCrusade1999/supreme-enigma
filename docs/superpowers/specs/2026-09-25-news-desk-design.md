@@ -93,7 +93,7 @@ The source list is a constant in `feeds.ts`. Changing it is a code change.
 
 ### 5.2 Normalization and dedupe
 
-Every item becomes `{id, title, url, source, summary?, publishedAt}`. `id` is a hash of the normalized title plus the UTC publish day. The day is part of the key because some releases repeat a fixed title: RBI publishes "Government Stock - Auction Results: Cut-off" every week, and a title-only key would keep the first week's copy and drop every later one until it aged out.
+Every item becomes `{id, title, url, source, summary?, publishedAt}`. `id` is a hash of the normalized title plus the UTC publish day. The day is part of the key because some releases repeat a fixed title: RBI publishes "Government Stock - Auction Results: Cut-off" every week, and a title-only key would keep the first week's copy and drop every later one until it aged out. Google News sometimes stamps its own index time instead of the publisher's, which can put two copies of one story on different UTC days, so the merge also treats same-title items less than 12 hours apart as one story. A daily release with a fixed title is about 24 hours apart and stays separate.
 
 Items older than 14 days, or with no parseable date, are discarded immediately after parsing, before dedupe and tagging, so the model is never paid to tag an old item.
 
