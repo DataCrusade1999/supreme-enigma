@@ -1,0 +1,260 @@
+# News Desk — Design
+
+**Date:** 2026-09-25
+**Status:** Draft, awaiting review
+**Branch:** `docs/news-desk-spec`
+**Epic:** #253
+
+## 1. Problem
+
+The owner wants one place to follow news on the Indian economy, economic reforms and legislation, drawn from wire services and financial papers (Reuters, Bloomberg, FT, The Economist), plus the official numbers behind those stories. None of those publishers offer free full text, and Reuters and Bloomberg have no public RSS. MoSPI (the Ministry of Statistics) publishes official statistics through a public MCP server, `https://mcp.mospi.gov.in/`, which an LLM can query in plain English.
+
+## 2. Goals and non-goals
+
+Goals:
+
+- A gated tool at `/tools/news-desk` listing recent headlines, each tagged Economy, Reforms or Legislation.
+- A table of official MoSPI indicators beside the headlines.
+- A chat assistant that answers statistics questions from MoSPI data, draws a chart when the answer is a time series, and can pin that series into the indicator table.
+- Refresh happens only when the owner clicks Refresh. Nothing runs on a schedule.
+- Free sources only. LLM cost stays in single-digit rupees per action.
+
+Non-goals:
+
+- Full article text. Headlines link out to the publisher.
+- Read/unread state, search, or history beyond 14 days.
+- Follow-up questions in chat. Each question is answered on its own (§7.1).
+- Charts in the indicator table. Charts appear only in chat answers.
+- Any scheduled job, email digest or notification.
+
+## 3. Decisions
+
+| # | Decision | Rejected alternative, and why |
+|---|---|---|
+| D1 | Refresh is manual; the result is stored in S3 | Fetch on page load: every visit would re-run feeds and paid tagging |
+| D2 | Topic tagging by LLM (Haiku 4.5 via OpenRouter), new headlines only | Keyword rules: cheaper but mislabels; source-based: too coarse |
+| D3 | Storage in each branch's existing S3 bucket, `news-desk/` prefix | Vercel Blob: new service and dependency when S3 already works here |
+| D4 | Chat answers one question at a time, no model-side memory | Follow-ups: every turn re-sends the conversation; can be added later in the client only |
+| D5 | Indicators are added by pinning a chat answer | An "add indicator" form: MoSPI filter lists are long and awkward as dropdowns |
+| D6 | Chat streams progress events (NDJSON) | Plain request/response: slower-feeling, and a failure gives no clue where it stopped |
+| D7 | MoSPI MCP called with hand-written JSON-RPC over `fetch` | `@modelcontextprotocol/sdk`: the server is stateless and has four tools; ~50 lines replace a dependency |
+| D8 | Hand-written SVG line chart | A chart library: one chart type in one place does not justify the bundle |
+| D9 | Own model env var `NEWS_DESK_MODEL` | Reusing `OPENROUTER_MODEL`: changing the resume model would silently change this tool |
+| D10 | Indicator rows show only the current series of each dataset | Splicing base years: CPI base 2012 and base 2024 differ in field names and even state codes (§6.2) |
+
+## 4. Page
+
+Route: `/tools/news-desk`. It is gated because everything under `/tools` is (`web/lib/route-gate.ts`). Registration:
+
+- one entry in `TOOLS` with a new kind, `News` (the existing kinds are Audio, Site and Money, none of which fit),
+- one `open news-desk` row in `web/lib/site/commands.ts`,
+- `/api/news-desk` added to `GATED_PREFIXES`, since API prefixes are listed explicitly.
+
+Layout (desktop), agreed from mockup v4 during brainstorming:
+
+- Top bar: title, "Refreshed 2h ago · N sources failed" (the failure count expands to the list), and a Refresh button. The button is disabled while a refresh is running.
+- Left column, about 70% wide: topic tabs with counts (All, Economy, Reforms, Legislation), then headlines newest first. Each headline shows its tag, title (linking to the article, new tab), the feed's summary when present, and source and age on their own line.
+- Right column, about 30% wide: the indicator table (Indicator, Period, Latest, Prev), sticky and vertically centred in the viewport as the headlines scroll. Pinned rows appear here with a remove control. A row whose last refresh failed shows its last good value and "stale since …" on hover.
+- A floating "Ask MoSPI" button, bottom right, opening a chat panel (§7).
+
+On narrow screens the columns stack: indicator table first, then headlines.
+
+## 5. Headlines
+
+### 5.1 Sources
+
+Checked on 2026-09-25 from a plain HTTP client:
+
+| Source | How | Result |
+|---|---|---|
+| FT India | `https://www.ft.com/world/asia-pacific/india?format=rss` | 200, 25 items |
+| RBI press releases | `https://www.rbi.org.in/pressreleases_rss.xml` | 200, 10 items |
+| RBI notifications | `https://www.rbi.org.in/notifications_rss.xml` | 200, 10 items |
+| SEBI | `https://www.sebi.gov.in/sebirss.xml` | 200, 30 items |
+| PIB | `https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3` | 200, but items came back in Hindi. The English parameter has to be found in Phase 1 |
+| Mint Economy | `https://www.livemint.com/rss/economy` | 200, 35 items |
+| Business Standard Economy | `https://www.business-standard.com/rss/economy-102.rss` | 200, 35 items |
+| The Economist | `economist.com/<section>/rss.xml` | **403** — use Google News |
+| PRS Legislative Research | no RSS found (`/rss.xml`, `/billtrack/rss` both 404) | use Google News |
+| Reuters, Bloomberg | no public RSS | use Google News |
+
+Google News queries use `https://news.google.com/rss/search?q=<query>&hl=en-IN&gl=IN&ceid=IN:en`, each with `when:7d` so they return recent items rather than the archive (an unrestricted `site:prsindia.org` query returned a 2021 Act first, because Google News sorts by relevance). `when:7d` was not part of the probe; Phase 1 verifies it. The age filter in §5.2 protects against it not working. Queries:
+
+- `site:reuters.com India economy`
+- `site:bloomberg.com India`
+- `site:economist.com India`
+- `site:prsindia.org`
+- `India (bill OR ordinance OR amendment) (Lok Sabha OR Rajya Sabha)`
+- `India ("Cabinet approves" OR "GST Council" OR "labour codes" OR disinvestment OR reform)`
+
+The source list is a constant in `feeds.ts`. Changing it is a code change.
+
+### 5.2 Normalization and dedupe
+
+Every item becomes `{id, title, url, source, summary?, publishedAt}`. `id` is a hash of the normalized title.
+
+Items older than 14 days, or with no parseable date, are discarded immediately after parsing, before dedupe and tagging, so the model is never paid to tag an old item.
+
+Google News titles end in ` - <Publisher>`. That suffix is stripped and becomes `source`. Google News links are `news.google.com/rss/articles/…` redirects, so they never match the publisher's own URL; dedupe is therefore by normalized title (lowercased, punctuation and the publisher suffix removed, whitespace collapsed). When two items share a normalized title, the one from a direct feed wins, because its link goes straight to the article.
+
+Summaries are the feed's own `description`, stripped of HTML and cut to about 200 characters. Google News descriptions are just the title again and are dropped.
+
+### 5.3 Tagging
+
+Only headlines whose `id` is not already in the snapshot are tagged. They are split into chunks of 100 and the chunks are sent in parallel. Each call sends `[{n, title, source}]`, where `n` is the item's position in the chunk (short, so output stays small), with `response_format` strict JSON returning `[{n, tag}]`, `tag ∈ Economy | Reforms | Legislation | Drop`.
+
+Chunking matters on the first refresh, when every headline is new: about 600 items in one call would need roughly 12,000 output tokens, which would exceed the output cap and take longer than the route's 60 s. Truncated JSON would save everything as `Untagged`, and the retry on the next refresh would fail the same way. At 100 per chunk, each call needs about 1,500 output tokens. `Drop` removes off-topic items (PIB congratulating athletes, for example). The prompt defines each tag in one or two sentences: Legislation covers bills, Acts, ordinances, amendments and committee reports; Reforms covers policy and regulatory changes by government, RBI, SEBI or the GST Council; Economy is everything else about the Indian economy.
+
+If a chunk's call fails or returns invalid JSON, that chunk's items are saved with tag `Untagged`; other chunks are unaffected. Untagged items appear only under All, and the next refresh retries them because they are not yet tagged. `max_tokens` is 3,000 per chunk.
+
+## 6. Indicators
+
+### 6.1 MoSPI MCP client
+
+Verified on 2026-09-25: the server needs no API key and no session. A `tools/call` POST works without `initialize` first, and returns `text/event-stream` with a single `data:` line holding the JSON-RPC response. A `get_data` call took about 200 ms.
+
+`mospi.ts` exposes `callTool(name, args)`: POST with `Accept: application/json, text/event-stream`, read the body, take the `data:` line, parse it, return `result.content[0].text` parsed as JSON. A JSON-RPC error, a `result.isError`, or a body of the form `{"error": …, "valid": false}` (which MoSPI returns for invalid filters) all throw. Timeout 10 s.
+
+Tools: `list_datasets`, `get_indicators(dataset)`, `get_metadata(dataset, …)`, `get_data(dataset, filters)`. All filters, including `limit` and `page`, go inside `filters`.
+
+### 6.2 Base-year breaks
+
+MoSPI moves datasets to new base years, and the series are not directly comparable. CPI moved to base 2024 in January 2026: base 2024 returns Jan–Aug 2026 with fields `division`, `index`, `inflation`, and `state_code=1` is All India; base 2012 returns up to Dec 2025 with fields `baseyear`, `group`, `subgroup`, and `state_code=1` is Jammu & Kashmir. NAS similarly accepts `base_year` `2022-23` or `2011-12`.
+
+Each indicator therefore stores one query against one base year. The table shows the latest two values of that series. Splicing is out of scope (D10). When a dataset rebases, the default indicator definition is updated in code and pinned ones are re-pinned by hand.
+
+### 6.3 Indicator definitions
+
+`news-desk/indicators.json` holds `[{id, label, dataset, filters, valueField, unit}]`. It is seeded from a constant on first read when absent. Defaults:
+
+| Label | Dataset | Notes |
+|---|---|---|
+| Retail inflation | CPI | base 2024, `state_code=1`, `sector_code=3`, `division_code=0`, `valueField=inflation` — verified |
+| Food inflation | CPI | base 2024, food division; code found in Phase 3 |
+| IIP growth | IIP | `frequency=Monthly`, general index, growth rate |
+| GDP growth | NAS | base 2022-23, real GDP, quarterly growth |
+| Unemployment (urban) | PLFS | quarterly (`frequency_code=2`), urban, CWS |
+| Services growth | ISP | monthly growth |
+
+Only the first row's filters were verified in brainstorming. Phase 3 finds and records the rest with `get_metadata`, and fixture tests pin them.
+
+### 6.4 Rows to values
+
+`series.ts` turns `get_data` rows into `[{period, value}]` sorted by time. It recognizes three period shapes: year + month name, year + quarter, and fiscal year (`2025-26`). Rows it cannot place in time make the series invalid, which is what makes a chat answer unpinnable (§7.3). The same function serves the table (last two points) and chat charts (all points), so a pinned row always matches the chart it came from.
+
+A refresh runs every indicator query in parallel. A failed query keeps the previous values and sets `error` and leaves `lastGoodAt` unchanged.
+
+## 7. Chat assistant
+
+### 7.1 Interaction
+
+The panel keeps the questions and answers from the current tab visible, so the owner can scroll back and pin. Each question is sent to the model on its own; nothing earlier is included. The input placeholder says "Each question is answered on its own."
+
+### 7.2 Loop
+
+`POST /api/news-desk/ask` with `{question}`. `ask.ts` is an async generator yielding events; the route turns it into an NDJSON `ReadableStream` and sets `maxDuration = 60`.
+
+1. System prompt: answer only about Indian official statistics; call the tools in order `list_datasets` → `get_indicators` → `get_metadata` → `get_data`; prefer the latest base year; state only numbers that appear in tool results.
+2. The four MoSPI tools are offered as OpenRouter tool definitions. Each tool call the model makes is sent to `mospi.ts`, and a `{"type":"step","label":…}` event is yielded with a plain-English label derived from the tool name and dataset ("Reading CPI filters…").
+3. **Metadata compaction.** `get_metadata` results can be large (CPI base 2024 returned 82 KB). Before a result goes back to the model it is rewritten compactly: each filter list becomes `name: code=label, code=label, …`, and fields the model does not need (`viz`) are removed. No filter values are removed. A result still over 20,000 characters is truncated with a note telling the model to query a narrower level.
+4. **Ending the loop.** A fifth tool, `answer`, takes `{text, chart: null | {title, unit, dataset, filters, valueField}}`. The loop ends when the model calls it. This avoids having to know in advance which turn is the last one, and avoids combining `response_format` with tools, which OpenRouter does not reliably support for Anthropic models. If the model replies with plain text instead of calling a tool, it is sent back once with an instruction to call `answer`; a second plain reply ends in an `error` event.
+5. Limits: 8 MoSPI tool calls, 1,500 output tokens per turn, about 120,000 input tokens across the loop. When the 8th MoSPI call returns, or the input budget is reached, the next request sets `tool_choice` to `answer`, so the model must answer with what it has. Hitting a limit gives a best-effort answer, not an error.
+6. If `chart` is set, the server re-runs that `get_data` call itself and builds points with `series.ts`. The model never supplies chart numbers. The final event is `{"type":"answer", text, chart: {title, unit, points} | null, pinnable, query}`.
+
+Errors (MoSPI down, OpenRouter failure, the model refusing to call `answer`) yield `{"type":"error","message":…}` and end the stream. The client keeps the steps already shown.
+
+### 7.3 Pinning
+
+`pinnable` is true when the chart query re-ran and `series.ts` produced a valid series. The client shows a Pin button, and the label is editable before saving (default: chart title). `POST /api/news-desk/indicators` appends `{id, label, dataset, filters, valueField, unit}` to `indicators.json`; `DELETE /api/news-desk/indicators/:id` removes one. The new row is filled on the next Refresh.
+
+## 8. Storage
+
+Two objects per branch bucket, read and written by `store.ts`:
+
+- `news-desk/indicators.json` — definitions (§6.3). Written only by pin and unpin.
+- `news-desk/snapshot.json` — `{refreshedAt, headlines[], indicators[{id, period, latest, prevPeriod, prev, lastGoodAt, error?}], sourceErrors[{source, message}]}`. Headlines older than 14 days are dropped on each refresh.
+
+Keeping definitions separate means a failed or bad refresh cannot lose pins.
+
+Each write replaces the whole object. A second refresh started before the first finishes overwrites it, and the result is still a complete snapshot. The button is disabled while a refresh runs, so this only happens with two open tabs.
+
+The bucket lifecycle deliberately has no catch-all expiry rule (`infra/main/environments.tf`), so these objects persist. Adding a blanket rule later would delete them along with `resume/current.*`.
+
+## 9. Routes
+
+| Route | Does |
+|---|---|
+| `GET /api/news-desk` | Returns the snapshot and definitions |
+| `POST /api/news-desk/refresh` | Feeds → dedupe → tag new → indicators → save. `maxDuration = 60` |
+| `POST /api/news-desk/ask` | NDJSON stream (§7.2). `maxDuration = 60` |
+| `POST /api/news-desk/indicators` | Pin |
+| `DELETE /api/news-desk/indicators/:id` | Unpin |
+
+The page itself reads the snapshot on the server for the first render.
+
+## 10. Cost
+
+Model `anthropic/claude-haiku-4.5` via OpenRouter at $1 / $5 per million input / output tokens, ₹96 per USD (2026-09-25).
+
+| Action | Estimate |
+|---|---|
+| First refresh (~600 headlines to tag: ~15k input, ~9k output tokens across 6 chunks) | ~₹6 |
+| Later refresh (new headlines only) | ₹0.5–1 |
+| Chat question (30–60k input tokens) | ₹3–6 |
+| Indicator refresh | free |
+
+Phase 2 and Phase 4 measure real figures and replace these. The OpenRouter key has no spend limit that Terraform can set; the owner sets it in OpenRouter.
+
+## 11. Infrastructure
+
+One Terraform change, in Phase 1:
+
+- The Vercel role's S3 policy in `infra/main/shared.tf` gains `s3:GetObject` and `s3:PutObject` on `news-desk/*` for all three bucket ARNs.
+- New variable `news_desk_model` (default `anthropic/claude-haiku-4.5`) and Vercel env var `NEWS_DESK_MODEL` on all targets.
+
+`terraform plan` against real state before merging, per repo rules.
+
+## 12. Failure handling
+
+| Failure | Behaviour |
+|---|---|
+| Feed timeout (8 s) or parse error | Skipped, listed in `sourceErrors`; other feeds still saved |
+| Tagging call fails | New items saved as `Untagged`, retried next refresh |
+| MoSPI down during refresh | Indicator keeps last good values, `error` set |
+| MoSPI down, or model never calls `answer`, in chat | `error` event; earlier steps stay visible |
+| Chat hits the tool-call or token limit | Forced `answer` call; best-effort answer |
+| S3 read fails on page load | Error message on the page; nothing written |
+| Concurrent refresh | Last write wins; each write is a whole snapshot |
+
+## 13. Testing
+
+Vitest, with fixtures recorded from the real services:
+
+- RSS parsing for each feed shape, including Google News suffix stripping and summary cleanup.
+- Dedupe, including direct-feed-wins.
+- Tagger: request shape, applying tags, `Drop`, failure → `Untagged`. OpenRouter mocked.
+- `mospi.ts`: SSE parsing, JSON-RPC error, `isError`, MoSPI's `{"valid": false}` body.
+- `series.ts`: each period shape, sorting, unplaceable rows, CPI base 2012 vs 2024 fixtures.
+- Metadata compaction: output smaller, no filter values lost, truncation note.
+- `ask.ts`: event sequence for a scripted model; the 8-call limit forcing `answer` via `tool_choice`; a plain-text reply being re-prompted once, then erroring; chart points built by the server, not taken from the model.
+- Tagger chunking: 250 items → 3 calls; one failed chunk leaves the other two tagged.
+- Age filter: items older than 14 days or undated never reach the tagger.
+- Routes: unauthenticated requests get 401; pin and unpin update `indicators.json`.
+
+Playwright, one spec: page renders from a stubbed snapshot, tabs filter headlines, chat panel opens and closes. No live network in CI.
+
+## 14. Phases
+
+Each phase has its own issue, plan and PR into `dev`, and is usable on the dev deployment when merged.
+
+1. **Infra, storage and feeds.** §11, `store.ts`, `feeds.ts`, dedupe, refresh route without tagging, page with the headline list, tool registration.
+2. **Tagging.** `tagger.ts`, topic tabs, measured refresh cost.
+3. **Indicators.** `mospi.ts`, `series.ts`, default definitions with verified filters, indicator table.
+4. **Chat.** `ask.ts`, streaming route, chat panel, SVG chart, pinning, measured question cost.
+
+## 15. Open items
+
+- PIB's English-language feed parameter (Phase 1).
+- Whether `when:7d` restricts Google News results as expected (Phase 1).
+- Filter codes for the five unverified default indicators (Phase 3).
+- Whether Google News rate-limits six queries per refresh from Vercel's IPs. If it does, merge them into fewer queries.
