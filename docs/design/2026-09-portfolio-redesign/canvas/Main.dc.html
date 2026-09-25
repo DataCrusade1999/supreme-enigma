@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home — Ashutosh Pandey</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=Fraunces:opsz,wght@9..144,500;9..144,600&amp;family=Space+Grotesk:wght@500;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 2400px; box-sizing: border-box; background: {{t.bg}}; color: {{t.ink}}; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<nav aria-label="Main" style="display: flex; justify-content: space-between; align-items: center; padding: 28px 80px; border-bottom: 1px solid {{t.line}}">
+<a href="#" style="display: flex; align-items: center; gap: 12px; color: {{t.ink}}; text-decoration: none; min-height: 44px">
+<span style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; background: {{t.accent}}; color: {{t.onAccent}}; font-family: {{t.display}}; font-weight: 700; font-size: 16px">AP</span>
+<span style="font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 20px">Ashutosh Pandey</span>
+</a>
+<div style="display: flex; gap: 36px; align-items: center; font-size: 15px">
+<a href="#work" style="color: {{t.ink}}; text-decoration: none; padding: 12px 0">Work</a>
+<a href="#writing" style="color: {{t.ink}}; text-decoration: none; padding: 12px 0">Writing</a>
+<a href="#about" style="color: {{t.ink}}; text-decoration: none; padding: 12px 0">About</a>
+<a href="#" style="color: {{t.ink}}; text-decoration: none; padding: 12px 0">Resume</a>
+<a href="#contact" style="display: inline-flex; align-items: center; height: 44px; padding: 0 18px; background: {{t.ink}}; color: {{t.bg}}; text-decoration: none; font-weight: 500">Contact</a>
+</div>
+</nav>
+
+<section style="padding: 112px 80px 96px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 40px; border-bottom: 1px solid {{t.line}}">
+<div style="grid-column: span 12; display: flex; align-items: center; gap: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.muted}}">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: {{t.accent}}"></span>
+<span>Software engineer · [City, Country] · Open to [role type]</span>
+</div>
+<h1 style="grid-column: span 10; margin: 0; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 120px; line-height: 0.92; letter-spacing: -0.035em">I build software end to end, and care how it <span style="color: {{t.accent}}">holds up</span>.</h1>
+<p style="grid-column: span 6; margin: 0; font-size: 20px; line-height: 1.6; color: {{t.soft}}">[One or two sentences on what you build and why it is worth building — the kind of problems you like and the teams you do your best work in.]</p>
+<div style="grid-column: 9 / span 4; display: flex; gap: 12px; align-items: flex-start; justify-content: flex-end">
+<a href="#work" style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 24px; background: {{t.ink}}; color: {{t.bg}}; text-decoration: none; font-weight: 500; font-size: 16px">Selected work
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></a>
+<a href="#" style="display: inline-flex; align-items: center; height: 52px; padding: 0 24px; border: 1.5px solid {{t.ink}}; color: {{t.ink}}; text-decoration: none; font-weight: 500; font-size: 16px">Resume</a>
+</div>
+</section>
+
+<section id="work" style="padding: 112px 80px 0; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid {{t.ink}}; padding-bottom: 20px; margin-bottom: 8px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.accent}}">01 — Selected work</div>
+<h2 style="margin: 0; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 56px; letter-spacing: -0.02em">Things I have made</h2>
+</div>
+<a href="#" style="font-weight: 500; font-size: 15px; color: {{t.link}}; text-underline-offset: 4px; padding: 12px 0">All projects</a>
+</div>
+<sc-for list="{{work}}" as="w" hint-placeholder-count="3">
+<a href="{{w.href}}" style="display: grid; grid-template-columns: 80px 1fr 360px 40px; align-items: baseline; gap: 24px; padding: 28px 0; border-bottom: 1px solid {{t.line}}; color: {{t.ink}}; text-decoration: none">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: {{t.muted}}">{{w.n}}</span>
+<span style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 36px; letter-spacing: -0.015em">{{w.name}}</span>
+<span style="font-size: 17px; line-height: 1.55; color: {{t.soft}}; max-width: 620px">{{w.blurb}}</span>
+</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: {{t.muted}}; line-height: 1.7">{{w.meta}}</span>
+<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"></path></svg>
+</a>
+</sc-for>
+</section>
+
+<section id="about" style="margin: 112px 80px 0; padding: 56px; background: {{t.surface}}; border: 1px solid {{t.line}}; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 32px">
+<div style="grid-column: span 12; font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.accent}}">02 — About</div>
+<div style="grid-column: span 6; display: flex; flex-direction: column; gap: 20px">
+<p style="margin: 0; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 36px; line-height: 1.15; letter-spacing: -0.01em">[A line on who you are as an engineer.]</p>
+<p style="margin: 0; font-size: 17px; line-height: 1.65; color: {{t.soft}}">[How you got here, what you are working on now, and what you are looking for next.]</p>
+<a href="#" style="font-weight: 500; font-size: 16px; color: {{t.link}}; text-underline-offset: 4px; padding: 10px 0">More about me</a>
+</div>
+<div style="grid-column: 8 / span 5; display: flex; flex-direction: column; gap: 14px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.muted}}">Also interested in</div>
+<div style="display: flex; flex-direction: column; border-top: 1.5px solid {{t.ink}}">
+<sc-for list="{{interests}}" as="i" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 14px 0; border-bottom: 1px solid {{t.line}}">
+<span style="font-weight: 600; font-size: 16px">{{i.title}}</span>
+<span style="font-size: 14px; line-height: 1.5; color: {{t.muted}}">{{i.detail}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</section>
+
+<section id="writing" style="padding: 112px 80px 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px">
+<div style="grid-column: span 4; display: flex; flex-direction: column; gap: 10px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.accent}}">03 — Writing</div>
+<h2 style="margin: 0; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 56px; letter-spacing: -0.02em">Notes</h2>
+<p style="margin: 8px 0 0; font-size: 16px; line-height: 1.6; color: {{t.soft}}; max-width: 340px">Things I learned while building, written down so I remember them.</p>
+</div>
+<div style="grid-column: 6 / span 7; display: flex; flex-direction: column; border-top: 2px solid {{t.ink}}">
+<sc-for list="{{posts}}" as="p" hint-placeholder-count="3">
+<a href="#" style="display: grid; grid-template-columns: 140px 1fr 40px; align-items: baseline; gap: 24px; padding: 24px 0; border-bottom: 1px solid {{t.line}}; color: {{t.ink}}; text-decoration: none">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: {{t.muted}}">{{p.date}}</span>
+<span style="display: flex; flex-direction: column; gap: 6px"><span style="font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 26px">{{p.title}}</span><span style="font-size: 15px; color: {{t.muted}}">{{p.summary}}</span></span>
+<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"></path></svg>
+</a>
+</sc-for>
+</div>
+</section>
+
+<footer id="contact" style="margin-top: auto; background: {{t.invBg}}; color: {{t.invFg}}; padding: 80px 80px 48px; display: flex; flex-direction: column; gap: 56px">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 40px">
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.8">04 — Contact</div>
+<h2 style="margin: 0; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 80px; line-height: 0.95; letter-spacing: -0.03em; max-width: 820px">Working on something interesting? Say hello.</h2>
+</div>
+<a href="#" style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 24px; background: {{t.invFg}}; color: {{t.invBg}}; text-decoration: none; font-weight: 500; font-size: 16px; white-space: nowrap">[your@email]
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></a>
+</div>
+<div style="display: flex; justify-content: space-between; border-top: 1px solid {{t.invLine}}; padding-top: 24px; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<span>© 2026 Ashutosh Pandey</span>
+<span style="display: flex; gap: 28px"><a href="#" style="color: {{t.invFg}}">GitHub</a><a href="#" style="color: {{t.invFg}}">LinkedIn</a><a href="#" style="color: {{t.invFg}}">RSS</a></span>
+</div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["paper","midnight","forest","cobalt","clay","midnightSerif","cobaltSerif"],"default":"paper"},"$preview":{"width":1440,"height":2400}}'>
+class Component extends DCLogic {
+renderVals() {
+const themes = {
+paper: { bg: '#F4F1EA', surface: '#FBFAF6', ink: '#16181D', soft: '#3A3E47', muted: '#5A5F6A', line: '#D9D4C8', accent: '#D2451E', onAccent: '#FFFFFF', link: '#B53A17', invBg: '#16181D', invFg: '#F4F1EA', invLine: '#3A3F49', display: "'Bricolage Grotesque', sans-serif", dw: 700 },
+midnight: { bg: '#0F1115', surface: '#171A21', ink: '#E9EAEE', soft: '#C4C8D0', muted: '#9AA0AC', line: '#272B34', accent: '#7CE0B5', onAccent: '#0F1115', link: '#7CE0B5', invBg: '#7CE0B5', invFg: '#0F1115', invLine: '#4FA985', display: "'Space Grotesk', sans-serif", dw: 700 },
+midnightSerif: { bg: '#0F1115', surface: '#171A21', ink: '#E9EAEE', soft: '#C4C8D0', muted: '#9AA0AC', line: '#272B34', accent: '#7CE0B5', onAccent: '#0F1115', link: '#7CE0B5', invBg: '#7CE0B5', invFg: '#0F1115', invLine: '#4FA985', display: "'Fraunces', serif", dw: 600 },
+forest: { bg: '#EEF0E8', surface: '#F7F8F3', ink: '#14231B', soft: '#34443A', muted: '#4F5E55', line: '#CDD4C6', accent: '#2F6B45', onAccent: '#FFFFFF', link: '#2F6B45', invBg: '#14231B', invFg: '#EEF0E8', invLine: '#34443A', display: "'Fraunces', serif", dw: 600 },
+cobalt: { bg: '#F2F5FA', surface: '#FFFFFF', ink: '#0E1A33', soft: '#2E3B57', muted: '#4B5873', line: '#D3DBE8', accent: '#1F4FD8', onAccent: '#FFFFFF', link: '#1F4FD8', invBg: '#1F4FD8', invFg: '#FFFFFF', invLine: '#5A7FE6', display: "'Space Grotesk', sans-serif", dw: 700 },
+cobaltSerif: { bg: '#F2F5FA', surface: '#FFFFFF', ink: '#0E1A33', soft: '#2E3B57', muted: '#4B5873', line: '#D3DBE8', accent: '#1F4FD8', onAccent: '#FFFFFF', link: '#1F4FD8', invBg: '#1F4FD8', invFg: '#FFFFFF', invLine: '#5A7FE6', display: "'Fraunces', serif", dw: 600 },
+clay: { bg: '#1C1714', surface: '#26201C', ink: '#F2E8DC', soft: '#D6C9BA', muted: '#B3A596', line: '#3A302A', accent: '#E8895B', onAccent: '#1C1714', link: '#F0A07A', invBg: '#E8895B', invFg: '#1C1714', invLine: '#B96A45', display: "'Fraunces', serif", dw: 600 }
+};
+const t = themes[this.props.theme] ?? themes.paper;
+return {
+t,
+work: [
+{ n: '01', name: 'BGM Looper', blurb: 'Turns a background-music track into a seamless, loudness-normalized loop. A side project in audio processing.', meta: 'Python · AWS Lambda · Next.js', href: 'Project.dc.html' },
+{ n: '02', name: '[Project name]', blurb: '[What it does and what was hard about it, in one sentence.]', meta: '[Stack]', href: '#' },
+{ n: '03', name: '[Project name]', blurb: '[What it does and what was hard about it, in one sentence.]', meta: '[Stack]', href: '#' }
+],
+interests: [
+{ title: 'DevOps and cloud infrastructure', detail: 'CI/CD pipelines, Terraform, and running things on AWS.' },
+{ title: 'Telecom systems', detail: 'LTE core networks like Magma EPC, and how the eNodeB and RAN connect to them.' },
+{ title: 'Computer networking', detail: 'How packets actually get from one place to another.' },
+{ title: 'Audio and DSP', detail: 'Where BGM Looper came from.' }
+],
+posts: [
+{ date: '2026-08-01', title: 'Hello, World', summary: 'The first post on this blog.' },
+{ date: '[Date]', title: '[Post title]', summary: '[One-line summary]' },
+{ date: '[Date]', title: '[Post title]', summary: '[One-line summary]' }
+]
+};
+}
+}
+</script>
+</body>
+</html>
