@@ -73,7 +73,9 @@ export function parseFeed(xml: string, source: SourceDef): Omit<Headline, "id">[
     let title = text(item.title);
     const url = text(item.link);
     const publishedAt = parsePubDate(text(item.pubDate));
-    if (!title || !url || !publishedAt) continue;
+    // The link becomes an <a href> on a page behind the password, so a
+    // javascript: or data: link from a bad feed would run with the session.
+    if (!title || !/^https?:\/\//i.test(url) || !publishedAt) continue;
 
     let name = source.name;
     if (source.kind === "google") {

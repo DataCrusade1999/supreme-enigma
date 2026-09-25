@@ -111,6 +111,14 @@ describe("parseFeed", () => {
     );
   });
 
+  it("drops items whose link is not http or https", () => {
+    const xml = `<rss><channel>
+      <item><title>Bad</title><link>javascript:alert(1)</link><pubDate>Fri, 25 Sep 2026 01:30:06 GMT</pubDate></item>
+      <item><title>Good</title><link>https://ok.example/a</link><pubDate>Fri, 25 Sep 2026 01:30:06 GMT</pubDate></item>
+    </channel></rss>`;
+    expect(parseFeed(xml, direct("X")).map((i) => i.title)).toEqual(["Good"]);
+  });
+
   it("returns an empty list for a channel with no items", () => {
     expect(parseFeed('<rss><channel><title>t</title></channel></rss>', direct("X"))).toEqual([]);
   });
