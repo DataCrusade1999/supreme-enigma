@@ -71,16 +71,17 @@ Checked on 2026-09-25 from a plain HTTP client:
 | RBI press releases | `https://www.rbi.org.in/pressreleases_rss.xml` | 200, 10 items |
 | RBI notifications | `https://www.rbi.org.in/notifications_rss.xml` | 200, 10 items |
 | SEBI | `https://www.sebi.gov.in/sebirss.xml` | 200, 30 items |
-| PIB | `https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3` | 200, but items came back in Hindi. The English parameter has to be found in Phase 1 |
+| PIB | `https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3` | 200, but items are in Hindi whatever `Lang` is set to, and carry no `pubDate`. **Use Google News** (`site:pib.gov.in`) |
 | Mint Economy | `https://www.livemint.com/rss/economy` | 200, 35 items |
 | Business Standard Economy | `https://www.business-standard.com/rss/economy-102.rss` | 200, 35 items |
 | The Economist | `economist.com/<section>/rss.xml` | **403** — use Google News |
 | PRS Legislative Research | no RSS found (`/rss.xml`, `/billtrack/rss` both 404) | use Google News |
 | Reuters, Bloomberg | no public RSS | use Google News |
 
-Google News queries use `https://news.google.com/rss/search?q=<query>&hl=en-IN&gl=IN&ceid=IN:en`, each with `when:7d` so they return recent items rather than the archive (an unrestricted `site:prsindia.org` query returned a 2021 Act first, because Google News sorts by relevance). `when:7d` was not part of the probe; Phase 1 verifies it. The age filter in §5.2 protects against it not working. Queries:
+Google News queries use `https://news.google.com/rss/search?q=<query>&hl=en-IN&gl=IN&ceid=IN:en`, each with `when:7d` so they return recent items rather than the archive (an unrestricted `site:prsindia.org` query returned a 2021 Act first, because Google News sorts by relevance). With `when:7d` the same query returned only items from the last seven days (checked 2026-09-25); `site:economist.com` still returned 17 older items, which the age filter in §5.2 removes. Queries:
 
 - `site:reuters.com India economy`
+- `site:pib.gov.in`
 - `site:bloomberg.com India`
 - `site:economist.com India`
 - `site:prsindia.org`
@@ -94,6 +95,10 @@ The source list is a constant in `feeds.ts`. Changing it is a code change.
 Every item becomes `{id, title, url, source, summary?, publishedAt}`. `id` is a hash of the normalized title.
 
 Items older than 14 days, or with no parseable date, are discarded immediately after parsing, before dedupe and tagging, so the model is never paid to tag an old item.
+
+Dates are not uniform. RBI publishes `Fri, 25 Sep 2026 14:05:00` with no time zone (it is IST; parsed bare, it would be read as UTC on Vercel and be 5.5 hours off), and SEBI publishes `24 Sep, 2026 +0530`, which `Date.parse` rejects. A date with no zone gets `+0530` appended, and the comma after the month is removed before parsing.
+
+Only FT, Mint and Business Standard summaries are kept. RBI's `description` is an HTML table and SEBI's repeats the title.
 
 Google News titles end in ` - <Publisher>`. That suffix is stripped and becomes `source`. Google News links are `news.google.com/rss/articles/…` redirects, so they never match the publisher's own URL; dedupe is therefore by normalized title (lowercased, punctuation and the publisher suffix removed, whitespace collapsed). When two items share a normalized title, the one from a direct feed wins, because its link goes straight to the article.
 
@@ -184,7 +189,6 @@ The bucket lifecycle deliberately has no catch-all expiry rule (`infra/main/envi
 
 | Route | Does |
 |---|---|
-| `GET /api/news-desk` | Returns the snapshot and definitions |
 | `POST /api/news-desk/refresh` | Feeds → dedupe → tag new → indicators → save. `maxDuration = 60` |
 | `POST /api/news-desk/ask` | NDJSON stream (§7.2). `maxDuration = 60` |
 | `POST /api/news-desk/indicators` | Pin |
@@ -210,6 +214,7 @@ Phase 2 and Phase 4 measure real figures and replace these. The OpenRouter key h
 One Terraform change, in Phase 1:
 
 - The Vercel role's S3 policy in `infra/main/shared.tf` gains `s3:GetObject` and `s3:PutObject` on `news-desk/*` for all three bucket ARNs.
+- It also gains `s3:ListBucket` on all three buckets. Without it, S3 answers a `GetObject` for a key that does not exist with 403 rather than 404, so the very first page load, before any snapshot exists, would look like a permissions outage. The existing `ResumeHeadObjectNotFound` statement grants the same thing on main's bucket for the same reason.
 - New variable `news_desk_model` (default `anthropic/claude-haiku-4.5`) and Vercel env var `NEWS_DESK_MODEL` on all targets.
 
 `terraform plan` against real state before merging, per repo rules.
@@ -254,7 +259,5 @@ Each phase has its own issue, plan and PR into `dev`, and is usable on the dev d
 
 ## 15. Open items
 
-- PIB's English-language feed parameter (Phase 1).
-- Whether `when:7d` restricts Google News results as expected (Phase 1).
 - Filter codes for the five unverified default indicators (Phase 3).
 - Whether Google News rate-limits six queries per refresh from Vercel's IPs. If it does, merge them into fewer queries.
