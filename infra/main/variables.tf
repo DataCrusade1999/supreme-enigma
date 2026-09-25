@@ -46,6 +46,12 @@ variable "openrouter_model" {
   default     = "anthropic/claude-haiku-4.5"
 }
 
+variable "news_desk_model" {
+  description = "Model slug for the News Desk's headline tagging and chat. Separate from openrouter_model so changing the resume extraction model does not change this tool."
+  type        = string
+  default     = "anthropic/claude-haiku-4.5"
+}
+
 # Used only for each Lambda function's initial `image_uri` at creation time — every
 # aws_lambda_function.looper/looper_env has `lifecycle.ignore_changes = [image_uri]`,
 # so CI's `update-function-code` is what actually keeps the deployed image current, and

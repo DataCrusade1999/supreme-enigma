@@ -40,6 +40,13 @@ export const TOOLS: Tool[] = [
       "Work out the date a purchase becomes affordable, from a balance, a salary and expenses on their own cadences.",
   },
   {
+    href: "/tools/news-desk",
+    name: "News Desk",
+    kind: "News",
+    blurb:
+      "Headlines on the Indian economy, reforms and legislation from 13 free sources, refreshed when you ask.",
+  },
+  {
     href: "/keystatic",
     name: "Content editor",
     kind: "Site",
@@ -57,6 +64,7 @@ const GATED_PREFIXES = [
   "/api/looper",
   "/api/resume",
   "/api/newsletter",
+  "/api/news-desk",
   "/keystatic",
   "/api/keystatic",
 ];

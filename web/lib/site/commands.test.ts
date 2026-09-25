@@ -21,6 +21,7 @@ describe("COMMANDS", () => {
       "open-resume-admin",
       "open-newsletter-admin",
       "open-money-planner",
+      "open-news-desk",
       "open-content-editor",
       "theme",
     ]);
@@ -52,6 +53,7 @@ describe("COMMANDS", () => {
     ["open-resume-admin", "/tools/resume-admin"],
     ["open-newsletter-admin", "/tools/newsletter-admin"],
     ["open-money-planner", "/tools/money-planner"],
+    ["open-news-desk", "/tools/news-desk"],
     ["open-content-editor", "/keystatic"],
   ])("%s pushes %s", (id, href) => {
     const push = vi.fn();

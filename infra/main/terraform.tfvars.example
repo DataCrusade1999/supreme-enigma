@@ -22,3 +22,4 @@ openrouter_api_key = "sk-or-v1-..."
 
 # Optional — defaults to anthropic/claude-haiku-4.5.
 # openrouter_model = "anthropic/claude-haiku-4.5"
+# news_desk_model = "anthropic/claude-haiku-4.5"

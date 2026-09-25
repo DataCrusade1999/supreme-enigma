@@ -65,7 +65,7 @@ describe("CommandBar", () => {
     expect(screen.getByText("cd projects")).toBeInTheDocument();
     expect(screen.queryByText("cd about")).not.toBeInTheDocument();
     expect(screen.queryByText("open bgm-looper")).not.toBeInTheDocument();
-    expect(screen.getByText("8 more — type to search")).toBeInTheDocument();
+    expect(screen.getByText("9 more — type to search")).toBeInTheDocument();
   });
 
   it("searches every command, not just the pinned ones", () => {

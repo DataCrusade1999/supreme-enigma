@@ -9,6 +9,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- News Desk tool at `/tools/news-desk`: headlines on the Indian economy, reforms and legislation from 13 free RSS sources (FT, RBI, SEBI, Mint, Business Standard directly; Reuters, Bloomberg, The Economist, PRS and PIB through Google News), refreshed only when you press Refresh. Items older than 14 days are dropped and duplicates across sources are merged. Topic tags, MoSPI indicators and the chat assistant follow in later phases (#253).
 - `/robots.txt`: disallows AI training and AI-scraping crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot and others) from the whole site, and keeps every crawler out of `/tools`, `/api/`, `/keystatic` and `/login`. Search engines can still index the public pages. It is advisory — crawlers that ignore robots.txt are not stopped.
 - Money Planner tool at `/tools/money-planner`: from a balance, a monthly salary and itemized expenses on their own cadences, the date a purchase becomes affordable without leaving the next pay cycle short.
 - Storybook for `web/components/`, and Chromatic visual regression on pull

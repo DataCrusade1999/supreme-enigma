@@ -302,6 +302,22 @@ resource "aws_iam_role_policy" "vercel" {
         Resource = [local.resume_bucket_arn]
       },
       {
+        Sid      = "NewsDeskObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = [for arn in local.all_audio_bucket_arns : "${arn}/news-desk/*"]
+      },
+      {
+        # Same reason as ResumeHeadObjectNotFound above: without ListBucket, S3 answers
+        # a GetObject for a missing key with 403, not 404. The News Desk's first page
+        # load reads a snapshot that does not exist yet, and would report that as a
+        # permissions failure. Grants listing key names in the three audio buckets.
+        Sid      = "NewsDeskMissingSnapshotIs404"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = local.all_audio_bucket_arns
+      },
+      {
         Sid      = "InvokeProcessor"
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
@@ -498,6 +514,14 @@ resource "vercel_project_environment_variable" "openrouter_base_url" {
   project_id = vercel_project.looper.id
   key        = "OPENROUTER_BASE_URL"
   value      = "https://openrouter.ai/api/v1"
+  target     = local.env_targets
+  sensitive  = false
+}
+
+resource "vercel_project_environment_variable" "news_desk_model" {
+  project_id = vercel_project.looper.id
+  key        = "NEWS_DESK_MODEL"
+  value      = var.news_desk_model
   target     = local.env_targets
   sensitive  = false
 }

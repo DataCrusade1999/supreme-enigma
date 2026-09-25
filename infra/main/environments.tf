@@ -88,8 +88,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "audio" {
   # `filter {}` expiration rule does not yield to the prefix rules — per AWS's
   # own conflict docs, an empty-filter expiration applies to every object in the
   # bucket, including ones a prefix rule already matches. Adding one at any
-  # number of days would therefore delete resume/current.*, which is the single
-  # thing this configuration exists to keep.
+  # number of days would therefore delete resume/current.* and the News Desk's
+  # news-desk/*.json, which are the things this configuration exists to keep.
   # https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-conflicts.html
   #
   # Stray keys are prevented at the IAM layer instead: the Vercel user is scoped
