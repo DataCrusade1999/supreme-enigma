@@ -79,6 +79,12 @@ export const COMMANDS: Command[] = [
     run: (ctx) => ctx.push("/tools/money-planner"),
   },
   {
+    id: "open-news-desk",
+    label: "open news-desk",
+    hint: "Read economy, reform and legislation headlines",
+    run: (ctx) => ctx.push("/tools/news-desk"),
+  },
+  {
     id: "open-content-editor",
     label: "open content-editor",
     hint: "Write a blog post",

@@ -60,6 +60,7 @@ describe("toolNameFor", () => {
     ["/tools/something-new", null],
     ["/api/looper/process", null],
     ["/tools/newsletter-admin", "Newsletter admin"],
+    ["/tools/news-desk", "News Desk"],
   ])("toolNameFor(%s) === %s", (pathname, expected) => {
     expect(toolNameFor(pathname)).toBe(expected);
   });
@@ -96,6 +97,7 @@ describe("TOOLS", () => {
       "/tools/resume-admin",
       "/tools/newsletter-admin",
       "/tools/money-planner",
+      "/tools/news-desk",
       "/keystatic",
     ]);
   });
