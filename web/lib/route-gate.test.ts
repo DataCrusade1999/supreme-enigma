@@ -27,6 +27,8 @@ describe("isGatedPath", () => {
     ["/api/keystatic/github/oauth/callback", true],
     ["/api/newsletter", true],
     ["/api/newsletter/send", true],
+    ["/api/news-desk/refresh", true],
+    ["/tools/news-desk", true],
     // Gated by the /tools prefix rather than an entry of its own — this case
     // is here to pin that, so moving the admin out of /tools fails loudly.
     ["/tools/newsletter-admin", true],

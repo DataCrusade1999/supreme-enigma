@@ -57,6 +57,7 @@ const GATED_PREFIXES = [
   "/api/looper",
   "/api/resume",
   "/api/newsletter",
+  "/api/news-desk",
   "/keystatic",
   "/api/keystatic",
 ];
