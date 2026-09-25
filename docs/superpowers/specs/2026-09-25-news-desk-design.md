@@ -1,8 +1,8 @@
 # News Desk — Design
 
 **Date:** 2026-09-25
-**Status:** Draft, awaiting review
-**Branch:** `docs/news-desk-spec`
+**Status:** Approved 2026-09-25
+**Branch:** `feat/news-desk-phase-1` (Phase 1 carries this spec)
 **Epic:** #253
 
 ## 1. Problem
@@ -41,6 +41,7 @@ Non-goals:
 | D8 | Hand-written SVG line chart | A chart library: one chart type in one place does not justify the bundle |
 | D9 | Own model env var `NEWS_DESK_MODEL` | Reusing `OPENROUTER_MODEL`: changing the resume model would silently change this tool |
 | D10 | Indicator rows show only the current series of each dataset | Splicing base years: CPI base 2012 and base 2024 differ in field names and even state codes (§6.2) |
+| D11 | RSS parsed with `fast-xml-parser` 4 | Regex parsing: CDATA, entities and namespaced tags vary across these 13 feeds. v4 has one small dependency (`strnum`); v5 is a rewrite with six |
 
 ## 4. Page
 
@@ -81,7 +82,7 @@ Checked on 2026-09-25 from a plain HTTP client:
 Google News queries use `https://news.google.com/rss/search?q=<query>&hl=en-IN&gl=IN&ceid=IN:en`, each with `when:7d` so they return recent items rather than the archive (an unrestricted `site:prsindia.org` query returned a 2021 Act first, because Google News sorts by relevance). With `when:7d` the same query returned only items from the last seven days (checked 2026-09-25); `site:economist.com` still returned 17 older items, which the age filter in §5.2 removes. Queries:
 
 - `site:reuters.com India economy`
-- `site:pib.gov.in`
+- `site:pib.gov.in (Cabinet OR economy OR bill OR GDP OR inflation OR GST OR reform OR RBI)` (unfiltered, PIB fills the 100-item cap with unrelated ministry notices)
 - `site:bloomberg.com India`
 - `site:economist.com India`
 - `site:prsindia.org`
@@ -92,7 +93,7 @@ The source list is a constant in `feeds.ts`. Changing it is a code change.
 
 ### 5.2 Normalization and dedupe
 
-Every item becomes `{id, title, url, source, summary?, publishedAt}`. `id` is a hash of the normalized title.
+Every item becomes `{id, title, url, source, summary?, publishedAt}`. `id` is a hash of the normalized title plus the UTC publish day. The day is part of the key because some releases repeat a fixed title: RBI publishes "Government Stock - Auction Results: Cut-off" every week, and a title-only key would keep the first week's copy and drop every later one until it aged out.
 
 Items older than 14 days, or with no parseable date, are discarded immediately after parsing, before dedupe and tagging, so the model is never paid to tag an old item.
 
@@ -100,7 +101,7 @@ Dates are not uniform. RBI publishes `Fri, 25 Sep 2026 14:05:00` with no time zo
 
 Only FT, Mint and Business Standard summaries are kept. RBI's `description` is an HTML table and SEBI's repeats the title.
 
-Google News titles end in ` - <Publisher>`. That suffix is stripped and becomes `source`. Google News links are `news.google.com/rss/articles/…` redirects, so they never match the publisher's own URL; dedupe is therefore by normalized title (lowercased, punctuation and the publisher suffix removed, whitespace collapsed). When two items share a normalized title, the one from a direct feed wins, because its link goes straight to the article.
+Google News items name the publisher in a `<source>` element and repeat it as a ` - <Publisher>` title suffix. `<source>` becomes `source` and the matching suffix is stripped; the suffix is only used as a fallback when `<source>` is missing, since headlines themselves contain " - ". Google News links are `news.google.com/rss/articles/…` redirects, so they never match the publisher's own URL; dedupe is therefore by normalized title (lowercased, punctuation and the publisher suffix removed, whitespace collapsed). When two items share a normalized title, the one from a direct feed wins, because its link goes straight to the article.
 
 Summaries are the feed's own `description`, stripped of HTML and cut to about 200 characters. Google News descriptions are just the title again and are dropped.
 

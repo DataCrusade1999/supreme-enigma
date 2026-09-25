@@ -6,7 +6,7 @@
 
 **Architecture:** Pure modules under `web/lib/news-desk/` (parse, dedupe, feeds, store, refresh), one POST route that runs a refresh and returns the snapshot, and a server-rendered page that reads the saved snapshot and hands it to a client component with the Refresh button. Terraform grants the Vercel role access to `news-desk/*` and adds the `NEWS_DESK_MODEL` env var that Phase 2 uses.
 
-**Tech Stack:** Next.js 16 (App Router), React 19, TypeScript, zod 4, `fast-xml-parser` 5 (new), `@aws-sdk/client-s3` via `web/lib/aws.ts`, Vitest + Testing Library, Playwright, Terraform.
+**Tech Stack:** Next.js 16 (App Router), React 19, TypeScript, zod 4, `fast-xml-parser` 4 (new; spec D11), `@aws-sdk/client-s3` via `web/lib/aws.ts`, Vitest + Testing Library, Playwright, Terraform.
 
 **Spec:** `docs/superpowers/specs/2026-09-25-news-desk-design.md` (§4, §5.1, §5.2, §8, §11, §12 for this phase)
 
@@ -15,7 +15,9 @@
 - Headlines older than 14 days, or with no parseable date, are discarded right after parsing (spec §5.2).
 - A date with no time zone is IST: append `+0530`. Remove the comma in `24 Sep, 2026` before parsing (spec §5.2).
 - Summaries are kept only for FT, Mint and Business Standard, stripped of HTML and cut to about 200 characters (spec §5.2).
-- Dedupe key is the normalized title; a direct-feed item beats a Google News item with the same key (spec §5.2).
+- Dedupe key is the normalized title plus the UTC publish day; a direct-feed item beats a Google News item with the same key (spec §5.2).
+- Client components must render the same thing on the server and in the browser: no `new Date()` during render. The page passes `nowIso` down.
+- Tests under `web/lib/news-desk/` start with `// @vitest-environment node` (the repo default is jsdom; these modules are server-only and use `AbortSignal.timeout` and `node:crypto`).
 - Feed timeout 8 s; a failed source is recorded in `sourceErrors` and does not fail the refresh (spec §12).
 - Storage is the per-branch bucket in `S3_BUCKET_NAME`, keys under `news-desk/` (spec §8). Every write replaces the whole object.
 - Refresh route: `maxDuration = 60` (spec §9).
@@ -32,7 +34,9 @@ Deliberate deviation from spec §9: no `GET /api/news-desk` in this phase. The p
 2. **Storage not configured** (`S3_BUCKET_NAME` unset: local dev, Playwright, CI). Expect the page to render with a plain message and the refresh route to answer 503, not a 500 or a build failure. Pinned in Tasks 5, 6 and 7.
 3. **A feed that hangs.** Expect it to be abandoned after 8 s and listed as failed while every other source is saved. Pinned in Task 4.
 4. **The same story from Google News and from the publisher's own feed**, with typographic differences (curly vs straight apostrophe, trailing ` - Mint`). Expect one entry, linking to the publisher. Pinned in Task 3.
-5. **A stored snapshot that is corrupt or from an older shape.** Expect the page to say it could not read the saved headlines and a Refresh to replace the file, rather than every refresh failing forever. Pinned in Tasks 5 and 6.
+5. **Recurring releases with identical titles** (RBI's weekly "Government Stock - Auction Results: Cut-off"). Expect each week's release to appear, not only the first one until it ages out. Pinned in Task 3 by keying ids on title plus publish day.
+
+Also handled, but less likely to bite: a stored snapshot that is corrupt or from an older shape. The page says it could not read the saved headlines and a Refresh replaces the file (Tasks 5 and 6).
 
 ---
 
@@ -175,7 +179,7 @@ cd /e/Personal/looper/infra/main && terraform fmt -check && terraform validate &
 
 Expected: `Plan: 1 to add, 1 to change, 0 to destroy.` The add is `vercel_project_environment_variable.news_desk_model`; the change is `aws_iam_role_policy.vercel` with the two new statements. If anything else appears, stop and report it.
 
-Do not apply. Applying is the owner's decision; ask before running `terraform apply`. The app handles a missing bucket and a permission failure without crashing, so merge order does not depend on it, but Refresh on dev will not work until it is applied.
+Do not apply yet. The repo's merge gate for an `infra/` PR is `terraform plan` showing `No changes.`, which means the owner applies this branch's Terraform **before** the PR merges (Task 8 Step 6). The changes only add permissions and one env var, so applying ahead of the app code is harmless. Ask the owner before running `terraform apply`; never run it unprompted.
 
 - [ ] **Step 5: Commit**
 
@@ -211,8 +215,10 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 - [ ] **Step 1: Install the XML parser**
 
 ```bash
-cd /e/Personal/looper/web && npm install fast-xml-parser@^5.11.1
+cd /e/Personal/looper/web && npm install fast-xml-parser@^4.5.7
 ```
+
+Version 4, not 5: v5 is a rewrite with a different option set, and the options below (`ignoreAttributes`, `parseTagValue`, `isArray`) are v4's. After installing, confirm each of the three appears in `node_modules/fast-xml-parser/README.md` or its linked options doc before relying on it.
 
 - [ ] **Step 2: Write the fixtures**
 
@@ -233,7 +239,8 @@ Trimmed copies of real responses, recorded 2026-09-25. Create each file exactly 
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>"site:reuters.com India economy when:7d" - Google News</title>
 <item><title>India to continue prudent fiscal management, chief economic advisor says - Reuters</title><link>https://news.google.com/rss/articles/CBMitwFBVV95cUxN?oc=5</link><guid isPermaLink="false">CBMitwFBVV95cUxN</guid><pubDate>Mon, 21 Sep 2026 08:01:43 GMT</pubDate><description>&lt;a href="https://news.google.com/rss/articles/CBMitwFBVV95cUxN?oc=5"&gt;India to continue prudent fiscal management&lt;/a&gt;</description><source url="https://www.reuters.com">Reuters</source></item>
-<item><title>Tata &amp; Sons – a profile - Business Standard - Mumbai edition</title><link>https://news.google.com/rss/articles/XYZ?oc=5</link><guid isPermaLink="false">XYZ</guid><pubDate>Tue, 22 Sep 2026 10:00:00 GMT</pubDate><description>ignored</description></item>
+<item><title>Tata &amp; Sons – a profile - Mumbai edition - Business Standard</title><link>https://news.google.com/rss/articles/XYZ?oc=5</link><guid isPermaLink="false">XYZ</guid><pubDate>Tue, 22 Sep 2026 10:00:00 GMT</pubDate><description>ignored</description><source url="https://www.business-standard.com">Business Standard</source></item>
+<item><title>Budget talk begins - Mint</title><link>https://news.google.com/rss/articles/NOSRC?oc=5</link><guid isPermaLink="false">NOSRC</guid><pubDate>Tue, 22 Sep 2026 09:00:00 GMT</pubDate></item>
 </channel></rss>
 ```
 
@@ -276,6 +283,7 @@ Trimmed copies of real responses, recorded 2026-09-25. Create each file exactly 
 `web/lib/news-desk/parse.test.ts`:
 
 ```ts
+// @vitest-environment node
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -361,7 +369,7 @@ describe("parseFeed", () => {
     ]);
   });
 
-  it("takes a Google News item's source from its title suffix and never keeps its description", () => {
+  it("takes a Google News item's source from <source> and strips it from the title", () => {
     const [first, second] = parseFeed(fixture("google-news.xml"), google);
     expect(first).toMatchObject({
       title: "India to continue prudent fiscal management, chief economic advisor says",
@@ -370,9 +378,16 @@ describe("parseFeed", () => {
       url: "https://news.google.com/rss/articles/CBMitwFBVV95cUxN?oc=5",
     });
     expect(first.summary).toBeUndefined();
-    // Only the LAST " - " separates the publisher, and entities are decoded once.
-    expect(second.title).toBe("Tata & Sons – a profile - Business Standard");
-    expect(second.source).toBe("Mumbai edition");
+    // A " - " inside the headline is not mistaken for the publisher, and
+    // entities are decoded once.
+    expect(second.title).toBe("Tata & Sons – a profile - Mumbai edition");
+    expect(second.source).toBe("Business Standard");
+  });
+
+  it("falls back to the title suffix when a Google News item has no <source>", () => {
+    const third = parseFeed(fixture("google-news.xml"), google)[2];
+    expect(third.title).toBe("Budget talk begins");
+    expect(third.source).toBe("Mint");
   });
 
   it("rejects something that is not RSS, such as a 200 HTML error page", () => {
@@ -511,10 +526,20 @@ export function parseFeed(xml: string, source: SourceDef): Omit<Headline, "id">[
 
     let name = source.name;
     if (source.kind === "google") {
-      const cut = title.lastIndexOf(" - ");
-      if (cut > 0) {
-        name = title.slice(cut + 3).trim();
-        title = title.slice(0, cut).trim();
+      // Google News names the publisher in <source> and repeats it as a
+      // " - Publisher" title suffix. Trust <source>; guess from the last " - "
+      // only when it is missing, since headlines contain " - " themselves.
+      const publisher = text(item.source);
+      if (publisher) {
+        name = publisher;
+        const suffix = ` - ${publisher}`;
+        if (title.endsWith(suffix)) title = title.slice(0, -suffix.length).trim();
+      } else {
+        const cut = title.lastIndexOf(" - ");
+        if (cut > 0) {
+          name = title.slice(cut + 3).trim();
+          title = title.slice(0, cut).trim();
+        }
       }
     }
 
@@ -535,7 +560,7 @@ export function parseFeed(xml: string, source: SourceDef): Omit<Headline, "id">[
 - [ ] **Step 6: Run to verify pass**
 
 Run: `cd /e/Personal/looper/web && npx vitest run lib/news-desk/parse.test.ts`
-Expected: PASS, 12 tests.
+Expected: PASS, 13 tests.
 
 If the SEBI date test fails, `Date.parse` on this Node version does not accept `24 Sep 2026 +0530`. Rewrite that shape to `24 Sep 2026 00:00:00 +0530` in `parsePubDate` (insert `00:00:00` when the text has no `:`), and rerun.
 
@@ -561,7 +586,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 - Produces:
   - `MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000`
   - `normalizeTitle(title: string): string`
-  - `withId(item: Omit<Headline, "id">): Headline` — `id` is the first 16 hex chars of SHA-1 of the normalized title
+  - `withId(item: Omit<Headline, "id">): Headline` — `id` is the first 16 hex chars of SHA-1 of `normalizedTitle + "|" + publishedAt.slice(0, 10)` (title plus UTC publish day)
   - `mergeHeadlines(existing: Headline[], incoming: Headline[], now: Date): Headline[]` — drops items older than `MAX_AGE_MS`, one item per `id` (existing wins over incoming unless incoming is direct and existing is not), sorted by `publishedAt` descending
 
 - [ ] **Step 1: Write the failing tests**
@@ -569,6 +594,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 `web/lib/news-desk/dedupe.test.ts`:
 
 ```ts
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { MAX_AGE_MS, mergeHeadlines, normalizeTitle, withId } from "./dedupe";
 import type { Headline } from "./types";
@@ -607,6 +633,15 @@ describe("withId", () => {
 
   it("is 16 hex characters", () => {
     expect(item().id).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it("keeps a recurring release with the same title as a separate item each week", () => {
+    // RBI publishes "Government Stock - Auction Results: Cut-off" every week.
+    const title = "Government Stock - Auction Results: Cut-off";
+    const lastWeek = item({ title, publishedAt: "2026-09-18T08:35:00.000Z" });
+    const thisWeek = item({ title, publishedAt: "2026-09-25T08:35:00.000Z" });
+    expect(lastWeek.id).not.toBe(thisWeek.id);
+    expect(mergeHeadlines([lastWeek], [thisWeek], NOW)).toHaveLength(2);
   });
 });
 
@@ -681,8 +716,13 @@ export function normalizeTitle(title: string): string {
     .trim();
 }
 
+// The publish day is part of the key so a recurring release with a fixed title
+// (RBI's weekly auction results) is a new item each week instead of being
+// swallowed by last week's copy. The same story from Google News and from the
+// publisher carries the same timestamp, so cross-source dedupe still works.
 export function withId(item: Omit<Headline, "id">): Headline {
-  const id = createHash("sha1").update(normalizeTitle(item.title)).digest("hex").slice(0, 16);
+  const key = `${normalizeTitle(item.title)}|${item.publishedAt.slice(0, 10)}`;
+  const id = createHash("sha1").update(key).digest("hex").slice(0, 16);
   return { id, ...item };
 }
 
@@ -703,7 +743,7 @@ export function mergeHeadlines(existing: Headline[], incoming: Headline[], now: 
 - [ ] **Step 4: Run to verify pass**
 
 Run: `cd /e/Personal/looper/web && npx vitest run lib/news-desk/dedupe.test.ts`
-Expected: PASS, 9 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -734,6 +774,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 `web/lib/news-desk/feeds.test.ts`:
 
 ```ts
+// @vitest-environment node
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -858,7 +899,12 @@ export const SOURCES: SourceDef[] = [
   googleNews("Google News: Bloomberg", "site:bloomberg.com India"),
   googleNews("Google News: The Economist", "site:economist.com India"),
   googleNews("Google News: PRS", "site:prsindia.org"),
-  googleNews("Google News: PIB", "site:pib.gov.in"),
+  // Unfiltered, site:pib.gov.in returns the 100-item cap every time, mostly
+  // ministry notices unrelated to the economy. Narrowed to the topics this desk covers.
+  googleNews(
+    "Google News: PIB",
+    "site:pib.gov.in (Cabinet OR economy OR bill OR GDP OR inflation OR GST OR reform OR RBI)",
+  ),
   googleNews(
     "Google News: legislation",
     'India (bill OR ordinance OR amendment) ("Lok Sabha" OR "Rajya Sabha")',
@@ -937,6 +983,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 `web/lib/news-desk/store.test.ts`:
 
 ```ts
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/aws", () => ({
@@ -1105,6 +1152,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 `web/lib/news-desk/refresh.test.ts`:
 
 ```ts
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./feeds", () => ({ fetchAllFeeds: vi.fn() }));
@@ -1354,7 +1402,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 - Produces:
   - `formatAge(iso: string, now: Date): string` — `"just now"`, `"5m ago"`, `"3h ago"`, `"2d ago"`
   - `<HeadlineList headlines={Headline[]} now={Date} />`
-  - `<NewsDesk initial={Snapshot | null} problem={string | null} />` (client)
+  - `<NewsDesk initial={Snapshot | null} problem={string | null} nowIso={string} />` (client; `nowIso` is the server's render time, so server and browser print the same ages)
   - Page at `/tools/news-desk`, `TOOLS` entry `{ href: "/tools/news-desk", name: "News Desk", kind: "News", blurb: … }`, command `open-news-desk`
 
 - [ ] **Step 1: Write the failing `formatAge` tests**
@@ -1362,6 +1410,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 `web/lib/news-desk/format.test.ts`:
 
 ```ts
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { formatAge } from "./format";
 
@@ -1406,10 +1455,12 @@ Run again → PASS, 5 tests.
 `web/components/news-desk/NewsDesk.test.tsx`:
 
 ```tsx
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NewsDesk } from "./NewsDesk";
 import type { Snapshot } from "../../lib/news-desk/types";
+
+const NOW = "2026-09-25T12:00:00.000Z";
 
 const SNAPSHOT: Snapshot = {
   version: 1,
@@ -1437,16 +1488,12 @@ const SNAPSHOT: Snapshot = {
 };
 
 describe("NewsDesk", () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ now: new Date("2026-09-25T12:00:00.000Z"), toFake: ["Date"] });
-  });
   afterEach(() => {
-    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
   it("lists headlines newest first, linking out in a new tab", () => {
-    render(<NewsDesk initial={SNAPSHOT} problem={null} />);
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
     const links = screen.getAllByRole("link");
     expect(links.map((l) => l.textContent)).toEqual([
       "Moody's raises India FY27 GDP forecast to 7%",
@@ -1460,26 +1507,26 @@ describe("NewsDesk", () => {
   });
 
   it("says when it last refreshed and which sources failed", () => {
-    render(<NewsDesk initial={SNAPSHOT} problem={null} />);
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
     expect(screen.getByText(/Refreshed 2h ago/)).toBeInTheDocument();
     expect(screen.getByText("1 source failed")).toBeInTheDocument();
     expect(screen.getByText("SEBI: timed out")).toBeInTheDocument();
   });
 
   it("shows an empty state before the first refresh", () => {
-    render(<NewsDesk initial={null} problem={null} />);
+    render(<NewsDesk initial={null} problem={null} nowIso={NOW} />);
     expect(screen.getByText("Nothing saved yet. Press Refresh to fetch headlines.")).toBeInTheDocument();
   });
 
   it("shows the server's problem instead of a list", () => {
-    render(<NewsDesk initial={null} problem="Could not read the saved headlines." />);
+    render(<NewsDesk initial={null} problem="Could not read the saved headlines." nowIso={NOW} />);
     expect(screen.getByText("Could not read the saved headlines.")).toBeInTheDocument();
   });
 
   it("replaces the list with the refreshed snapshot, disabling the button meanwhile", async () => {
     let resolve!: (r: Response) => void;
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((r) => (resolve = r))));
-    render(<NewsDesk initial={null} problem={null} />);
+    render(<NewsDesk initial={null} problem={null} nowIso={NOW} />);
 
     const button = screen.getByRole("button", { name: "Refresh" });
     fireEvent.click(button);
@@ -1496,7 +1543,7 @@ describe("NewsDesk", () => {
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ error: "storage not configured" }), { status: 503 })),
     );
-    render(<NewsDesk initial={SNAPSHOT} problem={null} />);
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("Refresh failed: storage not configured"),
@@ -1555,11 +1602,23 @@ import { formatAge } from "../../lib/news-desk/format";
 import type { Snapshot } from "../../lib/news-desk/types";
 import { HeadlineList } from "./HeadlineList";
 
-export function NewsDesk({ initial, problem }: { initial: Snapshot | null; problem: string | null }) {
+export function NewsDesk({
+  initial,
+  problem,
+  nowIso,
+}: {
+  initial: Snapshot | null;
+  problem: string | null;
+  nowIso: string;
+}) {
   const [snapshot, setSnapshot] = useState(initial);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const now = new Date();
+  // Ages are computed against the server's render time, never `new Date()` in
+  // render: the server and the browser would print different "Nm ago" strings
+  // and React would report a hydration mismatch. Updated only in the click
+  // handler, which runs in the browser alone.
+  const [now, setNow] = useState(() => new Date(nowIso));
 
   async function refresh() {
     setRefreshing(true);
@@ -1572,6 +1631,7 @@ export function NewsDesk({ initial, problem }: { initial: Snapshot | null; probl
         return;
       }
       setSnapshot(body as Snapshot);
+      setNow(new Date());
     } catch {
       setError("Refresh failed: network error");
     } finally {
@@ -1631,18 +1691,44 @@ export function NewsDesk({ initial, problem }: { initial: Snapshot | null; probl
 
 Before writing the classes, check the token names used by `web/components/newsletter/IssueList.tsx` (`border-rule`, `text-muted`, `text-fg`, `text-accent`) and match whatever that file actually uses; the theme tokens are defined in `web/app/globals.css`.
 
-`web/components/news-desk/HeadlineList.stories.tsx` — follow the structure of `web/components/newsletter/IssueList.stories.tsx` (same imports of `Meta`/`StoryObj`, same `title` prefix convention), with one story `Default` passing these args:
+`web/components/news-desk/HeadlineList.stories.tsx` (same shape as `web/components/newsletter/IssueList.stories.tsx`; Chromatic snapshots it in light and dark):
 
 ```tsx
-const now = new Date("2026-09-25T12:00:00.000Z");
-// args:
-{
-  now,
-  headlines: [
-    { id: "a", title: "Moody's raises India FY27 GDP forecast to 7%", url: "https://example.com/a", source: "Reuters", publishedAt: "2026-09-25T09:00:00.000Z", direct: false },
-    { id: "b", title: "Cabinet to decide on new BIT template", url: "https://example.com/b", source: "Mint", summary: "New template aims to ease investor–state dispute settlement.", publishedAt: "2026-09-25T08:00:00.000Z", direct: true },
-  ],
-}
+import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import { HeadlineList } from "./HeadlineList";
+import type { Headline } from "../../lib/news-desk/types";
+
+const meta = {
+  title: "News Desk/HeadlineList",
+  component: HeadlineList,
+} satisfies Meta<typeof HeadlineList>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+const headlines: Headline[] = [
+  {
+    id: "a",
+    title: "Moody's raises India FY27 GDP forecast to 7%",
+    url: "https://example.com/a",
+    source: "Reuters",
+    publishedAt: "2026-09-25T09:00:00.000Z",
+    direct: false,
+  },
+  {
+    id: "b",
+    title: "Cabinet to decide on new BIT template",
+    url: "https://example.com/b",
+    source: "Mint",
+    summary: "New template aims to ease investor–state dispute settlement.",
+    publishedAt: "2026-09-25T08:00:00.000Z",
+    direct: true,
+  },
+];
+
+export const Default: Story = {
+  args: { headlines, now: new Date("2026-09-25T12:00:00.000Z") },
+};
 ```
 
 - [ ] **Step 6: Run to verify pass**
@@ -1759,7 +1845,7 @@ export default async function NewsDeskPage() {
             Indian economy, reforms and legislation, from 13 free sources. Refresh fetches
             everything again; nothing updates on its own.
           </p>
-          <NewsDesk initial={initial} problem={problem} />
+          <NewsDesk initial={initial} problem={problem} nowIso={new Date().toISOString()} />
         </div>
       </main>
 
@@ -1859,6 +1945,8 @@ In `CHANGELOG.md`, under `## [Unreleased]` → `### Added`, add as the first bul
 
 In `CLAUDE.md`, in the Structure bullet for `web/`, change `the `/api/looper/*`, `/api/resume/*` and `/api/newsletter/*` routes` to `the `/api/looper/*`, `/api/resume/*`, `/api/newsletter/*` and `/api/news-desk/*` routes`, and add `News Desk` to the list of tools in the same sentence (`… newsletter admin, Money Planner, News Desk)`).
 
+In `.claude/rules/web.md`, the bullet beginning "Only `/tools`, `/api/looper/*`, `/api/resume/*`, `/keystatic`, and `/api/keystatic/*` require the shared password" is already missing `/api/newsletter/*`. Change that list to "`/tools`, `/api/looper/*`, `/api/resume/*`, `/api/newsletter/*`, `/api/news-desk/*`, `/keystatic`, and `/api/keystatic/*`", and leave the rest of the bullet as it is. Add `.claude/rules/web.md` to this step's `git add`.
+
 - [ ] **Step 4: Live refresh against real feeds (manual, local)**
 
 With AWS credentials for the `personal` profile available and the Task 1 Terraform applied, run the dev server against the dev bucket and press Refresh once:
@@ -1874,12 +1962,20 @@ Local static credentials can do more than the Vercel role, so this does not test
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /e/Personal/looper && git add web/e2e/news-desk.spec.ts CHANGELOG.md CLAUDE.md
+cd /e/Personal/looper && git add web/e2e/news-desk.spec.ts CHANGELOG.md CLAUDE.md .claude/rules/web.md
 git commit -m "docs(news-desk): changelog, gated routes, e2e reachability
 
 Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 ```
 
-- [ ] **Step 6: Open the PR**
+- [ ] **Step 6: Apply Terraform, confirm the plan is clean, open the PR**
 
-Invoke the `merging-a-pr` skill's pre-PR expectations. PR into `dev`, body starts with `Closes #<Phase 1 issue>` and `Part of #253`, and lists: the `terraform plan` result from Task 1, whether it has been applied, and the live refresh numbers from Step 4.
+Ask the owner to approve the apply, then:
+
+```bash
+cd /e/Personal/looper/infra/main && terraform apply -var-file=terraform.tfvars && terraform plan -var-file=terraform.tfvars -no-color | tail -3
+```
+
+Expected after apply: `No changes. Your infrastructure matches the configuration.` That is the merge gate for `infra/` changes (CLAUDE.md "Merging a PR").
+
+Then open the PR into `dev`. The body starts with `Closes #<Phase 1 issue>` and `Part of #253`, and records: the apply, the clean plan, and the live refresh numbers from Step 4. Before merging, follow the `merging-a-pr` skill end to end.
