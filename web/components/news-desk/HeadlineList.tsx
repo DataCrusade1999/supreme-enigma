@@ -3,9 +3,12 @@ import type { Headline } from "../../lib/news-desk/types";
 
 export function HeadlineList({ headlines, now }: { headlines: Headline[]; now: Date }) {
   return (
-    <ul>
+    <ul aria-label="Headlines">
       {headlines.map((headline) => (
         <li key={headline.id} className="border-b border-rule py-3">
+          {headline.tag !== "Untagged" && headline.tag !== "Drop" && (
+            <p className="mb-1 text-[0.6875rem] uppercase tracking-[0.16em] text-accent">{headline.tag}</p>
+          )}
           <a
             href={headline.url}
             target="_blank"

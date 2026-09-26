@@ -30,6 +30,15 @@ const headlines: Headline[] = [
     direct: true,
     tag: "Legislation",
   },
+  {
+    id: "c",
+    title: "RBI releases auction results",
+    url: "https://example.com/c",
+    source: "RBI",
+    publishedAt: "2026-09-25T06:00:00.000Z",
+    direct: true,
+    tag: "Untagged",
+  },
 ];
 
 export const Default: Story = {
