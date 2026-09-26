@@ -1,6 +1,7 @@
 import { mergeHeadlines } from "./dedupe";
 import { fetchAllFeeds } from "./feeds";
 import { readSnapshot, SnapshotCorruptError, writeSnapshot } from "./store";
+import { tagHeadlines } from "./tagger";
 import type { Headline, Snapshot } from "./types";
 
 export async function runRefresh(now: Date = new Date()): Promise<Snapshot> {
@@ -17,10 +18,24 @@ export async function runRefresh(now: Date = new Date()): Promise<Snapshot> {
   }
 
   const { headlines, errors } = await fetchAllFeeds();
+  // Merge first so a story carried by two sources is tagged once. Everything still
+  // Untagged is sent: new items, and items whose chunk failed last time.
+  const merged = mergeHeadlines(existing, headlines, now);
+  const tagging = await tagHeadlines(merged.filter((h) => h.tag === "Untagged"));
+  if (tagging.calls > 0) {
+    console.log(
+      `news-desk: tagged ${tagging.tags.size} headlines in ${tagging.calls} calls ` +
+        `(${tagging.failedCalls} failed), $${tagging.costUsd.toFixed(4)}`,
+    );
+  }
+
   const snapshot: Snapshot = {
     version: 1,
     refreshedAt: now.toISOString(),
-    headlines: mergeHeadlines(existing, headlines, now),
+    headlines: merged.map((h) => {
+      const tag = tagging.tags.get(h.id);
+      return tag ? { ...h, tag } : h;
+    }),
     sourceErrors: errors,
   };
   await writeSnapshot(snapshot);
