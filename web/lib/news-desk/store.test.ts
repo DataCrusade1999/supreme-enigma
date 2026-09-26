@@ -68,4 +68,24 @@ describe("news-desk store", () => {
     delete process.env.S3_BUCKET_NAME;
     expect(isStorageConfigured()).toBe(false);
   });
+  it("reads a Phase 1 snapshot, whose headlines have no tag, as Untagged", async () => {
+    const phase1 = {
+      version: 1,
+      refreshedAt: "2026-09-25T12:00:00.000Z",
+      headlines: [
+        {
+          id: "a",
+          title: "Old story",
+          url: "https://ft.example/a",
+          source: "FT",
+          publishedAt: "2026-09-25T10:00:00.000Z",
+          direct: true,
+        },
+      ],
+      sourceErrors: [],
+    };
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(phase1)));
+    const snapshot = await readSnapshot();
+    expect(snapshot?.headlines[0].tag).toBe("Untagged");
+  });
 });

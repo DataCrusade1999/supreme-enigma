@@ -9,7 +9,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
-- News Desk tool at `/tools/news-desk`: headlines on the Indian economy, reforms and legislation from 13 free RSS sources (FT, RBI, SEBI, Mint, Business Standard directly; Reuters, Bloomberg, The Economist, PRS and PIB through Google News), refreshed only when you press Refresh. Items older than 14 days are dropped and duplicates across sources are merged. Topic tags, MoSPI indicators and the chat assistant follow in later phases (#253).
+- News Desk tool at `/tools/news-desk`: headlines on the Indian economy, reforms and legislation from 13 free RSS sources (FT, RBI, SEBI, Mint, Business Standard directly; Reuters, Bloomberg, The Economist, PRS and PIB through Google News), refreshed only when you press Refresh. Items older than 14 days are dropped and duplicates across sources are merged. MoSPI indicators and the chat assistant follow in later phases (#253).
+- News Desk topic tags: each Refresh tags new headlines as Economy, Reforms or Legislation with Claude Haiku 4.5 through OpenRouter, and moves off-topic ones to a Hidden tab. The page has a tab per topic with counts. A first refresh of 886 headlines measured ₹7; later refreshes should cost about ₹0.008 per new headline, extrapolated from that run (#253).
 - `/robots.txt`: disallows AI training and AI-scraping crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot and others) from the whole site, and keeps every crawler out of `/tools`, `/api/`, `/keystatic` and `/login`. Search engines can still index the public pages. It is advisory — crawlers that ignore robots.txt are not stopped.
 - Money Planner tool at `/tools/money-planner`: from a balance, a monthly salary and itemized expenses on their own cadences, the date a purchase becomes affordable without leaving the next pay cycle short.
 - Storybook for `web/components/`, and Chromatic visual regression on pull

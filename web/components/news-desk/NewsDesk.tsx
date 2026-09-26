@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { formatAge } from "../../lib/news-desk/format";
+import { TOPICS, type Topic } from "../../lib/news-desk/tags";
 import type { Snapshot } from "../../lib/news-desk/types";
 import { HeadlineList } from "./HeadlineList";
+
+type Tab = "All" | Topic | "Hidden";
 
 export function NewsDesk({
   initial,
@@ -17,6 +20,7 @@ export function NewsDesk({
   const [snapshot, setSnapshot] = useState(initial);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("All");
   // Ages are computed against the server's render time, never `new Date()` in
   // render: the server and the browser would print different "Nm ago" strings
   // and React would report a hydration mismatch. Updated only in the click
@@ -43,6 +47,19 @@ export function NewsDesk({
   }
 
   const failed = snapshot?.sourceErrors ?? [];
+  // Drop items stay in the snapshot so they are not re-tagged on the next
+  // refresh. They are kept out of All and listed under Hidden, so a real story
+  // the model got wrong can still be found. Untagged items appear only under All.
+  const all = snapshot?.headlines ?? [];
+  const shown = all.filter((h) => h.tag !== "Drop");
+  const hidden = all.filter((h) => h.tag === "Drop");
+  const tabs: { label: Tab; count: number }[] = [
+    { label: "All", count: shown.length },
+    ...TOPICS.map((t) => ({ label: t, count: shown.filter((h) => h.tag === t).length })),
+    { label: "Hidden", count: hidden.length },
+  ];
+  const visible =
+    tab === "All" ? shown : tab === "Hidden" ? hidden : shown.filter((h) => h.tag === tab);
 
   return (
     <div>
@@ -83,7 +100,35 @@ export function NewsDesk({
       {problem ? (
         <p className="mt-6 text-sm text-muted">{problem}</p>
       ) : snapshot && snapshot.headlines.length > 0 ? (
-        <HeadlineList headlines={snapshot.headlines} now={now} />
+        <>
+          <div role="group" aria-label="Topics" className="mt-4 flex flex-wrap gap-4 border-b border-rule">
+            {tabs.map(({ label, count }) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={tab === label}
+                onClick={() => setTab(label)}
+                className={`-mb-px border-b-2 pb-2 text-sm ${
+                  tab === label ? "border-accent text-fg" : "border-transparent text-muted"
+                }`}
+              >
+                {label}{" "}
+                <span className="text-xs text-muted">{count}</span>
+              </button>
+            ))}
+          </div>
+          {visible.length > 0 ? (
+            <HeadlineList headlines={visible} now={now} />
+          ) : (
+            <p className="mt-6 text-sm text-muted">
+              {tab === "Hidden"
+                ? "No hidden headlines."
+                : tab === "All"
+                  ? "Every saved headline is hidden."
+                  : `No headlines tagged ${tab}.`}
+            </p>
+          )}
+        </>
       ) : (
         <p className="mt-6 text-sm text-muted">Nothing saved yet. Press Refresh to fetch headlines.</p>
       )}

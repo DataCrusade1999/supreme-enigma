@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { STORED_TAGS } from "./tags";
+
+export * from "./tags";
 
 export type SourceDef = {
   name: string;
@@ -19,8 +22,14 @@ export const headlineSchema = z.object({
   summary: z.string().optional(),
   publishedAt: z.string(),
   direct: z.boolean(),
+  // Defaulted rather than required so a Phase 1 snapshot, which has no tags,
+  // still reads; the next refresh tags its items.
+  tag: z.enum(STORED_TAGS).default("Untagged"),
 });
 export type Headline = z.infer<typeof headlineSchema>;
+
+/** A headline as parsed from a feed, before it has an id or a tag. */
+export type RawHeadline = Omit<Headline, "id" | "tag">;
 
 export const sourceErrorSchema = z.object({ source: z.string(), message: z.string() });
 export type SourceError = z.infer<typeof sourceErrorSchema>;

@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./feeds", () => ({ fetchAllFeeds: vi.fn() }));
+vi.mock("./tagger", () => ({ tagHeadlines: vi.fn() }));
 vi.mock("./store", async () => {
   const actual = await vi.importActual<typeof import("./store")>("./store");
   return { ...actual, readSnapshot: vi.fn(), writeSnapshot: vi.fn() };
@@ -11,6 +12,7 @@ import { fetchAllFeeds } from "./feeds";
 import { withId } from "./dedupe";
 import { readSnapshot, SnapshotCorruptError, writeSnapshot } from "./store";
 import { runRefresh } from "./refresh";
+import { tagHeadlines } from "./tagger";
 import type { Snapshot } from "./types";
 
 const NOW = new Date("2026-09-25T12:00:00.000Z");
@@ -21,13 +23,16 @@ const fresh = withId({
   publishedAt: "2026-09-25T10:00:00.000Z",
   direct: true,
 });
-const stored = withId({
-  title: "Stored story",
-  url: "https://ft.example/stored",
-  source: "FT",
-  publishedAt: "2026-09-24T10:00:00.000Z",
-  direct: true,
-});
+const stored = {
+  ...withId({
+    title: "Stored story",
+    url: "https://ft.example/stored",
+    source: "FT",
+    publishedAt: "2026-09-24T10:00:00.000Z",
+    direct: true,
+  }),
+  tag: "Economy" as const,
+};
 
 describe("runRefresh", () => {
   beforeEach(() => {
@@ -36,6 +41,7 @@ describe("runRefresh", () => {
       headlines: [fresh],
       errors: [{ source: "SEBI", message: "timed out" }],
     });
+    vi.mocked(tagHeadlines).mockResolvedValue({ tags: new Map(), calls: 0, failedCalls: 0, costUsd: 0 });
   });
 
   it("merges new headlines into the stored ones and saves the result", async () => {
@@ -77,5 +83,51 @@ describe("runRefresh", () => {
     );
     await expect(runRefresh(NOW)).rejects.toThrow("AccessDenied");
     expect(writeSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("sends only untagged headlines to the tagger and saves the tags it returns", async () => {
+    // Built field by field: spreading `fresh` into withId would carry fresh's id over the new one.
+    const failedBefore = withId({
+      title: "Failed last time",
+      url: "https://ft.example/failed",
+      source: "FT",
+      publishedAt: "2026-09-24T11:00:00.000Z",
+      direct: true,
+    });
+    vi.mocked(readSnapshot).mockResolvedValue({
+      version: 1,
+      refreshedAt: "2026-09-24T12:00:00.000Z",
+      headlines: [stored, failedBefore],
+      sourceErrors: [],
+    });
+    vi.mocked(tagHeadlines).mockResolvedValue({
+      tags: new Map([[fresh.id, "Reforms"]]),
+      calls: 1,
+      failedCalls: 0,
+      costUsd: 0.001,
+    });
+
+    const result = await runRefresh(NOW);
+
+    const sent = vi.mocked(tagHeadlines).mock.calls[0][0].map((h) => h.id).sort();
+    expect(sent).toEqual([fresh.id, failedBefore.id].sort());
+    const byId = new Map(result.headlines.map((h) => [h.id, h.tag]));
+    expect(byId.get(fresh.id)).toBe("Reforms");
+    expect(byId.get(failedBefore.id)).toBe("Untagged");
+    expect(byId.get(stored.id)).toBe("Economy");
+    expect(writeSnapshot).toHaveBeenCalledWith(result);
+  });
+
+  it("does not send dropped headlines again", async () => {
+    const dropped = { ...stored, id: "dropped", title: "Athlete congratulated", tag: "Drop" as const };
+    vi.mocked(readSnapshot).mockResolvedValue({
+      version: 1,
+      refreshedAt: "2026-09-24T12:00:00.000Z",
+      headlines: [dropped],
+      sourceErrors: [],
+    });
+    await runRefresh(NOW);
+    const sent = vi.mocked(tagHeadlines).mock.calls[0][0].map((h) => h.id);
+    expect(sent).toEqual([fresh.id]);
   });
 });

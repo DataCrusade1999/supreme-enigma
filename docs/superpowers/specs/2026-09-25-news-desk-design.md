@@ -54,7 +54,7 @@ Route: `/tools/news-desk`. It is gated because everything under `/tools` is (`we
 Layout (desktop), agreed from mockup v4 during brainstorming:
 
 - Top bar: title, "Refreshed 2h ago · N sources failed" (the failure count expands to the list), and a Refresh button. The button is disabled while a refresh is running.
-- Left column, about 70% wide: topic tabs with counts (All, Economy, Reforms, Legislation), then headlines newest first. Each headline shows its tag, title (linking to the article, new tab), the feed's summary when present, and source and age on their own line.
+- Left column, about 70% wide: topic tabs with counts (All, Economy, Reforms, Legislation, Hidden), then headlines newest first. Each headline shows its tag, title (linking to the article, new tab), the feed's summary when present, and source and age on their own line.
 - Right column, about 30% wide: the indicator table (Indicator, Period, Latest, Prev), sticky and vertically centred in the viewport as the headlines scroll. Pinned rows appear here with a remove control. A row whose last refresh failed shows its last good value and "stale since …" on hover.
 - A floating "Ask MoSPI" button, bottom right, opening a chat panel (§7).
 
@@ -107,9 +107,9 @@ Summaries are the feed's own `description`, stripped of HTML and cut to about 20
 
 ### 5.3 Tagging
 
-Only headlines whose `id` is not already in the snapshot are tagged. They are split into chunks of 100 and the chunks are sent in parallel. Each call sends `[{n, title, source}]`, where `n` is the item's position in the chunk (short, so output stays small), with `response_format` strict JSON returning `[{n, tag}]`, `tag ∈ Economy | Reforms | Legislation | Drop`.
+After the merge, every headline still tagged `Untagged` is sent: new items, and items whose chunk failed on an earlier refresh. They are split into chunks of 100 and the chunks are sent in parallel. Each call sends `[{n, title, source}]`, where `n` is the item's position in the chunk (short, so output stays small), with `response_format` strict JSON returning `[{n, tag}]`, `tag ∈ Economy | Reforms | Legislation | Drop`.
 
-Chunking matters on the first refresh, when every headline is new: about 600 items in one call would need roughly 12,000 output tokens, which would exceed the output cap and take longer than the route's 60 s. Truncated JSON would save everything as `Untagged`, and the retry on the next refresh would fail the same way. At 100 per chunk, each call needs about 1,500 output tokens. `Drop` removes off-topic items (PIB congratulating athletes, for example). The prompt defines each tag in one or two sentences: Legislation covers bills, Acts, ordinances, amendments and committee reports; Reforms covers policy and regulatory changes by government, RBI, SEBI or the GST Council; Economy is everything else about the Indian economy.
+Chunking matters on the first refresh, when every headline is new: about 600 items in one call would need roughly 12,000 output tokens, which would exceed the output cap and take longer than the route's 60 s. Truncated JSON would save everything as `Untagged`, and the retry on the next refresh would fail the same way. At 100 per chunk, each call needs about 1,500 output tokens. `Drop` hides off-topic items (PIB congratulating athletes, for example). They stay in the snapshot with that tag so the next refresh does not tag them again while they are still in the feeds. The page lists them under a Hidden tab, so a real story the model got wrong can still be found. The prompt defines each tag in one or two sentences: Legislation covers bills, Acts, ordinances, amendments and committee reports; Reforms covers policy and regulatory changes by government, RBI, SEBI or the GST Council; Economy is everything else about the Indian economy.
 
 If a chunk's call fails or returns invalid JSON, that chunk's items are saved with tag `Untagged`; other chunks are unaffected. Untagged items appear only under All, and the next refresh retries them because they are not yet tagged. `max_tokens` is 3,000 per chunk.
 
@@ -201,14 +201,14 @@ The page itself reads the snapshot on the server for the first render.
 
 Model `anthropic/claude-haiku-4.5` via OpenRouter at $1 / $5 per million input / output tokens, ₹96 per USD (2026-09-25).
 
-| Action | Estimate |
+| Action | Cost |
 |---|---|
-| First refresh (~600 headlines to tag: ~15k input, ~9k output tokens across 6 chunks) | ~₹6 |
-| Later refresh (new headlines only) | ₹0.5–1 |
+| First refresh (measured 2026-09-26: 886 headlines in 9 calls, $0.0735, 15.6 s) | ₹7.05 |
+| Later refresh (new headlines only; about ₹0.008 per headline from the first-refresh figure, so ~100 new items is ~₹0.8; a refresh with nothing new makes no call) | ₹0–1 |
 | Chat question (30–60k input tokens) | ₹3–6 |
 | Indicator refresh | free |
 
-Phase 2 and Phase 4 measure real figures and replace these. The OpenRouter key has no spend limit that Terraform can set; the owner sets it in OpenRouter.
+The refresh rows were measured in Phase 2 at ₹95.92 per USD (2026-09-26); Phase 4 measures the chat row. The OpenRouter key has no spend limit that Terraform can set; the owner sets it in OpenRouter.
 
 ## 11. Infrastructure
 

@@ -116,3 +116,41 @@ describe("mergeHeadlines", () => {
     expect(merged.map((h) => h.title)).toEqual(["newer", "older"]);
   });
 });
+
+describe("tags across a merge", () => {
+  const now = new Date("2026-09-25T12:00:00.000Z");
+
+  it("gives new items the Untagged tag", () => {
+    const item = withId({
+      title: "A",
+      url: "https://x/a",
+      source: "FT",
+      publishedAt: "2026-09-25T10:00:00.000Z",
+      direct: true,
+    });
+    expect(item.tag).toBe("Untagged");
+  });
+
+  it("keeps the stored tag when the publisher's copy replaces a Google News copy", () => {
+    const google = {
+      ...withId({
+        title: "Cabinet approves labour codes",
+        url: "https://news.google.com/rss/articles/x",
+        source: "Reuters",
+        publishedAt: "2026-09-25T09:00:00.000Z",
+        direct: false,
+      }),
+      tag: "Reforms" as const,
+    };
+    const direct = withId({
+      title: "Cabinet approves labour codes",
+      url: "https://www.livemint.com/x",
+      source: "Mint",
+      publishedAt: "2026-09-25T09:30:00.000Z",
+      direct: true,
+    });
+    const [merged] = mergeHeadlines([google], [direct], now);
+    expect(merged.url).toBe("https://www.livemint.com/x");
+    expect(merged.tag).toBe("Reforms");
+  });
+});
