@@ -119,7 +119,9 @@ If a chunk's call fails or returns invalid JSON, that chunk's items are saved wi
 
 Verified on 2026-09-25: the server needs no API key and no session. A `tools/call` POST works without `initialize` first, and returns `text/event-stream` with a single `data:` line holding the JSON-RPC response. A `get_data` call took about 200 ms.
 
-`mospi.ts` exposes `callTool(name, args)`: POST with `Accept: application/json, text/event-stream`, read the body, take the `data:` line, parse it, return `result.content[0].text` parsed as JSON. A JSON-RPC error, a `result.isError`, or a body of the form `{"error": …, "valid": false}` (which MoSPI returns for invalid filters) all throw. Timeout 10 s.
+`mospi.ts` exposes `callTool(name, args)`: POST with `Accept: application/json, text/event-stream`, read the body, take the `data:` line, parse it, return `result.content[0].text` parsed as JSON. A JSON-RPC error, a `result.isError`, or a content object with an `error` key all throw. MoSPI reports a rejected query inside a successful response in two shapes: `{"error": …, "valid": false, "missing_required": […]}` for invalid filters, and `{"error": "An error occurred: 400 …", "troubleshooting": …}` when its upstream API rejects the query. Timeout 10 s.
+
+`limit` is capped at 100: 200 and 500 return the upstream-400 shape (found 2026-09-26). Every `get_data` call sends `limit: "100"` and a `page`.
 
 Tools: `list_datasets`, `get_indicators(dataset)`, `get_metadata(dataset, …)`, `get_data(dataset, filters)`. All filters, including `limit` and `page`, go inside `filters`.
 
@@ -131,22 +133,29 @@ Each indicator therefore stores one query against one base year. The table shows
 
 ### 6.3 Indicator definitions
 
-`news-desk/indicators.json` holds `[{id, label, dataset, filters, valueField, unit}]`. It is seeded from a constant on first read when absent. Defaults:
+`news-desk/indicators.json` holds `[{id, label, dataset, filters, valueField, unit, match?}]`. When it is absent the defaults below are used; Phase 4's pin and unpin are its only writers. `match` lists row fields that must equal given values, for datasets whose filters cannot narrow the response to one series.
 
-| Label | Dataset | Notes |
-|---|---|---|
-| Retail inflation | CPI | base 2024, `state_code=1`, `sector_code=3`, `division_code=0`, `valueField=inflation` — verified |
-| Food inflation | CPI | base 2024, food division; code found in Phase 3 |
-| IIP growth | IIP | `frequency=Monthly`, general index, growth rate |
-| GDP growth | NAS | base 2022-23, real GDP, quarterly growth |
-| Unemployment (urban) | PLFS | quarterly (`frequency_code=2`), urban, CWS |
-| Services growth | ISP | monthly growth |
+Defaults, verified against MoSPI on 2026-09-26 and pinned by fixture tests against responses recorded that day:
 
-Only the first row's filters were verified in brainstorming. Phase 3 finds and records the rest with `get_metadata`, and fixture tests pin them.
+| Label | Dataset | Filters | valueField |
+|---|---|---|---|
+| Retail inflation | CPI | `base_year=2024, series=Current, state_code=1, sector_code=3, division_code=0` | `inflation` |
+| Food and beverages inflation | CPI | same, `division_code=1`; `match: {code: "01"}` | `inflation` |
+| IIP growth | IIP | `base_year=2022-23, frequency=Monthly, type=General` | `growth_rate` |
+| GDP growth (real) | NAS | `base_year=2022-23, series=Current, frequency_code=Quarterly, indicator_code=22` | `constant_price` |
+| Unemployment (urban) | PLFS | `indicator_code=3, frequency_code=3, state_code=99, gender_code=3, age_code=1, sector_code=2` | `value` |
+
+- CPI requires `series=Current`; without it MoSPI answers `missing_required: ["series"]`.
+- A base-2024 CPI division returns every group, class and sub-class row beneath it (219 rows a month for food), and `group_code` and `class_code` are rejected in base 2024. The food definition therefore matches the division's own row (`code=01`) and pages through the results (§6.4).
+- NAS indicator 22 is the GDP growth rate; `constant_price` is real growth, so no year-on-year computation is needed.
+- PLFS uses the monthly series (`frequency_code=3`), which starts in 2025, is current weekly status by construction and runs to the latest month. The quarterly series (`frequency_code=2`) ends at Oct–Dec 2025 and labels its years inconsistently.
+- Services growth (ISP) is not a default: MoSPI publishes no headline ISP index. `type_code=1` (General) returns no rows; only 19 sub-sectors exist.
 
 ### 6.4 Rows to values
 
-`series.ts` turns `get_data` rows into `[{period, value}]` sorted by time. It recognizes three period shapes: year + month name, year + quarter, and fiscal year (`2025-26`). Rows it cannot place in time make the series invalid, which is what makes a chat answer unpinnable (§7.3). The same function serves the table (last two points) and chat charts (all points), so a pinned row always matches the chart it came from.
+`series.ts` turns `get_data` rows into `[{period, value}]` sorted by time. It recognizes calendar year + month name, fiscal year + month name (April–December in the first year, January–March in the second), fiscal year + quarter (`Q1`–`Q4`), and a bare fiscal year (`2025-26`). A row whose value is null is skipped: base-2024 CPI returns 2025 months with an index but no inflation figure. Two rows for one period make the series invalid, since the filters then match more than one series and either number could be the wrong one. Rows it cannot place in time also make the series invalid, which is what makes a chat answer unpinnable (§7.3). The same function serves the table (last two points) and chat charts (all points), so a pinned row always matches the chart it came from.
+
+A definition with `match` pages through `get_data` (100 rows a page) until it holds two points or reaches the last page, at most 4 pages; the previous month's food row was on page 3 on 2026-09-26. A definition without `match` makes one call.
 
 A refresh runs every indicator query in parallel. A failed query keeps the previous values and sets `error` and leaves `lastGoodAt` unchanged.
 
@@ -190,12 +199,14 @@ The bucket lifecycle deliberately has no catch-all expiry rule (`infra/main/envi
 
 | Route | Does |
 |---|---|
-| `POST /api/news-desk/refresh` | Feeds → dedupe → tag new → indicators → save. `maxDuration = 60` |
+| `POST /api/news-desk/refresh` | Feeds → dedupe → tag new, with indicators alongside that chain → save. `maxDuration = 60` |
 | `POST /api/news-desk/ask` | NDJSON stream (§7.2). `maxDuration = 60` |
 | `POST /api/news-desk/indicators` | Pin |
 | `DELETE /api/news-desk/indicators/:id` | Unpin |
 
 The page itself reads the snapshot on the server for the first render.
+
+Indicators do not depend on the headlines, so the refresh runs them concurrently with the feed-and-tag chain. One after the other, feeds (8 s) + tagging (40 s cap) + a paged indicator (up to 4 calls of 10 s) could exceed 60 s. Measured on 2026-09-26 from a local `next dev` against the dev bucket: 10.4 s for a refresh that read 912 headlines, tagged 26 new ones in one call and loaded all five indicators.
 
 ## 10. Cost
 
@@ -260,5 +271,4 @@ Each phase has its own issue, plan and PR into `dev`, and is usable on the dev d
 
 ## 15. Open items
 
-- Filter codes for the five unverified default indicators (Phase 3).
 - Whether Google News rate-limits six queries per refresh from Vercel's IPs. If it does, merge them into fewer queries.
