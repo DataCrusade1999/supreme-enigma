@@ -5,6 +5,8 @@ import { formatAge } from "../../lib/news-desk/format";
 import { TOPICS, type Snapshot, type Topic } from "../../lib/news-desk/types";
 import { HeadlineList } from "./HeadlineList";
 
+type Tab = "All" | Topic | "Hidden";
+
 export function NewsDesk({
   initial,
   problem,
@@ -17,7 +19,7 @@ export function NewsDesk({
   const [snapshot, setSnapshot] = useState(initial);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"All" | Topic>("All");
+  const [tab, setTab] = useState<Tab>("All");
   // Ages are computed against the server's render time, never `new Date()` in
   // render: the server and the browser would print different "Nm ago" strings
   // and React would report a hydration mismatch. Updated only in the click
@@ -45,13 +47,18 @@ export function NewsDesk({
 
   const failed = snapshot?.sourceErrors ?? [];
   // Drop items stay in the snapshot so they are not re-tagged on the next
-  // refresh; they are never shown. Untagged items appear only under All.
-  const shown = (snapshot?.headlines ?? []).filter((h) => h.tag !== "Drop");
-  const tabs: { label: "All" | Topic; count: number }[] = [
+  // refresh. They are kept out of All and listed under Hidden, so a real story
+  // the model got wrong can still be found. Untagged items appear only under All.
+  const all = snapshot?.headlines ?? [];
+  const shown = all.filter((h) => h.tag !== "Drop");
+  const hidden = all.filter((h) => h.tag === "Drop");
+  const tabs: { label: Tab; count: number }[] = [
     { label: "All", count: shown.length },
     ...TOPICS.map((t) => ({ label: t, count: shown.filter((h) => h.tag === t).length })),
+    { label: "Hidden", count: hidden.length },
   ];
-  const visible = tab === "All" ? shown : shown.filter((h) => h.tag === tab);
+  const visible =
+    tab === "All" ? shown : tab === "Hidden" ? hidden : shown.filter((h) => h.tag === tab);
 
   return (
     <div>
@@ -113,7 +120,9 @@ export function NewsDesk({
           {visible.length > 0 ? (
             <HeadlineList headlines={visible} now={now} />
           ) : (
-            <p className="mt-6 text-sm text-muted">No headlines tagged {tab}.</p>
+            <p className="mt-6 text-sm text-muted">
+              {tab === "Hidden" ? "No hidden headlines." : `No headlines tagged ${tab}.`}
+            </p>
           )}
         </>
       ) : (

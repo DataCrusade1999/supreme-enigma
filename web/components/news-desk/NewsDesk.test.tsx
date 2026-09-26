@@ -122,6 +122,7 @@ describe("NewsDesk", () => {
       "Economy 1",
       "Reforms 0",
       "Legislation 1",
+      "Hidden 1",
     ]);
     expect(screen.getByRole("tab", { name: "All 3" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByText("Athletes congratulated by minister")).not.toBeInTheDocument();
@@ -144,5 +145,20 @@ describe("NewsDesk", () => {
     expect(items[0]).toHaveTextContent(/^Economy/);
     expect(items[1]).toHaveTextContent(/^Legislation/);
     expect(items[2]).not.toHaveTextContent(/Untagged/);
+  });
+
+  it("lists the headlines tagged off-topic under Hidden", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Hidden 1" }));
+    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
+      "Athletes congratulated by minister",
+    ]);
+  });
+
+  it("says so when nothing is hidden", () => {
+    const none = { ...SNAPSHOT, headlines: SNAPSHOT.headlines.filter((h) => h.tag !== "Drop") };
+    render(<NewsDesk initial={none} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Hidden 0" }));
+    expect(screen.getByText("No hidden headlines.")).toBeInTheDocument();
   });
 });
