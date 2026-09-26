@@ -100,13 +100,12 @@ export function NewsDesk({
         <p className="mt-6 text-sm text-muted">{problem}</p>
       ) : snapshot && snapshot.headlines.length > 0 ? (
         <>
-          <div role="tablist" aria-label="Topics" className="mt-4 flex flex-wrap gap-4 border-b border-rule">
+          <div role="group" aria-label="Topics" className="mt-4 flex flex-wrap gap-4 border-b border-rule">
             {tabs.map(({ label, count }) => (
               <button
                 key={label}
                 type="button"
-                role="tab"
-                aria-selected={tab === label}
+                aria-pressed={tab === label}
                 onClick={() => setTab(label)}
                 className={`-mb-px border-b-2 pb-2 text-sm ${
                   tab === label ? "border-accent text-fg" : "border-transparent text-muted"
@@ -121,7 +120,11 @@ export function NewsDesk({
             <HeadlineList headlines={visible} now={now} />
           ) : (
             <p className="mt-6 text-sm text-muted">
-              {tab === "Hidden" ? "No hidden headlines." : `No headlines tagged ${tab}.`}
+              {tab === "Hidden"
+                ? "No hidden headlines."
+                : tab === "All"
+                  ? "Every saved headline is hidden."
+                  : `No headlines tagged ${tab}.`}
             </p>
           )}
         </>

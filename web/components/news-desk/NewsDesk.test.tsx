@@ -117,24 +117,24 @@ describe("NewsDesk", () => {
 
   it("shows topic tabs with counts, never counting dropped items", () => {
     render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+    expect(within(screen.getByRole("group", { name: "Topics" })).getAllByRole("button").map((t) => t.textContent)).toEqual([
       "All 3",
       "Economy 1",
       "Reforms 0",
       "Legislation 1",
       "Hidden 1",
     ]);
-    expect(screen.getByRole("tab", { name: "All 3" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "All 3" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Athletes congratulated by minister")).not.toBeInTheDocument();
   });
 
   it("filters by tab, and shows untagged items only under All", () => {
     render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Legislation 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Legislation 1" }));
     expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
       "Cabinet to decide on new BIT template",
     ]);
-    fireEvent.click(screen.getByRole("tab", { name: "Reforms 0" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reforms 0" }));
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(screen.getByText("No headlines tagged Reforms.")).toBeInTheDocument();
   });
@@ -149,7 +149,7 @@ describe("NewsDesk", () => {
 
   it("lists the headlines tagged off-topic under Hidden", () => {
     render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Hidden 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hidden 1" }));
     expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
       "Athletes congratulated by minister",
     ]);
@@ -158,7 +158,13 @@ describe("NewsDesk", () => {
   it("says so when nothing is hidden", () => {
     const none = { ...SNAPSHOT, headlines: SNAPSHOT.headlines.filter((h) => h.tag !== "Drop") };
     render(<NewsDesk initial={none} problem={null} nowIso={NOW} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Hidden 0" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hidden 0" }));
     expect(screen.getByText("No hidden headlines.")).toBeInTheDocument();
+  });
+
+  it("says everything is hidden when no headline is on topic", () => {
+    const allDropped = { ...SNAPSHOT, headlines: SNAPSHOT.headlines.filter((h) => h.tag === "Drop") };
+    render(<NewsDesk initial={allDropped} problem={null} nowIso={NOW} />);
+    expect(screen.getByText("Every saved headline is hidden.")).toBeInTheDocument();
   });
 });
