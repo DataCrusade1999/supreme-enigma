@@ -12,7 +12,7 @@ const MAX_PAGES = 4;
 
 const dataSchema = z.object({
   data: z.array(z.record(z.string(), z.unknown())),
-  meta_data: z.object({ totalPages: z.number() }).partial().optional(),
+  meta_data: z.object({ totalPages: z.coerce.number() }).partial().optional(),
 });
 
 function matches(row: Record<string, unknown>, match: Record<string, string> | undefined): boolean {

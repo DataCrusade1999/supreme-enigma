@@ -78,6 +78,15 @@ describe("fetchSeries", () => {
     vi.mocked(callTool).mockResolvedValue({ data: [], msg: "No Data Found", statusCode: true });
     await expect(fetchSeries(byId("iip"))).rejects.toThrow("MoSPI returned no values for these filters");
   });
+
+  it("reads a page count MoSPI sends as text", async () => {
+    vi.mocked(callTool).mockResolvedValue({
+      data: [{ year: 2026, month: "July", code: "02", inflation: "1.0" }],
+      meta_data: { totalPages: "1" },
+    });
+    await expect(fetchSeries(byId("cpi-food"))).rejects.toThrow("MoSPI returned no values for these filters");
+    expect(callTool).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("refreshIndicators", () => {

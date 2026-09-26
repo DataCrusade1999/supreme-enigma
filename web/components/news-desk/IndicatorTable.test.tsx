@@ -75,4 +75,10 @@ describe("IndicatorTable", () => {
     render(<IndicatorTable indicators={[]} now={NOW} />);
     expect(screen.getByText("Indicators load on the next Refresh.")).toBeInTheDocument();
   });
+
+  it("shows a whole number with one decimal, as MoSPI publishes it", () => {
+    render(<IndicatorTable indicators={[{ ...fresh, latest: 7, prev: 6.5 }]} now={NOW} />);
+    expect(screen.getByText("7.0%")).toBeInTheDocument();
+    expect(screen.getByText("6.5%")).toBeInTheDocument();
+  });
 });

@@ -8,16 +8,7 @@ import type { Headline, Snapshot, SourceError } from "./types";
 export async function runRefresh(now: Date = new Date()): Promise<Snapshot> {
   // Read before fetching: if S3 is unreachable there is no point spending the
   // feed round-trips, and nothing must be written over a snapshot we could not read.
-  let previous: Snapshot | null = null;
-  try {
-    previous = await readSnapshot();
-  } catch (err) {
-    // A corrupt file would otherwise fail every refresh until someone deleted it
-    // by hand. Replacing it loses at most 14 days of headlines the feeds still carry.
-    if (!(err instanceof SnapshotCorruptError)) throw err;
-    console.error("news-desk: replacing a corrupt snapshot", err);
-  }
-  const defs = await readIndicatorDefs();
+  const [previous, defs] = await Promise.all([readPrevious(), readIndicatorDefs()]);
 
   // Indicators do not depend on the headlines, so they run alongside the
   // feed-and-tag chain; one after the other would not fit the route's 60 s.
@@ -35,6 +26,18 @@ export async function runRefresh(now: Date = new Date()): Promise<Snapshot> {
   };
   await writeSnapshot(snapshot);
   return snapshot;
+}
+
+async function readPrevious(): Promise<Snapshot | null> {
+  try {
+    return await readSnapshot();
+  } catch (err) {
+    // A corrupt file would otherwise fail every refresh until someone deleted it
+    // by hand. Replacing it loses at most 14 days of headlines the feeds still carry.
+    if (!(err instanceof SnapshotCorruptError)) throw err;
+    console.error("news-desk: replacing a corrupt snapshot", err);
+    return null;
+  }
 }
 
 async function refreshHeadlines(

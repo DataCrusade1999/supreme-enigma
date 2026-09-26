@@ -9,27 +9,41 @@ export class MospiError extends Error {}
 let nextId = 1;
 
 export async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-  const res = await fetch(MOSPI_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: nextId++,
-      method: "tools/call",
-      params: { name, arguments: args },
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(MOSPI_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: nextId++,
+        method: "tools/call",
+        params: { name, arguments: args },
+      }),
+    });
+  } catch (err) {
+    if ((err as { name?: string }).name === "TimeoutError") {
+      throw new MospiError(`MoSPI did not answer within ${TIMEOUT_MS / 1000} s`);
+    }
+    throw err;
+  }
   if (!res.ok) throw new MospiError(`MoSPI status ${res.status}`);
 
   const body = await res.text();
-  const line = body.split("\n").find((l) => l.startsWith("data:"));
+  // One event, whose data may span several data: lines (joined with newlines).
+  // The event ends at the first blank line.
+  const event = body.split(/\r?\n\r?\n/)[0];
+  const data = event
+    .split(/\r?\n/)
+    .filter((l) => l.startsWith("data:"))
+    .map((l) => l.slice(5).replace(/^ /, ""));
   let rpc: {
     error?: { message?: string };
     result?: { isError?: boolean; content?: { text?: unknown }[] };
   };
   try {
-    rpc = JSON.parse(line ? line.slice(5) : body);
+    rpc = JSON.parse(data.length > 0 ? data.join("\n") : body);
   } catch {
     throw new MospiError("MoSPI response is not JSON-RPC");
   }

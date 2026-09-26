@@ -180,4 +180,14 @@ describe("runRefresh", () => {
     releaseFeeds();
     await done;
   });
+
+  it("reads the snapshot and the indicator definitions at the same time", async () => {
+    let releaseSnapshot!: () => void;
+    vi.mocked(readSnapshot).mockReturnValue(new Promise((resolve) => (releaseSnapshot = () => resolve(null))));
+
+    const done = runRefresh(NOW);
+    await vi.waitFor(() => expect(readIndicatorDefs).toHaveBeenCalled());
+    releaseSnapshot();
+    await done;
+  });
 });

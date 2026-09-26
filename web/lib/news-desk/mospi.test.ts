@@ -76,4 +76,36 @@ describe("callTool", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(toolText("Service temporarily unavailable"))));
     await expect(callTool("get_data", {})).rejects.toBeInstanceOf(MospiError);
   });
+
+  it("joins an event's data lines, as SSE allows one event to span several", async () => {
+    const payload = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { content: [{ type: "text", text: JSON.stringify({ data: [{ year: 2026 }] }) }] },
+    });
+    const half = payload.indexOf(',"result"');
+    const body = `event: message\ndata: ${payload.slice(0, half)}\ndata: ${payload.slice(half)}\n\n`;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body)));
+    expect(await callTool("get_data", {})).toEqual({ data: [{ year: 2026 }] });
+  });
+
+  it("gives up after 10 s with a readable error", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) =>
+            init.signal!.addEventListener("abort", () => reject(init.signal!.reason)),
+          ),
+      ),
+    );
+    const call = callTool("get_data", {});
+    controller.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+    await expect(call).rejects.toThrow("MoSPI did not answer within 10 s");
+    await expect(call).rejects.toBeInstanceOf(MospiError);
+    expect(timeout).toHaveBeenCalledWith(10_000);
+    timeout.mockRestore();
+  });
 });

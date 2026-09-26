@@ -2,8 +2,10 @@ import { formatAge } from "../../lib/news-desk/format";
 import type { IndicatorValue } from "../../lib/news-desk/types";
 
 function show(value: number | null, unit: string): string {
-  // As MoSPI publishes it: CPI to two decimals, the rest to one.
-  return value === null ? "—" : `${value}${unit}`;
+  if (value === null) return "—";
+  // MoSPI publishes at least one decimal (CPI two, the rest one). Parsing drops a
+  // trailing zero, so a whole number gets its ".0" back.
+  return `${Number.isInteger(value) ? value.toFixed(1) : value}${unit}`;
 }
 
 export function IndicatorTable({ indicators, now }: { indicators: IndicatorValue[]; now: Date }) {
