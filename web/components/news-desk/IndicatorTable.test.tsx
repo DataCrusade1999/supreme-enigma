@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { IndicatorTable } from "./IndicatorTable";
 import type { IndicatorValue } from "../../lib/news-desk/types";
 
@@ -80,5 +80,14 @@ describe("IndicatorTable", () => {
     render(<IndicatorTable indicators={[{ ...fresh, latest: 7, prev: 6.5 }]} now={NOW} />);
     expect(screen.getByText("7.0%")).toBeInTheDocument();
     expect(screen.getByText("6.5%")).toBeInTheDocument();
+  });
+
+  it("offers a remove control on pinned rows only", () => {
+    const onRemove = vi.fn();
+    const pin: IndicatorValue = { ...fresh, id: "pin-abc", label: "IIP manufacturing" };
+    render(<IndicatorTable indicators={[fresh, pin]} now={NOW} onRemove={onRemove} />);
+    expect(screen.queryByRole("button", { name: "Remove Retail inflation" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove IIP manufacturing" }));
+    expect(onRemove).toHaveBeenCalledWith("pin-abc");
   });
 });

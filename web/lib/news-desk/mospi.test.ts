@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { callTool, MospiError } from "./mospi";
+import { callTool, MospiError, MospiUnavailableError } from "./mospi";
 
 const fixture = (name: string) =>
   readFileSync(join(__dirname, "__fixtures__", "mospi", name), "utf8");
@@ -105,7 +105,27 @@ describe("callTool", () => {
     controller.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
     await expect(call).rejects.toThrow("MoSPI did not answer within 10 s");
     await expect(call).rejects.toBeInstanceOf(MospiError);
+    await expect(call).rejects.toBeInstanceOf(MospiUnavailableError);
     expect(timeout).toHaveBeenCalledWith(10_000);
     timeout.mockRestore();
+  });
+
+  it("marks an HTTP error status as MoSPI being unreachable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("bad gateway", { status: 502 })));
+    await expect(callTool("get_data", {})).rejects.toBeInstanceOf(MospiUnavailableError);
+  });
+
+  it("marks a network failure as MoSPI being unreachable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("fetch failed"))));
+    await expect(callTool("get_data", {})).rejects.toThrow("MoSPI could not be reached: fetch failed");
+    await expect(callTool("get_data", {})).rejects.toBeInstanceOf(MospiUnavailableError);
+  });
+
+  it("does not mark a rejected query as MoSPI being unreachable", async () => {
+    const body = JSON.stringify({ error: "Invalid parameters", valid: false });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(toolText(body))));
+    const err = await callTool("get_data", {}).catch((e) => e);
+    expect(err).toBeInstanceOf(MospiError);
+    expect(err).not.toBeInstanceOf(MospiUnavailableError);
   });
 });

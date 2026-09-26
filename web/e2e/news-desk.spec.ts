@@ -17,6 +17,27 @@ test("the refresh route is behind the gate", async ({ request }) => {
   expect(res.status()).toBe(401);
 });
 
+test("the ask and pin routes are behind the gate", async ({ request }) => {
+  for (const [method, url] of [
+    ["post", "/api/news-desk/ask"],
+    ["post", "/api/news-desk/indicators"],
+    ["delete", "/api/news-desk/indicators/pin-000000000000"],
+  ] as const) {
+    const res = await request[method](url, { maxRedirects: 0 });
+    expect(res.status(), `${method} ${url}`).toBe(401);
+  }
+});
+
+test("the chat panel opens and closes", async ({ page }) => {
+  await page.goto("/tools/news-desk");
+  await page.getByLabel(/password/i).fill("test123");
+  await page.getByRole("button", { name: /log in/i }).click();
+  await page.getByRole("button", { name: "Ask MoSPI" }).click();
+  await expect(page.getByRole("textbox", { name: "Question" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("textbox", { name: "Question" })).toBeHidden();
+});
+
 test("the News Desk fits a phone screen without scrolling sideways", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/tools/news-desk");

@@ -54,17 +54,11 @@ describe("toSeries", () => {
     ]);
   });
 
-  it("places a month in a fiscal year: April–December in the first year, January–March in the second", () => {
-    const result = toSeries(
-      [
-        { year: "2025-26", month: "March", growth_rate: "5.0" },
-        { year: "2026-27", month: "June", growth_rate: "6.0" },
-        { year: "2025-26", month: "December", growth_rate: "4.0" },
-      ],
-      "growth_rate",
-    );
-    if (!result.ok) throw new Error(result.reason);
-    expect(result.points.map((p) => p.period)).toEqual(["Dec 2025", "Mar 2026", "Jun 2026"]);
+  it("does not place a month inside a fiscal-year label, whose calendar year depends on the dataset", () => {
+    // An April–March year and a July–June year both read "2025-26"; guessing
+    // would label every point of the wrong kind a year off (#268).
+    const result = toSeries([{ year: "2025-26", month: "March", growth_rate: "5.0" }], "growth_rate");
+    expect(result).toEqual({ ok: false, reason: expect.stringMatching(/cannot place a row in time/) });
   });
 
   it("places a bare fiscal year", () => {

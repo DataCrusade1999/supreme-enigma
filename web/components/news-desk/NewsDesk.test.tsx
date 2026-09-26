@@ -200,4 +200,19 @@ describe("NewsDesk", () => {
     render(<NewsDesk initial={null} problem={null} nowIso={NOW} />);
     expect(screen.getByText("Indicators load on the next Refresh.")).toBeInTheDocument();
   });
+
+  it("removes a pinned row after the server confirms", async () => {
+    const pin = { ...SNAPSHOT.indicators[0], id: "pin-abc", label: "IIP manufacturing" };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<NewsDesk initial={{ ...SNAPSHOT, indicators: [...SNAPSHOT.indicators, pin] }} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove IIP manufacturing" }));
+    await waitFor(() => expect(screen.queryByText("IIP manufacturing")).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith("/api/news-desk/indicators/pin-abc", { method: "DELETE" });
+  });
+
+  it("offers the chat panel", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    expect(screen.getByRole("button", { name: "Ask MoSPI" })).toBeInTheDocument();
+  });
 });

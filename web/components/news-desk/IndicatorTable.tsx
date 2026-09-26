@@ -1,3 +1,4 @@
+import { isPinId } from "../../lib/news-desk/chat-types";
 import { formatAge } from "../../lib/news-desk/format";
 import type { IndicatorValue } from "../../lib/news-desk/types";
 
@@ -8,7 +9,15 @@ function show(value: number | null, unit: string): string {
   return `${Number.isInteger(value) ? value.toFixed(1) : value}${unit}`;
 }
 
-export function IndicatorTable({ indicators, now }: { indicators: IndicatorValue[]; now: Date }) {
+export function IndicatorTable({
+  indicators,
+  now,
+  onRemove,
+}: {
+  indicators: IndicatorValue[];
+  now: Date;
+  onRemove?: (id: string) => void;
+}) {
   if (indicators.length === 0) {
     return <p className="text-sm text-muted">Indicators load on the next Refresh.</p>;
   }
@@ -41,6 +50,16 @@ export function IndicatorTable({ indicators, now }: { indicators: IndicatorValue
                 >
                   {row.lastGoodAt ? "stale" : "not loaded"}
                 </span>
+              )}
+              {onRemove && isPinId(row.id) && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${row.label}`}
+                  onClick={() => onRemove(row.id)}
+                  className="ml-1.5 text-muted hover:text-accent"
+                >
+                  ×
+                </button>
               )}
             </td>
             <td className="py-2 pr-2 text-muted">{row.period ?? "—"}</td>

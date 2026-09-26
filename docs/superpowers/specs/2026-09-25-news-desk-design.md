@@ -55,8 +55,8 @@ Layout (desktop), agreed from mockup v4 during brainstorming:
 
 - Top bar: title, "Refreshed 2h ago · N sources failed" (the failure count expands to the list), and a Refresh button. The button is disabled while a refresh is running.
 - Left column, about 70% wide: topic tabs with counts (All, Economy, Reforms, Legislation, Hidden), then headlines newest first. Each headline shows its tag, title (linking to the article, new tab), the feed's summary when present, and source and age on their own line.
-- Right column, about 30% wide: the indicator table (Indicator, Period, Latest, Prev), sticky and vertically centred in the viewport as the headlines scroll. Pinned rows appear here with a remove control. A row whose last refresh failed shows its last good value and "stale since …" on hover.
-- A floating "Ask MoSPI" button, bottom right, opening a chat panel (§7).
+- Right column, about 30% wide: the indicator table (Indicator, Period, Latest, Prev), sticky and vertically centred in the viewport as the headlines scroll. Pinned rows appear here with a remove control (×); the five defaults have none and cannot be removed. A row whose last refresh failed shows its last good value and "stale since …" on hover.
+- A floating "Ask MoSPI" button, bottom right, opening a chat panel (§7). The panel lists each question with its steps, then the answer as plain text, a line chart when there is one, and a name field with a Pin button when the chart is pinnable.
 
 On narrow screens the columns stack: indicator table first, then headlines.
 
@@ -133,7 +133,7 @@ Each indicator therefore stores one query against one base year. The table shows
 
 ### 6.3 Indicator definitions
 
-`news-desk/indicators.json` holds `[{id, label, dataset, filters, valueField, unit, match?}]`. When it is absent the defaults below are used; Phase 4's pin and unpin are its only writers. When it exists but cannot be read (an S3 error, or a body that fails validation), the refresh uses the defaults for that run, leaves the file alone and lists `indicators.json` with the source errors, so the headlines are still saved. The pin writer must refuse to write over a file it could not read. `match` lists row fields that must equal given values, for datasets whose filters cannot narrow the response to one series.
+`news-desk/indicators.json` holds `[{id, label, dataset, filters, valueField, unit, match?}]`, and only pinned definitions. The indicator list is the defaults below followed by the pins; a stored entry with a default's id is ignored. Storing the defaults too would freeze them: a default rebased in code (§6.2) would never reach a list written with the old one. A pin's id is `pin-` plus the first 12 hex characters of a SHA-256 of its query (dataset, sorted filters, valueField, sorted match), so a pin cannot take a default's id (#269) and the same chart cannot be pinned twice. Pin and unpin are the file's only writers. When it exists but cannot be read (an S3 error, or a body that fails validation), the refresh uses the defaults for that run, leaves the file alone and lists `indicators.json` with the source errors, so the headlines are still saved. The pin writer must refuse to write over a file it could not read. `match` lists row fields that must equal given values, for datasets whose filters cannot narrow the response to one series.
 
 Defaults, verified against MoSPI on 2026-09-26 and pinned by fixture tests against responses recorded that day:
 
@@ -153,7 +153,7 @@ Defaults, verified against MoSPI on 2026-09-26 and pinned by fixture tests again
 
 ### 6.4 Rows to values
 
-`series.ts` turns `get_data` rows into `[{period, value}]` sorted by time. It recognizes calendar year + month name, fiscal year + month name (April–December in the first year, January–March in the second), fiscal year + quarter (`Q1`–`Q4`), and a bare fiscal year (`2025-26`). A row whose value is null is skipped: base-2024 CPI returns 2025 months with an index but no inflation figure. Two rows for one period make the series invalid, since the filters then match more than one series and either number could be the wrong one. Rows it cannot place in time also make the series invalid, which is what makes a chat answer unpinnable (§7.3). The same function serves the table (last two points) and chat charts (all points), so a pinned row always matches the chart it came from.
+`series.ts` turns `get_data` rows into `[{period, value}]` sorted by time. It recognizes calendar year + month name, fiscal year + quarter (`Q1`–`Q4`), and a bare fiscal year (`2025-26`). A month inside a fiscal-year label is not placed (#268): `2025-26` is April–March for NAS but July–June for other surveys, nothing in the row says which, and a guess would label every point of the wrong kind a year off. No recorded response uses that shape. A row whose value is null is skipped: base-2024 CPI returns 2025 months with an index but no inflation figure. Two rows for one period make the series invalid, since the filters then match more than one series and either number could be the wrong one. Rows it cannot place in time also make the series invalid, which is what makes a chat answer unpinnable (§7.3). The same function serves the table (last two points) and chat charts (all points), so a pinned row always matches the chart it came from.
 
 A definition with `match` pages through `get_data` (100 rows a page) until it holds two points or reaches the last page, at most 4 pages; the previous month's food row was on page 3 on 2026-09-26. A definition without `match` makes one call.
 
@@ -170,23 +170,25 @@ The panel keeps the questions and answers from the current tab visible, so the o
 `POST /api/news-desk/ask` with `{question}`. `ask.ts` is an async generator yielding events; the route turns it into an NDJSON `ReadableStream` and sets `maxDuration = 60`.
 
 1. System prompt: answer only about Indian official statistics; call the tools in order `list_datasets` → `get_indicators` → `get_metadata` → `get_data`; prefer the latest base year; state only numbers that appear in tool results.
-2. The four MoSPI tools are offered as OpenRouter tool definitions. Each tool call the model makes is sent to `mospi.ts`, and a `{"type":"step","label":…}` event is yielded with a plain-English label derived from the tool name and dataset ("Reading CPI filters…").
-3. **Metadata compaction.** `get_metadata` results can be large (CPI base 2024 returned 82 KB). Before a result goes back to the model it is rewritten compactly: each filter list becomes `name: code=label, code=label, …`, and fields the model does not need (`viz`) are removed. No filter values are removed. A result still over 20,000 characters is truncated with a note telling the model to query a narrower level.
-4. **Ending the loop.** A fifth tool, `answer`, takes `{text, chart: null | {title, unit, dataset, filters, valueField}}`. The loop ends when the model calls it. This avoids having to know in advance which turn is the last one, and avoids combining `response_format` with tools, which OpenRouter does not reliably support for Anthropic models. If the model replies with plain text instead of calling a tool, it is sent back once with an instruction to call `answer`; a second plain reply ends in an `error` event.
-5. Limits: 8 MoSPI tool calls, 1,500 output tokens per turn, about 120,000 input tokens across the loop. When the 8th MoSPI call returns, or the input budget is reached, the next request sets `tool_choice` to `answer`, so the model must answer with what it has. Hitting a limit gives a best-effort answer, not an error.
+2. The four MoSPI tools are offered as OpenRouter tool definitions, taken from a copy of MoSPI's `tools/list` recorded on 2026-09-26 (`mospi-tools.json`) rather than fetched per question. `get_indicators` and `get_metadata` have a `user_query` parameter "captured for telemetry"; it is removed from the definitions, and dropped from any call that still sends it, so the owner's question is not sent to MoSPI. Each tool call the model makes is sent to `mospi.ts`, and a `{"type":"step","label":…}` event is yielded with a plain-English label derived from the tool name and dataset ("Reading CPI filters…").
+3. **Metadata compaction.** `get_metadata` results can be large (CPI base 2024 returned 82 KB). Before a result goes back to the model it is rewritten compactly: each filter list becomes `name: code=label; code=label; …`, the `get_data` parameters become one line each with their allowed values, and fields the model does not need (`viz`, `msg`, `statusCode`) and parent codes (a CPI item's class, group and division) are removed. No filter values or labels are removed. MoSPI nests the lists differently per dataset (CPI under `data[0]`, PLFS under `filter_values.data`, IIP under `data`), so compaction walks the whole object. CPI base 2024 goes from 82,158 to 22,331 characters. Any result still over 24,000 characters is truncated with a note telling the model to ask for a narrower level or fewer rows; the cap is 24,000 rather than 20,000 so that CPI's metadata fits whole.
+4. **Ending the loop.** A fifth tool, `answer`, takes `{text, chart: null | {title, unit, dataset, filters, valueField, match?}}`. `match` is the §6.3 row matcher, so a CPI division chart can pick its own row. The server drops `limit` and `page` from `filters`; they are its own to set. The loop ends when the model calls it. This avoids having to know in advance which turn is the last one, and avoids combining `response_format` with tools, which OpenRouter does not reliably support for Anthropic models. If the model replies with plain text instead of calling a tool, it is sent back once with an instruction to call `answer`; a second plain reply ends in an `error` event.
+5. Limits: 8 MoSPI tool calls, 1,500 output tokens per turn, about 120,000 input tokens across the loop. When the 8th MoSPI call returns, or the input budget is reached, the next request sets `tool_choice` to `answer`, so the model must answer with what it has. Hitting a limit gives a best-effort answer, not an error. Time is limited too, from the route's 60 s: past 30 s the next turn is forced to answer; past 55 s, or with under 3 s left, the loop ends with an error event rather than being cut off by Vercel. Each OpenRouter call times out at 15 s or the time left, whichever is less. A message with tool calls is followed whatever text it also carries; only a message with no tool calls counts as a plain reply.
 6. If `chart` is set, the server re-runs that `get_data` call itself and builds points with `series.ts`. The model never supplies chart numbers. The final event is `{"type":"answer", text, chart: {title, unit, points} | null, pinnable, query}`.
 
-Errors (MoSPI down, OpenRouter failure, the model refusing to call `answer`) yield `{"type":"error","message":…}` and end the stream. The client keeps the steps already shown.
+Errors (MoSPI unreachable, OpenRouter failure, the model refusing to call `answer`, an `answer` that does not parse) yield `{"type":"error","message":…}` and end the stream. MoSPI counts as unreachable on an HTTP error status, a timeout or a network failure (`MospiUnavailableError`). A call MoSPI rejects (a bad filter, a wrong type, which it answers with a pydantic message) goes back to the model as the tool result, so it can correct the call. If the chart query does not give one valid series, the text answer stands with `chart: null` and `pinnable: false`. The client keeps the steps already shown, and if the stream ends without an answer or error it says "The answer did not arrive."
 
 ### 7.3 Pinning
 
-`pinnable` is true when the chart query re-ran and `series.ts` produced a valid series. The client shows a Pin button, and the label is editable before saving (default: chart title). `POST /api/news-desk/indicators` appends `{id, label, dataset, filters, valueField, unit}` to `indicators.json`; `DELETE /api/news-desk/indicators/:id` removes one. The new row is filled on the next Refresh.
+`pinnable` is true when the chart query re-ran and `series.ts` produced a valid series. The client shows a Pin button, and the label is editable before saving (default: chart title). `POST /api/news-desk/indicators` appends `{id, label, dataset, filters, valueField, unit, match?}` to `indicators.json`; `DELETE /api/news-desk/indicators/:id` removes one. Both also update the saved snapshot, so a new pin appears in the table at once (with dashes) and a removed one disappears without a Refresh; the new row's values fill on the next Refresh. A duplicate pin gets 409, a default's id 400, an id that is not pinned 404. When `indicators.json` exists but cannot be read, pin and unpin write nothing and answer 500.
+
+Known gap, found measuring on 2026-09-26: the model puts the question's time window into the chart query (`year: "2026", month_code: "8"`, or a twelve-month list), so a pinned row re-runs that window on every Refresh and stops advancing. A pinned IIP chart showed Mar 2026 beside the default IIP row's Jul 2026. A fix has to drop time filters from a pinned query, which depends on whether MoSPI's first page holds the latest rows without them; that has not been checked. Until then a pin is a snapshot of the question's window, not a live row.
 
 ## 8. Storage
 
 Two objects per branch bucket, read and written by `store.ts`:
 
-- `news-desk/indicators.json` — definitions (§6.3). Written only by pin and unpin.
+- `news-desk/indicators.json` — pinned definitions only (§6.3). Written only by pin and unpin.
 - `news-desk/snapshot.json` — `{refreshedAt, headlines[], indicators[{id, period, latest, prevPeriod, prev, lastGoodAt, error?}], sourceErrors[{source, message}]}`. Headlines older than 14 days are dropped on each refresh.
 
 Keeping definitions separate means a failed or bad refresh cannot lose pins.
@@ -216,10 +218,18 @@ Model `anthropic/claude-haiku-4.5` via OpenRouter at $1 / $5 per million input /
 |---|---|
 | First refresh (measured 2026-09-26: 886 headlines in 9 calls, $0.0735, 15.6 s) | ₹7.05 |
 | Later refresh (new headlines only; about ₹0.008 per headline from the first-refresh figure, so ~100 new items is ~₹0.8; a refresh with nothing new makes no call) | ₹0–1 |
-| Chat question (30–60k input tokens) | ₹3–6 |
+| Chat question (measured 2026-09-26, three questions below) | ₹4.6–10.7, about ₹7 on average |
 | Indicator refresh | free |
 
-The refresh rows were measured in Phase 2 at ₹95.92 per USD (2026-09-26); Phase 4 measures the chat row. The OpenRouter key has no spend limit that Terraform can set; the owner sets it in OpenRouter.
+All rows were measured at ₹95.92 per USD (2026-09-26). The chat questions, asked through a local `next dev` against the dev bucket:
+
+| Question | Turns | MoSPI calls | Input tokens | Time | Cost |
+|---|---|---|---|---|---|
+| What was retail inflation in August 2026? | 5 | 4 | 56,141 | 13.6 s | $0.0596 (₹5.72) |
+| How has IIP growth moved over the last twelve months? | 5 | 4 | 43,827 | 13.2 s | $0.0483 (₹4.63) |
+| What is the urban unemployment rate for women? | 9 | 8 | 106,258 | 25.6 s | $0.1117 (₹10.71) |
+
+The third hit the 8-call limit without finding PLFS data and gave a best-effort "unable to retrieve" answer, so ₹10.71 is close to the ceiling a question can cost. The second answered from IIP base 2011-12, whose series ends in March 2026, although the prompt asks for the latest base year. The OpenRouter key has no spend limit that Terraform can set; the owner sets it in OpenRouter.
 
 ## 11. Infrastructure
 
@@ -238,8 +248,12 @@ One Terraform change, in Phase 1:
 | Feed timeout (8 s) or parse error | Skipped, listed in `sourceErrors`; other feeds still saved |
 | Tagging call fails | New items saved as `Untagged`, retried next refresh |
 | MoSPI down during refresh | Indicator keeps last good values, `error` set |
-| MoSPI down, or model never calls `answer`, in chat | `error` event; earlier steps stay visible |
+| MoSPI unreachable (HTTP error, timeout, network), or model never calls `answer`, in chat | `error` event; earlier steps stay visible |
+| MoSPI rejects a chat call (bad filter, wrong type) | The rejection goes back to the model as the tool result |
 | Chat hits the tool-call or token limit | Forced `answer` call; best-effort answer |
+| Chat question runs past 30 s | Forced `answer` call; past 55 s, `error` event |
+| Chart query gives no single series | Text answer without a chart; not pinnable |
+| Pin or unpin when `indicators.json` cannot be read | Nothing written; 500 |
 | S3 read fails on page load | Error message on the page; nothing written |
 | Concurrent refresh | Last write wins; each write is a whole snapshot |
 
@@ -253,7 +267,8 @@ Vitest, with fixtures recorded from the real services:
 - `mospi.ts`: SSE parsing, JSON-RPC error, `isError`, MoSPI's `{"valid": false}` body.
 - `series.ts`: each period shape, sorting, unplaceable rows, CPI base 2012 vs 2024 fixtures.
 - Metadata compaction: output smaller, no filter values lost, truncation note.
-- `ask.ts`: event sequence for a scripted model; the 8-call limit forcing `answer` via `tool_choice`; a plain-text reply being re-prompted once, then erroring; chart points built by the server, not taken from the model.
+- `ask.ts`: event sequence for a scripted model; the 8-call limit, the input budget and the 30 s deadline forcing `answer` via `tool_choice`; the 55 s deadline ending in an error; a plain-text reply being re-prompted once, then erroring; a rejected MoSPI call returned to the model; an unreachable MoSPI ending the stream; chart points built by the server, not taken from the model; `user_query` never passed on.
+- Pins: id stable across filter order; duplicate refused; nothing written when `indicators.json` cannot be read; defaults cannot be removed.
 - Tagger chunking: 250 items → 3 calls; one failed chunk leaves the other two tagged.
 - Age filter: items older than 14 days or undated never reach the tagger.
 - Routes: unauthenticated requests get 401; pin and unpin update `indicators.json`.
