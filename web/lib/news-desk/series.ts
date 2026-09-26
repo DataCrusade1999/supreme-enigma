@@ -25,11 +25,8 @@ function place(row: Record<string, unknown>): { key: number; label: string } | n
   if (CALENDAR_YEAR.test(year) && month >= 0) {
     return { key: Number(year) * 12 + month, label: `${SHORT[month]} ${year}` };
   }
-  if (fiscal && month >= 0) {
-    // India's fiscal year runs April to March.
-    const calendarYear = Number(fiscal[1]) + (month < 3 ? 1 : 0);
-    return { key: calendarYear * 12 + month, label: `${SHORT[month]} ${calendarYear}` };
-  }
+  // A month inside a fiscal-year label is not placed: "2025-26" is April–March
+  // for NAS but July–June for other surveys, and nothing in the row says which.
   if (fiscal && quarter) {
     const q = Number(quarter[1]);
     return { key: Number(fiscal[1]) * 12 + 3 + (q - 1) * 3, label: `Q${q} ${year}` };
