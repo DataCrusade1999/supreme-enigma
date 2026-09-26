@@ -107,7 +107,7 @@ Summaries are the feed's own `description`, stripped of HTML and cut to about 20
 
 ### 5.3 Tagging
 
-Only headlines whose `id` is not already in the snapshot are tagged. They are split into chunks of 100 and the chunks are sent in parallel. Each call sends `[{n, title, source}]`, where `n` is the item's position in the chunk (short, so output stays small), with `response_format` strict JSON returning `[{n, tag}]`, `tag ∈ Economy | Reforms | Legislation | Drop`.
+After the merge, every headline still tagged `Untagged` is sent: new items, and items whose chunk failed on an earlier refresh. They are split into chunks of 100 and the chunks are sent in parallel. Each call sends `[{n, title, source}]`, where `n` is the item's position in the chunk (short, so output stays small), with `response_format` strict JSON returning `[{n, tag}]`, `tag ∈ Economy | Reforms | Legislation | Drop`.
 
 Chunking matters on the first refresh, when every headline is new: about 600 items in one call would need roughly 12,000 output tokens, which would exceed the output cap and take longer than the route's 60 s. Truncated JSON would save everything as `Untagged`, and the retry on the next refresh would fail the same way. At 100 per chunk, each call needs about 1,500 output tokens. `Drop` hides off-topic items (PIB congratulating athletes, for example). They stay in the snapshot with that tag so the next refresh does not tag them again while they are still in the feeds. The prompt defines each tag in one or two sentences: Legislation covers bills, Acts, ordinances, amendments and committee reports; Reforms covers policy and regulatory changes by government, RBI, SEBI or the GST Council; Economy is everything else about the Indian economy.
 
