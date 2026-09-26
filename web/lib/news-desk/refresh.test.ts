@@ -208,4 +208,33 @@ describe("runRefresh", () => {
     });
     expect(writeSnapshot).toHaveBeenCalledWith(result);
   });
+
+  it("keeps other indicators, marked stale, when it falls back to the defaults", async () => {
+    const pinned: IndicatorValue = {
+      id: "user-pin",
+      label: "Pinned",
+      unit: "%",
+      period: "Jun 2026",
+      latest: 1.5,
+      prevPeriod: "May 2026",
+      prev: 1.4,
+      lastGoodAt: "2026-09-20T08:00:00.000Z",
+    };
+    vi.mocked(readSnapshot).mockResolvedValue({
+      version: 1,
+      refreshedAt: "2026-09-24T12:00:00.000Z",
+      headlines: [],
+      indicators: [pinned],
+      sourceErrors: [],
+    });
+    vi.mocked(readIndicatorDefs).mockRejectedValue(new Error("Access Denied"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await runRefresh(NOW);
+
+    expect(result.indicators).toContainEqual({
+      ...pinned,
+      error: "indicators.json unreadable, used the defaults: Access Denied",
+    });
+  });
 });

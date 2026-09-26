@@ -13,10 +13,20 @@ export async function runRefresh(now: Date = new Date()): Promise<Snapshot> {
 
   // Indicators do not depend on the headlines, so they run alongside the
   // feed-and-tag chain; one after the other would not fit the route's 60 s.
-  const [{ headlines, sourceErrors }, indicators] = await Promise.all([
+  const [{ headlines, sourceErrors }, refreshed] = await Promise.all([
     refreshHeadlines(previous?.headlines ?? [], now),
     refreshIndicators(defsRead.defs, previous?.indicators ?? [], now),
   ]);
+
+  // On a fallback the defaults were refreshed, but the file may hold pins the
+  // defaults lack. Keep those rows as they were, marked stale, rather than drop them.
+  const defIds = new Set(defsRead.defs.map((d) => d.id));
+  const kept = defsRead.error
+    ? (previous?.indicators ?? [])
+        .filter((v) => !defIds.has(v.id))
+        .map((v) => ({ ...v, error: `indicators.json ${defsRead.error!.message}` }))
+    : [];
+  const indicators = [...refreshed, ...kept];
 
   const snapshot: Snapshot = {
     version: 1,
