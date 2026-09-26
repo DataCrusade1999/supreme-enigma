@@ -3,17 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./feeds", () => ({ fetchAllFeeds: vi.fn() }));
 vi.mock("./tagger", () => ({ tagHeadlines: vi.fn() }));
+vi.mock("./indicators", () => ({ refreshIndicators: vi.fn() }));
 vi.mock("./store", async () => {
   const actual = await vi.importActual<typeof import("./store")>("./store");
-  return { ...actual, readSnapshot: vi.fn(), writeSnapshot: vi.fn() };
+  return { ...actual, readSnapshot: vi.fn(), readIndicatorDefs: vi.fn(), writeSnapshot: vi.fn() };
 });
 
+import { DEFAULT_INDICATORS } from "./defaults";
 import { fetchAllFeeds } from "./feeds";
 import { withId } from "./dedupe";
-import { readSnapshot, SnapshotCorruptError, writeSnapshot } from "./store";
+import { refreshIndicators } from "./indicators";
+import { readIndicatorDefs, readSnapshot, SnapshotCorruptError, writeSnapshot } from "./store";
 import { runRefresh } from "./refresh";
 import { tagHeadlines } from "./tagger";
-import type { Snapshot } from "./types";
+import type { IndicatorValue, Snapshot } from "./types";
 
 const NOW = new Date("2026-09-25T12:00:00.000Z");
 const fresh = withId({
@@ -42,6 +45,8 @@ describe("runRefresh", () => {
       errors: [{ source: "SEBI", message: "timed out" }],
     });
     vi.mocked(tagHeadlines).mockResolvedValue({ tags: new Map(), calls: 0, failedCalls: 0, costUsd: 0 });
+    vi.mocked(readIndicatorDefs).mockResolvedValue(DEFAULT_INDICATORS);
+    vi.mocked(refreshIndicators).mockResolvedValue([]);
   });
 
   it("merges new headlines into the stored ones and saves the result", async () => {
@@ -49,6 +54,7 @@ describe("runRefresh", () => {
       version: 1,
       refreshedAt: "2026-09-24T12:00:00.000Z",
       headlines: [stored],
+      indicators: [],
       sourceErrors: [],
     };
     vi.mocked(readSnapshot).mockResolvedValue(previous);
@@ -59,6 +65,7 @@ describe("runRefresh", () => {
       version: 1,
       refreshedAt: "2026-09-25T12:00:00.000Z",
       headlines: [fresh, stored],
+      indicators: [],
       sourceErrors: [{ source: "SEBI", message: "timed out" }],
     });
     expect(writeSnapshot).toHaveBeenCalledWith(result);
@@ -98,6 +105,7 @@ describe("runRefresh", () => {
       version: 1,
       refreshedAt: "2026-09-24T12:00:00.000Z",
       headlines: [stored, failedBefore],
+      indicators: [],
       sourceErrors: [],
     });
     vi.mocked(tagHeadlines).mockResolvedValue({
@@ -124,10 +132,109 @@ describe("runRefresh", () => {
       version: 1,
       refreshedAt: "2026-09-24T12:00:00.000Z",
       headlines: [dropped],
+      indicators: [],
       sourceErrors: [],
     });
     await runRefresh(NOW);
     const sent = vi.mocked(tagHeadlines).mock.calls[0][0].map((h) => h.id);
     expect(sent).toEqual([fresh.id]);
+  });
+
+  it("saves refreshed indicators, passing the previous values in", async () => {
+    const before: IndicatorValue = {
+      id: "iip",
+      label: "IIP growth",
+      unit: "%",
+      period: "Jun 2026",
+      latest: 8.8,
+      prevPeriod: "May 2026",
+      prev: 5,
+      lastGoodAt: "2026-09-20T08:00:00.000Z",
+    };
+    const after: IndicatorValue = { ...before, period: "Jul 2026", latest: 6.7, prevPeriod: "Jun 2026", prev: 8.8 };
+    vi.mocked(readSnapshot).mockResolvedValue({
+      version: 1,
+      refreshedAt: "2026-09-24T12:00:00.000Z",
+      headlines: [],
+      indicators: [before],
+      sourceErrors: [],
+    });
+    vi.mocked(refreshIndicators).mockResolvedValue([after]);
+
+    const result = await runRefresh(NOW);
+
+    expect(refreshIndicators).toHaveBeenCalledWith(DEFAULT_INDICATORS, [before], NOW);
+    expect(result.indicators).toEqual([after]);
+    expect(writeSnapshot).toHaveBeenCalledWith(result);
+  });
+
+  it("starts the indicators without waiting for the feeds", async () => {
+    let releaseFeeds!: () => void;
+    vi.mocked(fetchAllFeeds).mockReturnValue(
+      new Promise((resolve) => (releaseFeeds = () => resolve({ headlines: [fresh], errors: [] }))),
+    );
+    vi.mocked(readSnapshot).mockResolvedValue(null);
+
+    const done = runRefresh(NOW);
+    await vi.waitFor(() => expect(refreshIndicators).toHaveBeenCalled());
+    releaseFeeds();
+    await done;
+  });
+
+  it("reads the snapshot and the indicator definitions at the same time", async () => {
+    let releaseSnapshot!: () => void;
+    vi.mocked(readSnapshot).mockReturnValue(new Promise((resolve) => (releaseSnapshot = () => resolve(null))));
+
+    const done = runRefresh(NOW);
+    await vi.waitFor(() => expect(readIndicatorDefs).toHaveBeenCalled());
+    releaseSnapshot();
+    await done;
+  });
+
+  it("still saves headlines when the indicator definitions cannot be read", async () => {
+    vi.mocked(readSnapshot).mockResolvedValue(null);
+    vi.mocked(readIndicatorDefs).mockRejectedValue(
+      Object.assign(new Error("Access Denied"), { name: "AccessDenied" }),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await runRefresh(NOW);
+
+    expect(refreshIndicators).toHaveBeenCalledWith(DEFAULT_INDICATORS, [], NOW);
+    expect(result.headlines.map((h) => h.id)).toEqual([fresh.id]);
+    expect(result.sourceErrors).toContainEqual({
+      source: "indicators.json",
+      message: "unreadable, used the defaults: Access Denied",
+    });
+    expect(writeSnapshot).toHaveBeenCalledWith(result);
+  });
+
+  it("keeps other indicators, marked stale, when it falls back to the defaults", async () => {
+    const pinned: IndicatorValue = {
+      id: "user-pin",
+      label: "Pinned",
+      unit: "%",
+      period: "Jun 2026",
+      latest: 1.5,
+      prevPeriod: "May 2026",
+      prev: 1.4,
+      lastGoodAt: "2026-09-20T08:00:00.000Z",
+    };
+    vi.mocked(readSnapshot).mockResolvedValue({
+      version: 1,
+      refreshedAt: "2026-09-24T12:00:00.000Z",
+      headlines: [],
+      indicators: [pinned],
+      sourceErrors: [],
+    });
+    vi.mocked(readIndicatorDefs).mockRejectedValue(new Error("Access Denied"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await runRefresh(NOW);
+
+    expect(result.indicators).toContainEqual({
+      ...pinned,
+      error: "indicators.json unreadable, used the defaults: Access Denied",
+    });
   });
 });

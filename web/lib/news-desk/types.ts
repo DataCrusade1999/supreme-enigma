@@ -34,10 +34,40 @@ export type RawHeadline = Omit<Headline, "id" | "tag">;
 export const sourceErrorSchema = z.object({ source: z.string(), message: z.string() });
 export type SourceError = z.infer<typeof sourceErrorSchema>;
 
+export const indicatorDefSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  dataset: z.string(),
+  filters: z.record(z.string(), z.string()),
+  valueField: z.string(),
+  unit: z.string(),
+  // Row fields that must equal these values. Needed when the filters cannot
+  // narrow MoSPI to one series: a base-2024 CPI division also returns every
+  // group and class beneath it. See spec §6.3.
+  match: z.record(z.string(), z.string()).optional(),
+});
+export type IndicatorDef = z.infer<typeof indicatorDefSchema>;
+
+export const indicatorValueSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  unit: z.string(),
+  period: z.string().nullable(),
+  latest: z.number().nullable(),
+  prevPeriod: z.string().nullable(),
+  prev: z.number().nullable(),
+  // Unchanged by a failed refresh, so the table can say how stale a row is.
+  lastGoodAt: z.string().nullable(),
+  error: z.string().optional(),
+});
+export type IndicatorValue = z.infer<typeof indicatorValueSchema>;
+
 export const snapshotSchema = z.object({
   version: z.literal(1),
   refreshedAt: z.string(),
   headlines: z.array(headlineSchema),
+  // Defaulted so a Phase 2 snapshot still reads; the next refresh fills it.
+  indicators: z.array(indicatorValueSchema).default([]),
   sourceErrors: z.array(sourceErrorSchema),
 });
 export type Snapshot = z.infer<typeof snapshotSchema>;

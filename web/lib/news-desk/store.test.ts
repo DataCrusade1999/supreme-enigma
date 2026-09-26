@@ -7,8 +7,11 @@ vi.mock("@/lib/aws", () => ({
 }));
 
 import { getObjectBytes, putObjectJson } from "@/lib/aws";
+import { DEFAULT_INDICATORS } from "./defaults";
 import {
+  INDICATORS_KEY,
   isStorageConfigured,
+  readIndicatorDefs,
   readSnapshot,
   SNAPSHOT_KEY,
   SnapshotCorruptError,
@@ -20,6 +23,7 @@ const SNAPSHOT: Snapshot = {
   version: 1,
   refreshedAt: "2026-09-25T12:00:00.000Z",
   headlines: [],
+  indicators: [],
   sourceErrors: [],
 };
 
@@ -87,5 +91,35 @@ describe("news-desk store", () => {
     vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(phase1)));
     const snapshot = await readSnapshot();
     expect(snapshot?.headlines[0].tag).toBe("Untagged");
+  });
+
+  it("reads a Phase 2 snapshot, which has no indicators, with an empty list", async () => {
+    const phase2 = {
+      version: 1,
+      refreshedAt: "2026-09-26T09:00:00.000Z",
+      headlines: [],
+      sourceErrors: [],
+    };
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(phase2)));
+    expect((await readSnapshot())?.indicators).toEqual([]);
+  });
+
+  it("uses the default indicators when none are stored", async () => {
+    vi.mocked(getObjectBytes).mockRejectedValue(Object.assign(new Error("gone"), { name: "NoSuchKey" }));
+    expect(await readIndicatorDefs()).toEqual(DEFAULT_INDICATORS);
+    expect(vi.mocked(getObjectBytes)).toHaveBeenCalledWith("audio-bucket", INDICATORS_KEY);
+  });
+
+  it("reads stored indicator definitions", async () => {
+    const stored = [
+      { id: "x", label: "X", dataset: "IIP", filters: { type: "General" }, valueField: "growth_rate", unit: "%" },
+    ];
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(stored)));
+    expect(await readIndicatorDefs()).toEqual(stored);
+  });
+
+  it("surfaces an S3 failure reading indicator definitions", async () => {
+    vi.mocked(getObjectBytes).mockRejectedValue(Object.assign(new Error("denied"), { name: "AccessDenied" }));
+    await expect(readIndicatorDefs()).rejects.toThrow("denied");
   });
 });

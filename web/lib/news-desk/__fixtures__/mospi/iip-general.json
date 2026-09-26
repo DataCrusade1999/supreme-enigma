@@ -1,0 +1,412 @@
+{
+ "data": [
+  {
+   "base_year": "2022-23",
+   "year": 2026,
+   "month": "July",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "124.8",
+   "growth_rate": "6.7"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2026,
+   "month": "June",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "124.8",
+   "growth_rate": "8.8"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2026,
+   "month": "May",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "122.5",
+   "growth_rate": "5.0"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2026,
+   "month": "April",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "118.2",
+   "growth_rate": "4.9"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2026,
+   "month": "March",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "129.7",
+   "growth_rate": "3.0"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2026,
+   "month": "February",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "117.9",
+   "growth_rate": "4.4"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2026,
+   "month": "January",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "123.0",
+   "growth_rate": "4.1"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "December",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "123.5",
+   "growth_rate": "6.7"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "November",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "114.6",
+   "growth_rate": "7.0"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "October",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "111.6",
+   "growth_rate": "-0.9"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "September",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "116.5",
+   "growth_rate": "6.1"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "August",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "114.2",
+   "growth_rate": "4.7"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "July",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "117.0",
+   "growth_rate": "5.4"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "June",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "114.7",
+   "growth_rate": "2.2"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "May",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "116.7",
+   "growth_rate": "3.4"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "April",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "112.7",
+   "growth_rate": "4.8"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "March",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "125.9",
+   "growth_rate": "5.8"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "February",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "112.9",
+   "growth_rate": "2.9"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2025,
+   "month": "January",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "118.1",
+   "growth_rate": "6.3"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "December",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "115.7",
+   "growth_rate": "6.1"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "November",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "107.1",
+   "growth_rate": "5.9"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "October",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "112.6",
+   "growth_rate": "5.6"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "September",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "109.8",
+   "growth_rate": "4.7"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "August",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "109.1",
+   "growth_rate": "2.1"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "July",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "111.0",
+   "growth_rate": "7.8"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "June",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "112.2",
+   "growth_rate": "7.3"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "May",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "112.9",
+   "growth_rate": "7.3"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "April",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "107.5",
+   "growth_rate": "7.1"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "March",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "119.0",
+   "growth_rate": "19.0"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "February",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "109.7",
+   "growth_rate": "9.7"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2024,
+   "month": "January",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "111.1",
+   "growth_rate": "11.1"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2023,
+   "month": "December",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "109.0",
+   "growth_rate": "9.0"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2023,
+   "month": "November",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "101.1",
+   "growth_rate": "1.1"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2023,
+   "month": "October",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "106.6",
+   "growth_rate": "6.6"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2023,
+   "month": "September",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "104.9",
+   "growth_rate": "4.9"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2023,
+   "month": "August",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "106.9",
+   "growth_rate": "6.9"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2023,
+   "month": "July",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "103.0",
+   "growth_rate": "3.0"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2023,
+   "month": "June",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "104.6",
+   "growth_rate": "4.6"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2023,
+   "month": "May",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "105.2",
+   "growth_rate": "5.2"
+  },
+  {
+   "base_year": "2022-23",
+   "year": 2023,
+   "month": "April",
+   "type": "General",
+   "category": "General",
+   "sub_category": "",
+   "index": "100.4",
+   "growth_rate": "0.4"
+  }
+ ],
+ "meta_data": {
+  "page": 1,
+  "totalRecords": 40,
+  "totalPages": 1,
+  "recordPerPage": 100
+ },
+ "msg": "Data fetched successfully",
+ "statusCode": true
+}

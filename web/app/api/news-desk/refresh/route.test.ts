@@ -12,7 +12,7 @@ describe("POST /api/news-desk/refresh", () => {
   });
 
   it("returns the new snapshot", async () => {
-    const snapshot = { version: 1, refreshedAt: "x", headlines: [], sourceErrors: [] };
+    const snapshot = { version: 1, refreshedAt: "x", headlines: [], indicators: [], sourceErrors: [] };
     vi.mocked(runRefresh).mockResolvedValue(snapshot as never);
     const res = await POST();
     expect(res.status).toBe(200);

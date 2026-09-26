@@ -5,6 +5,7 @@ import { formatAge } from "../../lib/news-desk/format";
 import { TOPICS, type Topic } from "../../lib/news-desk/tags";
 import type { Snapshot } from "../../lib/news-desk/types";
 import { HeadlineList } from "./HeadlineList";
+import { IndicatorTable } from "./IndicatorTable";
 
 type Tab = "All" | Topic | "Hidden";
 
@@ -97,41 +98,54 @@ export function NewsDesk({
         </p>
       )}
 
-      {problem ? (
-        <p className="mt-6 text-sm text-muted">{problem}</p>
-      ) : snapshot && snapshot.headlines.length > 0 ? (
-        <>
-          <div role="group" aria-label="Topics" className="mt-4 flex flex-wrap gap-4 border-b border-rule">
-            {tabs.map(({ label, count }) => (
-              <button
-                key={label}
-                type="button"
-                aria-pressed={tab === label}
-                onClick={() => setTab(label)}
-                className={`-mb-px border-b-2 pb-2 text-sm ${
-                  tab === label ? "border-accent text-fg" : "border-transparent text-muted"
-                }`}
-              >
-                {label}{" "}
-                <span className="text-xs text-muted">{count}</span>
-              </button>
-            ))}
+      <div className="mt-6 grid grid-cols-12 gap-y-8 lg:gap-x-10">
+        {/* First in the DOM so narrow screens show it above the headlines (spec §4). */}
+        {/* On desktop the aside is a viewport-tall sticky box that centres the table,
+            so it stays centred beside the scrolling headlines. A transform would
+            lift it over the refresh bar when the headline column is short. */}
+        <aside className="col-span-12 lg:sticky lg:top-0 lg:order-2 lg:col-span-4 lg:flex lg:h-screen lg:items-center lg:self-start">
+          <div className="w-full">
+            <IndicatorTable indicators={snapshot?.indicators ?? []} now={now} />
           </div>
-          {visible.length > 0 ? (
-            <HeadlineList headlines={visible} now={now} />
+        </aside>
+        <div className="col-span-12 lg:order-1 lg:col-span-8">
+          {problem ? (
+            <p className="text-sm text-muted">{problem}</p>
+          ) : snapshot && snapshot.headlines.length > 0 ? (
+            <>
+              <div role="group" aria-label="Topics" className="flex flex-wrap gap-4 border-b border-rule">
+                {tabs.map(({ label, count }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    aria-pressed={tab === label}
+                    onClick={() => setTab(label)}
+                    className={`-mb-px border-b-2 pb-2 text-sm ${
+                      tab === label ? "border-accent text-fg" : "border-transparent text-muted"
+                    }`}
+                  >
+                    {label}{" "}
+                    <span className="text-xs text-muted">{count}</span>
+                  </button>
+                ))}
+              </div>
+              {visible.length > 0 ? (
+                <HeadlineList headlines={visible} now={now} />
+              ) : (
+                <p className="mt-6 text-sm text-muted">
+                  {tab === "Hidden"
+                    ? "No hidden headlines."
+                    : tab === "All"
+                      ? "Every saved headline is hidden."
+                      : `No headlines tagged ${tab}.`}
+                </p>
+              )}
+            </>
           ) : (
-            <p className="mt-6 text-sm text-muted">
-              {tab === "Hidden"
-                ? "No hidden headlines."
-                : tab === "All"
-                  ? "Every saved headline is hidden."
-                  : `No headlines tagged ${tab}.`}
-            </p>
+            <p className="text-sm text-muted">Nothing saved yet. Press Refresh to fetch headlines.</p>
           )}
-        </>
-      ) : (
-        <p className="mt-6 text-sm text-muted">Nothing saved yet. Press Refresh to fetch headlines.</p>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
