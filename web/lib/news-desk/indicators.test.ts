@@ -69,6 +69,12 @@ describe("fetchSeries", () => {
     expect(callTool).toHaveBeenCalledTimes(4);
   });
 
+  it("keeps paging a matched definition when MoSPI sends no page count", async () => {
+    vi.mocked(callTool).mockResolvedValue({ data: [{ year: 2026, month: "July", code: "02", inflation: "1.0" }] });
+    await expect(fetchSeries(byId("cpi-food"))).rejects.toThrow("MoSPI returned no values for these filters");
+    expect(callTool).toHaveBeenCalledTimes(4);
+  });
+
   it("fails rather than mixing series when the filters match more than one", async () => {
     const unmatched: IndicatorDef = { ...byId("cpi-food"), match: undefined };
     await expect(fetchSeries(unmatched)).rejects.toThrow(/filters match more than one series/);

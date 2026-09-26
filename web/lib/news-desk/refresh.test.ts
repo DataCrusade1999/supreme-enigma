@@ -190,4 +190,22 @@ describe("runRefresh", () => {
     releaseSnapshot();
     await done;
   });
+
+  it("still saves headlines when the indicator definitions cannot be read", async () => {
+    vi.mocked(readSnapshot).mockResolvedValue(null);
+    vi.mocked(readIndicatorDefs).mockRejectedValue(
+      Object.assign(new Error("Access Denied"), { name: "AccessDenied" }),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await runRefresh(NOW);
+
+    expect(refreshIndicators).toHaveBeenCalledWith(DEFAULT_INDICATORS, [], NOW);
+    expect(result.headlines.map((h) => h.id)).toEqual([fresh.id]);
+    expect(result.sourceErrors).toContainEqual({
+      source: "indicators.json",
+      message: "unreadable, used the defaults: Access Denied",
+    });
+    expect(writeSnapshot).toHaveBeenCalledWith(result);
+  });
 });

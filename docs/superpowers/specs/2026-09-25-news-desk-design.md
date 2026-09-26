@@ -133,7 +133,7 @@ Each indicator therefore stores one query against one base year. The table shows
 
 ### 6.3 Indicator definitions
 
-`news-desk/indicators.json` holds `[{id, label, dataset, filters, valueField, unit, match?}]`. When it is absent the defaults below are used; Phase 4's pin and unpin are its only writers. `match` lists row fields that must equal given values, for datasets whose filters cannot narrow the response to one series.
+`news-desk/indicators.json` holds `[{id, label, dataset, filters, valueField, unit, match?}]`. When it is absent the defaults below are used; Phase 4's pin and unpin are its only writers. When it exists but cannot be read (an S3 error, or a body that fails validation), the refresh uses the defaults for that run, leaves the file alone and lists `indicators.json` with the source errors, so the headlines are still saved. The pin writer must refuse to write over a file it could not read. `match` lists row fields that must equal given values, for datasets whose filters cannot narrow the response to one series.
 
 Defaults, verified against MoSPI on 2026-09-26 and pinned by fixture tests against responses recorded that day:
 

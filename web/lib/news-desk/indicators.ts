@@ -35,7 +35,8 @@ export async function fetchSeries(def: IndicatorDef): Promise<Point[]> {
     const series = toSeries(rows, def.valueField);
     if (!series.ok) throw new Error(series.reason);
     points = series.points;
-    const lastPage = response.meta_data?.totalPages ?? page;
+    // Without a page count, keep going to MAX_PAGES rather than stop at page 1.
+    const lastPage = response.meta_data?.totalPages ?? MAX_PAGES;
     if (points.length >= 2 || page >= lastPage) break;
   }
   if (points.length === 0) throw new Error("MoSPI returned no values for these filters");
