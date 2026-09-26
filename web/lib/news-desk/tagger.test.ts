@@ -53,6 +53,7 @@ describe("tagHeadlines", () => {
     process.env.OPENROUTER_BASE_URL = "https://openrouter.example/api/v1";
     process.env.NEWS_DESK_MODEL = "anthropic/claude-haiku-4.5";
     vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -172,5 +173,20 @@ describe("tagHeadlines", () => {
     const result = await tagHeadlines([headline(1)]);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(result.tags.size).toBe(0);
+  });
+
+  it("makes no request when the base URL is not configured", async () => {
+    delete process.env.OPENROUTER_BASE_URL;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await tagHeadlines([headline(1)]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.tags.size).toBe(0);
+  });
+
+  it("warns when a reply tags fewer items than it was sent", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => reply([{ n: 0, tag: "Economy" }])));
+    await tagHeadlines([headline(1), headline(2)]);
+    expect(console.warn).toHaveBeenCalledWith("news-desk: tagging reply covered 1 of 2 items");
   });
 });

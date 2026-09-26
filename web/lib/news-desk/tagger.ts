@@ -52,7 +52,8 @@ export async function tagHeadlines(items: Headline[]): Promise<TagResult> {
   if (items.length === 0) return result;
   // Unset in local dev, Playwright and CI. Without this check the request would
   // go to "undefined/chat/completions" and every chunk would log a failure.
-  if (!process.env.OPENROUTER_API_KEY || !process.env.NEWS_DESK_MODEL) return result;
+  const { OPENROUTER_API_KEY, OPENROUTER_BASE_URL, NEWS_DESK_MODEL } = process.env;
+  if (!OPENROUTER_API_KEY || !OPENROUTER_BASE_URL || !NEWS_DESK_MODEL) return result;
 
   const chunks: Headline[][] = [];
   for (let i = 0; i < items.length; i += CHUNK_SIZE) chunks.push(items.slice(i, i + CHUNK_SIZE));
@@ -121,6 +122,11 @@ async function tagChunk(chunk: Headline[]): Promise<{ tags: Map<number, ModelTag
     const { n, tag } = parsed.data;
     if (n < 0 || n >= chunk.length || tags.has(n)) continue;
     tags.set(n, tag);
+  }
+  // A short reply is not a failed call, but its missing items are retried and
+  // paid for again on the next refresh, so say so.
+  if (tags.size < chunk.length) {
+    console.warn(`news-desk: tagging reply covered ${tags.size} of ${chunk.length} items`);
   }
   const cost = json?.usage?.cost;
   return { tags, costUsd: typeof cost === "number" ? cost : 0 };
