@@ -100,9 +100,11 @@ export function NewsDesk({
 
       <div className="mt-6 grid grid-cols-12 gap-y-8 lg:gap-x-10">
         {/* First in the DOM so narrow screens show it above the headlines (spec §4). */}
-        <aside className="col-span-12 lg:order-2 lg:col-span-4">
-          {/* Sticky and vertically centred beside the scrolling headlines. */}
-          <div className="lg:sticky lg:top-1/2 lg:-translate-y-1/2">
+        {/* On desktop the aside is a viewport-tall sticky box that centres the table,
+            so it stays centred beside the scrolling headlines. A transform would
+            lift it over the refresh bar when the headline column is short. */}
+        <aside className="col-span-12 lg:sticky lg:top-0 lg:order-2 lg:col-span-4 lg:flex lg:h-screen lg:items-center lg:self-start">
+          <div className="w-full">
             <IndicatorTable indicators={snapshot?.indicators ?? []} now={now} />
           </div>
         </aside>
