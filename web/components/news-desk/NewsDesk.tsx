@@ -98,7 +98,7 @@ export function NewsDesk({
         </p>
       )}
 
-      <div className="mt-6 grid grid-cols-12 gap-x-10 gap-y-8">
+      <div className="mt-6 grid grid-cols-12 gap-y-8 lg:gap-x-10">
         {/* First in the DOM so narrow screens show it above the headlines (spec §4). */}
         <aside className="col-span-12 lg:order-2 lg:col-span-4">
           {/* Sticky and vertically centred beside the scrolling headlines. */}
