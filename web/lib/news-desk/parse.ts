@@ -1,5 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
-import type { Headline, SourceDef } from "./types";
+import type { RawHeadline, SourceDef } from "./types";
 
 const SUMMARY_MAX = 200;
 
@@ -62,13 +62,13 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export function parseFeed(xml: string, source: SourceDef): Omit<Headline, "id">[] {
+export function parseFeed(xml: string, source: SourceDef): RawHeadline[] {
   const doc = parser.parse(xml);
   const channel = doc?.rss?.channel;
   if (!channel) throw new Error("not an RSS feed");
   const items: unknown[] = channel.item ?? [];
 
-  const out: Omit<Headline, "id">[] = [];
+  const out: RawHeadline[] = [];
   for (const raw of items) {
     const item = raw as Record<string, unknown>;
     let title = text(item.title);

@@ -18,6 +18,7 @@ const headlines: Headline[] = [
     source: "Reuters",
     publishedAt: "2026-09-25T09:00:00.000Z",
     direct: false,
+    tag: "Economy",
   },
   {
     id: "b",
@@ -27,6 +28,7 @@ const headlines: Headline[] = [
     summary: "New template aims to ease investor–state dispute settlement.",
     publishedAt: "2026-09-25T08:00:00.000Z",
     direct: true,
+    tag: "Legislation",
   },
 ];
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Headline } from "./types";
+import type { Headline, RawHeadline } from "./types";
 
 export const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -18,10 +18,10 @@ export function normalizeTitle(title: string): string {
 // The publish day is part of the key so a recurring release with a fixed title
 // (RBI's weekly auction results) is a new item each week instead of being
 // swallowed by last week's copy.
-export function withId(item: Omit<Headline, "id">): Headline {
+export function withId(item: RawHeadline): Headline {
   const key = `${normalizeTitle(item.title)}|${item.publishedAt.slice(0, 10)}`;
   const id = createHash("sha1").update(key).digest("hex").slice(0, 16);
-  return { id, ...item };
+  return { id, ...item, tag: "Untagged" };
 }
 
 // Google News sometimes stamps its own index time rather than the publisher's,
@@ -44,7 +44,8 @@ export function mergeHeadlines(existing: Headline[], incoming: Headline[], now: 
       (k) => k.id === headline.id || Math.abs(Date.parse(k.publishedAt) - at) < SAME_STORY_MS,
     );
     if (i === -1) kept.push(headline);
-    else if (!kept[i].direct && headline.direct) kept[i] = headline;
+    // The tag carries over so a story already tagged is not paid for again.
+    else if (!kept[i].direct && headline.direct) kept[i] = { ...headline, tag: kept[i].tag };
     byTitle.set(key, kept);
   }
   return [...byTitle.values()].flat().sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));

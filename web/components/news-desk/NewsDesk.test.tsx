@@ -16,6 +16,7 @@ const SNAPSHOT: Snapshot = {
       source: "Reuters",
       publishedAt: "2026-09-25T09:00:00.000Z",
       direct: false,
+      tag: "Economy",
     },
     {
       id: "b",
@@ -25,6 +26,7 @@ const SNAPSHOT: Snapshot = {
       summary: "New template aims to ease dispute settlement.",
       publishedAt: "2026-09-25T08:00:00.000Z",
       direct: true,
+      tag: "Legislation",
     },
   ],
   sourceErrors: [{ source: "SEBI", message: "timed out" }],
