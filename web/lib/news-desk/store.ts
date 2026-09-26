@@ -1,5 +1,7 @@
 import { getObjectBytes, putObjectJson } from "@/lib/aws";
-import { snapshotSchema, type Snapshot } from "./types";
+import { z } from "zod";
+import { DEFAULT_INDICATORS } from "./defaults";
+import { indicatorDefSchema, snapshotSchema, type IndicatorDef, type Snapshot } from "./types";
 
 export const SNAPSHOT_KEY = "news-desk/snapshot.json";
 
@@ -44,4 +46,20 @@ export async function readSnapshot(): Promise<Snapshot | null> {
 
 export async function writeSnapshot(snapshot: Snapshot): Promise<void> {
   await putObjectJson(bucket(), SNAPSHOT_KEY, snapshot);
+}
+
+export const INDICATORS_KEY = "news-desk/indicators.json";
+
+/** The indicator definitions, or the defaults when none are stored. Phase 4's
+ * pin and unpin are the only writers. */
+export async function readIndicatorDefs(): Promise<IndicatorDef[]> {
+  let bytes: Buffer;
+  try {
+    bytes = await getObjectBytes(bucket(), INDICATORS_KEY);
+  } catch (err) {
+    const name = (err as { name?: string }).name;
+    if (name === "NoSuchKey" || name === "NotFound") return DEFAULT_INDICATORS;
+    throw err;
+  }
+  return z.array(indicatorDefSchema).parse(JSON.parse(bytes.toString("utf8")));
 }

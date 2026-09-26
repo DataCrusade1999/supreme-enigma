@@ -36,6 +36,7 @@ export async function runRefresh(now: Date = new Date()): Promise<Snapshot> {
       const tag = tagging.tags.get(h.id);
       return tag ? { ...h, tag } : h;
     }),
+    indicators: [],
     sourceErrors: errors,
   };
   await writeSnapshot(snapshot);

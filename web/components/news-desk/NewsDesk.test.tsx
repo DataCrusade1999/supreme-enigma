@@ -47,6 +47,7 @@ const SNAPSHOT: Snapshot = {
       tag: "Untagged",
     },
   ],
+  indicators: [],
   sourceErrors: [{ source: "SEBI", message: "timed out" }],
 };
 

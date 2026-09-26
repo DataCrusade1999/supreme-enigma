@@ -49,6 +49,7 @@ describe("runRefresh", () => {
       version: 1,
       refreshedAt: "2026-09-24T12:00:00.000Z",
       headlines: [stored],
+      indicators: [],
       sourceErrors: [],
     };
     vi.mocked(readSnapshot).mockResolvedValue(previous);
@@ -59,6 +60,7 @@ describe("runRefresh", () => {
       version: 1,
       refreshedAt: "2026-09-25T12:00:00.000Z",
       headlines: [fresh, stored],
+      indicators: [],
       sourceErrors: [{ source: "SEBI", message: "timed out" }],
     });
     expect(writeSnapshot).toHaveBeenCalledWith(result);
@@ -98,6 +100,7 @@ describe("runRefresh", () => {
       version: 1,
       refreshedAt: "2026-09-24T12:00:00.000Z",
       headlines: [stored, failedBefore],
+      indicators: [],
       sourceErrors: [],
     });
     vi.mocked(tagHeadlines).mockResolvedValue({
@@ -124,6 +127,7 @@ describe("runRefresh", () => {
       version: 1,
       refreshedAt: "2026-09-24T12:00:00.000Z",
       headlines: [dropped],
+      indicators: [],
       sourceErrors: [],
     });
     await runRefresh(NOW);
