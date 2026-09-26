@@ -34,12 +34,14 @@ export default async function NewsDeskPage() {
       </header>
 
       <main className="grid flex-1 grid-cols-12 gap-6 px-5 py-14 sm:px-10">
-        <div className="col-span-12 lg:col-span-8">
+        <div className="col-span-12">
           <h1 className="font-display text-3xl leading-[1.15]">News Desk</h1>
-          <p className="mt-4 mb-8 text-sm leading-relaxed text-muted">
-            Indian economy, reforms and legislation, from 13 free sources. Refresh fetches
-            everything again; nothing updates on its own.
-          </p>
+          <div className="lg:w-2/3">
+            <p className="mt-4 mb-8 text-sm leading-relaxed text-muted">
+              Indian economy, reforms and legislation, from 13 free sources. Refresh fetches
+              everything again; nothing updates on its own.
+            </p>
+          </div>
           <NewsDesk initial={initial} problem={problem} nowIso={new Date().toISOString()} />
         </div>
       </main>

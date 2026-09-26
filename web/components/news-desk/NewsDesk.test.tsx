@@ -47,7 +47,18 @@ const SNAPSHOT: Snapshot = {
       tag: "Untagged",
     },
   ],
-  indicators: [],
+  indicators: [
+    {
+      id: "cpi-headline",
+      label: "Retail inflation",
+      unit: "%",
+      period: "Aug 2026",
+      latest: 4.82,
+      prevPeriod: "Jul 2026",
+      prev: 4.45,
+      lastGoodAt: "2026-09-25T10:00:00.000Z",
+    },
+  ],
   sourceErrors: [{ source: "SEBI", message: "timed out" }],
 };
 
@@ -167,5 +178,26 @@ describe("NewsDesk", () => {
     const allDropped = { ...SNAPSHOT, headlines: SNAPSHOT.headlines.filter((h) => h.tag === "Drop") };
     render(<NewsDesk initial={allDropped} problem={null} nowIso={NOW} />);
     expect(screen.getByText("Every saved headline is hidden.")).toBeInTheDocument();
+  });
+
+  it("shows the indicator table beside the headlines", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    expect(within(screen.getByRole("table", { name: "Official indicators" })).getByText("4.82%")).toBeInTheDocument();
+  });
+
+  it("updates the indicators when a refresh returns new ones", async () => {
+    const next = {
+      ...SNAPSHOT,
+      indicators: [{ ...SNAPSHOT.indicators[0], period: "Sep 2026", latest: 5.1, prevPeriod: "Aug 2026", prev: 4.82 }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(next), { status: 200 })));
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(screen.getByText("5.1%")).toBeInTheDocument());
+  });
+
+  it("shows the empty indicator table before the first refresh", () => {
+    render(<NewsDesk initial={null} problem={null} nowIso={NOW} />);
+    expect(screen.getByText("Indicators load on the next Refresh.")).toBeInTheDocument();
   });
 });
