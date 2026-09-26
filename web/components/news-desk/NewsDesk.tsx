@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { formatAge } from "../../lib/news-desk/format";
 import { TOPICS, type Topic } from "../../lib/news-desk/tags";
-import type { Snapshot } from "../../lib/news-desk/types";
+import type { IndicatorValue, Snapshot } from "../../lib/news-desk/types";
+import { ChatPanel } from "./ChatPanel";
 import { HeadlineList } from "./HeadlineList";
 import { IndicatorTable } from "./IndicatorTable";
 
@@ -45,6 +46,25 @@ export function NewsDesk({
     } finally {
       setRefreshing(false);
     }
+  }
+
+  async function remove(id: string) {
+    setError(null);
+    try {
+      const res = await fetch(`/api/news-desk/indicators/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError(`Could not remove the indicator: ${body?.error ?? `status ${res.status}`}`);
+        return;
+      }
+      setSnapshot((s) => (s ? { ...s, indicators: s.indicators.filter((v) => v.id !== id) } : s));
+    } catch {
+      setError("Could not remove the indicator: network error");
+    }
+  }
+
+  function pinned(row: IndicatorValue) {
+    setSnapshot((s) => (s ? { ...s, indicators: [...s.indicators.filter((v) => v.id !== row.id), row] } : s));
   }
 
   const failed = snapshot?.sourceErrors ?? [];
@@ -105,7 +125,7 @@ export function NewsDesk({
             lift it over the refresh bar when the headline column is short. */}
         <aside className="col-span-12 lg:sticky lg:top-0 lg:order-2 lg:col-span-4 lg:flex lg:h-screen lg:items-center lg:self-start">
           <div className="w-full">
-            <IndicatorTable indicators={snapshot?.indicators ?? []} now={now} />
+            <IndicatorTable indicators={snapshot?.indicators ?? []} now={now} onRemove={remove} />
           </div>
         </aside>
         <div className="col-span-12 lg:order-1 lg:col-span-8">
@@ -146,6 +166,7 @@ export function NewsDesk({
           )}
         </div>
       </div>
+      <ChatPanel onPinned={pinned} />
     </div>
   );
 }
