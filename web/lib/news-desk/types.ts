@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { STORED_TAGS } from "./tags";
+
+export * from "./tags";
 
 export type SourceDef = {
   name: string;
@@ -10,15 +13,6 @@ export type SourceDef = {
   // SEBI's repeats the title. See the design spec §5.2.
   summary: boolean;
 };
-
-// The topics shown as tabs. The model may also answer Drop for an off-topic item;
-// Untagged means not yet tagged, or the tagging call failed. See spec §5.3.
-export const TOPICS = ["Economy", "Reforms", "Legislation"] as const;
-export type Topic = (typeof TOPICS)[number];
-export const MODEL_TAGS = [...TOPICS, "Drop"] as const;
-export type ModelTag = (typeof MODEL_TAGS)[number];
-export const STORED_TAGS = [...MODEL_TAGS, "Untagged"] as const;
-export type StoredTag = (typeof STORED_TAGS)[number];
 
 export const headlineSchema = z.object({
   id: z.string(),

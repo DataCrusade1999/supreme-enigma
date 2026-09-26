@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { formatAge } from "../../lib/news-desk/format";
-import { TOPICS, type Snapshot, type Topic } from "../../lib/news-desk/types";
+import { TOPICS, type Topic } from "../../lib/news-desk/tags";
+import type { Snapshot } from "../../lib/news-desk/types";
 import { HeadlineList } from "./HeadlineList";
 
 type Tab = "All" | Topic | "Hidden";
