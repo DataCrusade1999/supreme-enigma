@@ -24,13 +24,26 @@ function reply(tags: unknown, cost = 0.001) {
   );
 }
 
-type Sent = { model: string; max_tokens: number; usage: unknown; response_format: any; messages: any[] };
+type Message = { role: string; content: string };
+type Sent = {
+  model: string;
+  max_tokens: number;
+  usage: unknown;
+  response_format: {
+    type: string;
+    json_schema: {
+      strict: boolean;
+      schema: { properties: { tags: { items: { properties: { tag: { enum: string[] } } } } } };
+    };
+  };
+  messages: Message[];
+};
 function sentBody(fetchMock: ReturnType<typeof vi.fn>, call = 0): Sent {
   const [, init] = fetchMock.mock.calls[call] as unknown as [string, RequestInit];
   return JSON.parse(init.body as string);
 }
 function sentItems(fetchMock: ReturnType<typeof vi.fn>, call = 0) {
-  const user = sentBody(fetchMock, call).messages.find((m) => m.role === "user");
+  const user = sentBody(fetchMock, call).messages.find((m) => m.role === "user")!;
   return JSON.parse(user.content) as { n: number; title: string; source: string }[];
 }
 
@@ -89,7 +102,7 @@ describe("tagHeadlines", () => {
   it("splits 250 items into three calls; a failed one leaves only its items untagged", async () => {
     const items = Array.from({ length: 250 }, (_, i) => headline(i));
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
-      const user = JSON.parse(init.body as string).messages.find((m: any) => m.role === "user");
+      const user = (JSON.parse(init.body as string) as Sent).messages.find((m) => m.role === "user")!;
       const sent = JSON.parse(user.content) as { n: number; title: string }[];
       if (sent[0].title === "Story 100") return new Response("upstream error", { status: 502 });
       return reply(sent.map((s) => ({ n: s.n, tag: "Economy" })));
