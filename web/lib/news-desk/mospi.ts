@@ -6,6 +6,10 @@ const TIMEOUT_MS = 10_000;
 
 export class MospiError extends Error {}
 
+/** MoSPI could not be reached: an HTTP error status, a timeout or a network
+ * failure. Unlike a rejected query, asking again differently will not help. */
+export class MospiUnavailableError extends MospiError {}
+
 let nextId = 1;
 
 export async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -24,11 +28,11 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
     });
   } catch (err) {
     if ((err as { name?: string }).name === "TimeoutError") {
-      throw new MospiError(`MoSPI did not answer within ${TIMEOUT_MS / 1000} s`);
+      throw new MospiUnavailableError(`MoSPI did not answer within ${TIMEOUT_MS / 1000} s`);
     }
-    throw err;
+    throw new MospiUnavailableError(`MoSPI could not be reached: ${err instanceof Error ? err.message : String(err)}`);
   }
-  if (!res.ok) throw new MospiError(`MoSPI status ${res.status}`);
+  if (!res.ok) throw new MospiUnavailableError(`MoSPI status ${res.status}`);
 
   const body = await res.text();
   // One event, whose data may span several data: lines (joined with newlines).
