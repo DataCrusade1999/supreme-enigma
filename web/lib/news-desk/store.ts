@@ -50,16 +50,27 @@ export async function writeSnapshot(snapshot: Snapshot): Promise<void> {
 
 export const INDICATORS_KEY = "news-desk/indicators.json";
 
-/** The indicator definitions, or the defaults when none are stored. Phase 4's
- * pin and unpin are the only writers. */
-export async function readIndicatorDefs(): Promise<IndicatorDef[]> {
+/** The pinned indicator definitions. `indicators.json` holds only pins: stored
+ * defaults would never pick up a change to DEFAULT_INDICATORS (spec §6.2). */
+export async function readPins(): Promise<IndicatorDef[]> {
   let bytes: Buffer;
   try {
     bytes = await getObjectBytes(bucket(), INDICATORS_KEY);
   } catch (err) {
     const name = (err as { name?: string }).name;
-    if (name === "NoSuchKey" || name === "NotFound") return DEFAULT_INDICATORS;
+    if (name === "NoSuchKey" || name === "NotFound") return [];
     throw err;
   }
   return z.array(indicatorDefSchema).parse(JSON.parse(bytes.toString("utf8")));
+}
+
+export async function writePins(pins: IndicatorDef[]): Promise<void> {
+  await putObjectJson(bucket(), INDICATORS_KEY, pins);
+}
+
+/** The defaults, then the pins. */
+export async function readIndicatorDefs(): Promise<IndicatorDef[]> {
+  const defaultIds = new Set(DEFAULT_INDICATORS.map((d) => d.id));
+  const pins = await readPins();
+  return [...DEFAULT_INDICATORS, ...pins.filter((p) => !defaultIds.has(p.id))];
 }

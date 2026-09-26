@@ -12,9 +12,11 @@ import {
   INDICATORS_KEY,
   isStorageConfigured,
   readIndicatorDefs,
+  readPins,
   readSnapshot,
   SNAPSHOT_KEY,
   SnapshotCorruptError,
+  writePins,
   writeSnapshot,
 } from "./store";
 import type { Snapshot } from "./types";
@@ -110,12 +112,27 @@ describe("news-desk store", () => {
     expect(vi.mocked(getObjectBytes)).toHaveBeenCalledWith("audio-bucket", INDICATORS_KEY);
   });
 
-  it("reads stored indicator definitions", async () => {
-    const stored = [
-      { id: "x", label: "X", dataset: "IIP", filters: { type: "General" }, valueField: "growth_rate", unit: "%" },
-    ];
-    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(stored)));
-    expect(await readIndicatorDefs()).toEqual(stored);
+  it("lists the defaults, then the stored pins", async () => {
+    const pin = { id: "pin-abc", label: "X", dataset: "IIP", filters: { type: "General" }, valueField: "growth_rate", unit: "%" };
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify([pin])));
+    expect(await readIndicatorDefs()).toEqual([...DEFAULT_INDICATORS, pin]);
+  });
+
+  it("does not let a stored entry replace or repeat a default", async () => {
+    const clash = { ...DEFAULT_INDICATORS[0], label: "Changed" };
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify([clash])));
+    expect(await readIndicatorDefs()).toEqual(DEFAULT_INDICATORS);
+  });
+
+  it("reads no pins when none are stored", async () => {
+    vi.mocked(getObjectBytes).mockRejectedValue(Object.assign(new Error("gone"), { name: "NoSuchKey" }));
+    expect(await readPins()).toEqual([]);
+  });
+
+  it("writes the pins as the whole indicators file", async () => {
+    const pin = { id: "pin-abc", label: "X", dataset: "IIP", filters: {}, valueField: "growth_rate", unit: "%" };
+    await writePins([pin]);
+    expect(putObjectJson).toHaveBeenCalledWith("audio-bucket", INDICATORS_KEY, [pin]);
   });
 
   it("surfaces an S3 failure reading indicator definitions", async () => {
