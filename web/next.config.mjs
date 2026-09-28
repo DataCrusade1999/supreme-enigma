@@ -13,6 +13,19 @@ const nextConfig = {
       },
     ];
   },
+  async headers() {
+    // dev.ashutosh-pandey.com and stage.ashutosh-pandey.com are public copies
+    // of the site. A header rather than a robots.txt disallow: a crawler that
+    // is blocked from fetching a page never sees a noindex on it, and can
+    // still index the bare URL from links.
+    if (process.env.VERCEL_ENV === "production") return [];
+    return [
+      {
+        source: "/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -19,9 +19,9 @@ Not for merging a feature branch into `dev` — that is the review sequence in
 
 | Branch | URL | Lambda | Bucket |
 |---|---|---|---|
-| `main` | https://bgm-looper.vercel.app | `bgm-looper-processor` | `portfolio-data-223376380711` |
-| `stage` | https://bgm-looper-git-stage-ashutosh-pandeys-projects-77cb3a00.vercel.app | `bgm-looper-processor-stage` | `portfolio-data-stage-223376380711` |
-| `dev` | https://bgm-looper-git-dev-ashutosh-pandeys-projects-77cb3a00.vercel.app | `bgm-looper-processor-dev` | `portfolio-data-dev-223376380711` |
+| `main` | https://ashutosh-pandey.com | `bgm-looper-processor` | `portfolio-data-223376380711` |
+| `stage` | https://stage.ashutosh-pandey.com | `bgm-looper-processor-stage` | `portfolio-data-stage-223376380711` |
+| `dev` | https://dev.ashutosh-pandey.com | `bgm-looper-processor-dev` | `portfolio-data-dev-223376380711` |
 
 ## Procedure
 

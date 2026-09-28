@@ -5,8 +5,7 @@ The portfolio half (home, about, projects, resume, blog, contact) is public
 and needs no login. The tools half sits behind a single shared password —
 these are things built for one user, not a product with accounts.
 
-Live at **https://bgm-looper.vercel.app** (the domain still carries the name
-of the first tool that lived here).
+Live at **https://ashutosh-pandey.com**.
 
 ## What's on the site
 
@@ -93,9 +92,9 @@ promotion works.
 
 | Branch  | URL | Purpose |
 |---------|-----|---------|
-| `main`  | https://bgm-looper.vercel.app | Production |
-| `stage` | https://bgm-looper-git-stage-ashutosh-pandeys-projects-77cb3a00.vercel.app | Pre-prod QA |
-| `dev`   | https://bgm-looper-git-dev-ashutosh-pandeys-projects-77cb3a00.vercel.app | Default branch, integration |
+| `main`  | https://ashutosh-pandey.com | Production |
+| `stage` | https://stage.ashutosh-pandey.com | Pre-prod QA |
+| `dev`   | https://dev.ashutosh-pandey.com | Default branch, integration |
 
 Promote by PR: `dev` → `stage` → `main`.
 
