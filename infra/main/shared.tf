@@ -30,10 +30,7 @@ locals {
     [local.lambda_function_name],
     [for f in aws_lambda_function.looper_env : f.function_name]
   )
-  all_audio_bucket_arns = concat(
-    [aws_s3_bucket.audio.arn],
-    [for b in aws_s3_bucket.audio_env : b.arn]
-  )
+  all_data_bucket_arns = [for b in aws_s3_bucket.data : b.arn]
 }
 
 # --- ECR (one repo, per-branch tag prefixes — see environments.tf's Lambda functions
@@ -131,12 +128,9 @@ resource "aws_iam_role_policy" "lambda_s3" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
-      Action = ["s3:GetObject", "s3:PutObject"]
-      Resource = concat(
-        ["${aws_s3_bucket.audio.arn}/*"],
-        [for b in aws_s3_bucket.audio_env : "${b.arn}/*"]
-      )
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject"]
+      Resource = [for arn in local.all_data_bucket_arns : "${arn}/*"]
     }]
   })
 }
@@ -144,7 +138,7 @@ resource "aws_iam_role_policy" "lambda_s3" {
 locals {
   # Only main's bucket holds resume data — dev/stage read and write it too, via the
   # env-agnostic RESUME_BUCKET_NAME. See the design spec §4.1.
-  resume_bucket_arn = aws_s3_bucket.audio.arn
+  resume_bucket_arn = aws_s3_bucket.data["main"].arn
 }
 
 # --- GitHub Actions OIDC: how deploy.yml authenticates to AWS. It replaced an IAM user
@@ -278,7 +272,7 @@ resource "aws_iam_role_policy" "vercel" {
         Effect = "Allow"
         Action = ["s3:PutObject", "s3:GetObject"]
         Resource = flatten([
-          for arn in local.all_audio_bucket_arns : ["${arn}/uploads/*", "${arn}/outputs/*"]
+          for arn in local.all_data_bucket_arns : ["${arn}/uploads/*", "${arn}/outputs/*"]
         ])
       },
       {
@@ -305,17 +299,17 @@ resource "aws_iam_role_policy" "vercel" {
         Sid      = "NewsDeskObjects"
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = [for arn in local.all_audio_bucket_arns : "${arn}/news-desk/*"]
+        Resource = [for arn in local.all_data_bucket_arns : "${arn}/news-desk/*"]
       },
       {
         # Same reason as ResumeHeadObjectNotFound above: without ListBucket, S3 answers
         # a GetObject for a missing key with 403, not 404. The News Desk's first page
         # load reads a snapshot that does not exist yet, and would report that as a
-        # permissions failure. Grants listing key names in the three audio buckets.
+        # permissions failure. Grants listing key names in the three data buckets.
         Sid      = "NewsDeskMissingSnapshotIs404"
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]
-        Resource = local.all_audio_bucket_arns
+        Resource = local.all_data_bucket_arns
       },
       {
         Sid      = "InvokeProcessor"
@@ -487,7 +481,7 @@ resource "vercel_project_environment_variable" "aws_region" {
 resource "vercel_project_environment_variable" "resume_bucket_name" {
   project_id = vercel_project.looper.id
   key        = "RESUME_BUCKET_NAME"
-  value      = aws_s3_bucket.audio.id
+  value      = aws_s3_bucket.data["main"].id
   target     = local.env_targets
   sensitive  = false
 }

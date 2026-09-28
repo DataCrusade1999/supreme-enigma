@@ -2,22 +2,11 @@
 # and the Vercel env vars that point the app at its own bucket/function. Resources shared
 # across all three branches (ECR, IAM, the Vercel project itself) live in shared.tf instead.
 #
-# main's bucket/function are the original resources, kept unrenamed to avoid a destructive
+# main's Lambda function is the original resource, kept unrenamed to avoid a destructive
 # replacement — dev/stage are for_each twins (identical shape, different name/branch).
+# The three buckets are a single for_each keyed main/dev/stage.
 
 # --- S3 ---
-
-resource "aws_s3_bucket" "audio" {
-  bucket = "${var.project_name}-audio-${data.aws_caller_identity.current.account_id}"
-}
-
-resource "aws_s3_bucket_public_access_block" "audio" {
-  bucket                  = aws_s3_bucket.audio.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
 
 locals {
   # The three deployment origins that issue presigned-URL uploads. Wildcard origins were
@@ -38,8 +27,29 @@ locals {
   ]
 }
 
-resource "aws_s3_bucket_cors_configuration" "audio" {
-  bucket = aws_s3_bucket.audio.id
+# The buckets hold resume data and News Desk snapshots as well as audio, hence
+# "data". One for_each over all three branches; main has no suffix.
+locals {
+  data_bucket_suffix = { main = "", dev = "-dev", stage = "-stage" }
+}
+
+resource "aws_s3_bucket" "data" {
+  for_each = local.data_bucket_suffix
+  bucket   = "portfolio-data${each.value}-${data.aws_caller_identity.current.account_id}"
+}
+
+resource "aws_s3_bucket_public_access_block" "data" {
+  for_each                = aws_s3_bucket.data
+  bucket                  = each.value.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_cors_configuration" "data" {
+  for_each = aws_s3_bucket.data
+  bucket   = each.value.id
 
   cors_rule {
     allowed_methods = ["PUT", "GET"]
@@ -52,8 +62,10 @@ resource "aws_s3_bucket_cors_configuration" "audio" {
 # but resume/current.* must persist indefinitely. Bucket versioning is deliberately NOT
 # enabled — with versioning on, these expiration rules would only write delete markers
 # and every audio object would linger as a noncurrent version. See the design spec §4.2.
-resource "aws_s3_bucket_lifecycle_configuration" "audio" {
-  bucket = aws_s3_bucket.audio.id
+# Only main's bucket holds resume data, but all three get the same rules.
+resource "aws_s3_bucket_lifecycle_configuration" "data" {
+  for_each = aws_s3_bucket.data
+  bucket   = each.value.id
 
   rule {
     id     = "expire-audio-uploads"
@@ -97,66 +109,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "audio" {
   # on 2026-09-12 — zero objects outside these prefixes across all three buckets.
   # The remaining writer with bucket-wide access is the Lambda exec role; scoping
   # that too is the natural follow-up if a stray ever appears.
-}
-
-resource "aws_s3_bucket" "audio_env" {
-  for_each = toset(["dev", "stage"])
-  bucket   = "${var.project_name}-audio-${each.key}-${data.aws_caller_identity.current.account_id}"
-}
-
-resource "aws_s3_bucket_public_access_block" "audio_env" {
-  for_each                = aws_s3_bucket.audio_env
-  bucket                  = each.value.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_cors_configuration" "audio_env" {
-  for_each = aws_s3_bucket.audio_env
-  bucket   = each.value.id
-
-  cors_rule {
-    allowed_methods = ["PUT", "GET"]
-    allowed_origins = local.app_origins
-    allowed_headers = ["*"]
-  }
-}
-
-# Kept identical to main's rules above. Only main's bucket holds resume data, but a
-# matching configuration avoids a confusing diff between environments.
-resource "aws_s3_bucket_lifecycle_configuration" "audio_env" {
-  for_each = aws_s3_bucket.audio_env
-  bucket   = each.value.id
-
-  rule {
-    id     = "expire-audio-uploads"
-    status = "Enabled"
-    filter { prefix = "uploads/" }
-    expiration { days = 1 }
-  }
-
-  rule {
-    id     = "expire-audio-outputs"
-    status = "Enabled"
-    filter { prefix = "outputs/" }
-    expiration { days = 1 }
-  }
-
-  rule {
-    id     = "expire-resume-drafts"
-    status = "Enabled"
-    filter { prefix = "resume/drafts/" }
-    expiration { days = 1 }
-  }
-
-  rule {
-    id     = "expire-resume-archive"
-    status = "Enabled"
-    filter { prefix = "resume/archive/" }
-    expiration { days = 365 }
-  }
 }
 
 # --- Lambda ---
@@ -249,7 +201,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_invocation_rate" {
 resource "vercel_project_environment_variable" "s3_bucket_production" {
   project_id = vercel_project.looper.id
   key        = "S3_BUCKET_NAME"
-  value      = aws_s3_bucket.audio.bucket
+  value      = aws_s3_bucket.data["main"].bucket
   target     = ["production"]
   sensitive  = false
 }
@@ -257,7 +209,7 @@ resource "vercel_project_environment_variable" "s3_bucket_production" {
 resource "vercel_project_environment_variable" "s3_bucket_preview" {
   project_id = vercel_project.looper.id
   key        = "S3_BUCKET_NAME"
-  value      = aws_s3_bucket.audio_env["dev"].bucket
+  value      = aws_s3_bucket.data["dev"].bucket
   target     = ["preview"]
   sensitive  = false
 }
@@ -265,7 +217,7 @@ resource "vercel_project_environment_variable" "s3_bucket_preview" {
 resource "vercel_project_environment_variable" "s3_bucket_stage" {
   project_id = vercel_project.looper.id
   key        = "S3_BUCKET_NAME"
-  value      = aws_s3_bucket.audio_env["stage"].bucket
+  value      = aws_s3_bucket.data["stage"].bucket
   target     = ["preview"]
   git_branch = "stage"
   sensitive  = false

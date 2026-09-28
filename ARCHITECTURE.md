@@ -37,7 +37,7 @@ AWS (personal account 223376380711, us-east-1, Terraform-managed)
 | Resource | main | dev | stage |
 |---|---|---|---|
 | Lambda function | `bgm-looper-processor` | `-dev` | `-stage` |
-| S3 bucket | `bgm-looper-audio-<acct>` | `-dev-<acct>` | `-stage-<acct>` |
+| S3 bucket | `portfolio-data-<acct>` | `-dev-<acct>` | `-stage-<acct>` |
 | Vercel deploy | `bgm-looper.vercel.app` | `-git-dev-...` | `-git-stage-...` |
 
 Each Lambda: container image (`librosa`, `numpy`, `soundfile`,
