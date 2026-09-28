@@ -33,6 +33,8 @@ resource "aws_cognito_user_pool" "owner" {
   # Cognito accepts this relying party only once the prefix domain below exists, so
   # a from-scratch apply fails here after creating the pool. Recovery:
   # .claude/rules/infra.md ("Cognito WebAuthn on a from-scratch apply").
+  # Passkeys are bound to this relying party: renaming the prefix, changing region
+  # or moving to a custom domain invalidates every registered passkey.
   web_authn_configuration {
     relying_party_id  = "${local.cognito_domain_prefix}.auth.${var.aws_region}.amazoncognito.com"
     user_verification = "preferred"
@@ -64,7 +66,9 @@ resource "aws_cognito_user_pool" "owner" {
 }
 
 # DEVELOPER mode sends as the domain identity, so the identity has to let Cognito
-# do that — and only for this pool.
+# do that. The condition allows any user pool in this account (userpool/*), not
+# only this one: naming aws_cognito_user_pool.owner.arn would be a dependency
+# cycle, since the pool depends on this policy.
 resource "aws_sesv2_email_identity_policy" "cognito" {
   email_identity = aws_sesv2_email_identity.domain.email_identity
   policy_name    = "cognito-owner-pool"
