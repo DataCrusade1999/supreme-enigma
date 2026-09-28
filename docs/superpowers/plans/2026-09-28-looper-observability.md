@@ -80,7 +80,22 @@ class FakeLambdaContext:
 @pytest.fixture
 def lambda_context():
     return FakeLambdaContext()
+
+
+@pytest.fixture(autouse=True)
+def _log_to_captured_stdout(capsys):
+    # Powertools' Logger binds its handler to sys.stdout when looper.handler is
+    # imported, during collection, before capsys swaps sys.stdout. Rebinding it
+    # here lets tests read log lines; EMF metric lines are print()ed at flush
+    # time and are captured either way.
+    import sys
+
+    from looper import handler as handler_module
+
+    handler_module.logger.registered_handler.setStream(sys.stdout)
 ```
+
+Treat the first run of Step 5 as the check on this fixture: if `job finished` lines are missing from `capsys` output, the fixture is not taking effect; if they appear, it is doing its job.
 
 - [ ] **Step 3: Point every existing handler call at the fake context.** In `lambda/tests/test_handler.py`, each test that calls `handler_module.handler(..., None)` now takes `lambda_context` as a parameter and passes it instead of `None`:
 

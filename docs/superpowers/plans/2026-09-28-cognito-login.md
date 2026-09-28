@@ -106,9 +106,10 @@ locals {
 }
 
 resource "aws_cognito_user_pool" "owner" {
-  name                = "${var.project_name}-owner"
-  user_pool_tier      = "ESSENTIALS"
-  deletion_protection = "ACTIVE"
+  name           = "${var.project_name}-owner"
+  user_pool_tier = "ESSENTIALS"
+  # No deletion_protection: infra/main must stay destroyable by the kill-switch
+  # `terraform destroy`, and a protected pool fails that destroy partway.
 
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
@@ -291,7 +292,7 @@ gh pr create --base dev --title "feat(infra): Cognito user pool for owner sign-i
 Refs #290"
 ```
 
-With the owner's go-ahead: apply, then `No changes.`. Verify managed login renders: open `https://ashutosh-pandey-login.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=<client id>&response_type=code&scope=openid+email&redirect_uri=http://localhost:3000/api/auth/callback` — it shows "Continue with Google" and an email field; entering the owner's email offers an email code, which arrives from `no-reply@ashutosh-pandey.com`. The redirect to localhost afterwards fails (nothing is listening); that is expected. Merge per `merging-a-pr`.
+With the owner's go-ahead: apply, then plan again. `aws_cognito_user` with `username_attributes = ["email"]` is known to report a `username` diff on the next plan, because Cognito stores the username as the user's `sub`. If the second plan shows only that, add `lifecycle { ignore_changes = [username] }` to `aws_cognito_user.owner` with a one-line comment saying why, and plan again until it shows `No changes.`. Verify managed login renders: open `https://ashutosh-pandey-login.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=<client id>&response_type=code&scope=openid+email&redirect_uri=http://localhost:3000/api/auth/callback` — it shows "Continue with Google" and an email field; entering the owner's email offers an email code, which arrives from `no-reply@ashutosh-pandey.com`. The redirect to localhost afterwards fails (nothing is listening); that is expected. Merge per `merging-a-pr`.
 
 ---
 

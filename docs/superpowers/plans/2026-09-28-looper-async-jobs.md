@@ -406,7 +406,7 @@ Refs #286
 
 Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 git push -u origin feat/looper-async-lambda
-gh pr create --base dev --title "feat(lambda): accept SQS events and record job status" --body "Phase 1, PR 1 of 4 (spec §7). Carries the design spec and plan. The handler accepts both the direct-invoke payload and SQS-wrapped S3 events; direct invokes behave exactly as today.
+gh pr create --base dev --title "feat(lambda): accept SQS events and record job status" --body "Phase 1, PR 1 of 4 (spec §7). Carries the specs and plans for all five phases of epic #285. The handler accepts both the direct-invoke payload and SQS-wrapped S3 events; direct invokes behave exactly as today.
 
 Refs #286"
 ```

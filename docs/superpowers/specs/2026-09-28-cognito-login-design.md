@@ -64,7 +64,8 @@ Non-goals:
 Everything is in `infra/main/auth.tf` and shared by all environments, like `COOKIE_SECRET`.
 
 - `aws_cognito_user_pool.owner`:
-  - Essentials, email as the username, admin-created users only, deletion protection
+  - Essentials, email as the username, admin-created users only
+  - no deletion protection, so the kill-switch `terraform destroy` of `infra/main` still works
   - the sign-in policy above
   - WebAuthn with the relying party set to the Cognito domain
   - SES developer email
