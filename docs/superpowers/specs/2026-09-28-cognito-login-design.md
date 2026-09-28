@@ -3,7 +3,7 @@
 **Date:** 2026-09-28
 **Status:** Approved 2026-09-28. Written without a brainstorming session, at the owner's request; the owner reviewed the §3 decisions afterwards.
 **Issue:** #290
-**Epic:** #285 (phase 5 of 5). Depends on phase 4 (#289) for the SES domain identity.
+**Epic:** #285 (phase 5 of 5). Built before phase 4 (#289): it creates the SES identities and DNS records phase 4 had planned, and phase 4 reuses them.
 
 ## 1. Problem
 
@@ -25,7 +25,6 @@ Non-goals:
 
 - GitHub sign-in. Cognito has no built-in GitHub provider, and GitHub OAuth isn't OpenID Connect, so it would need an OIDC wrapper service. Google plus passkey plus email code covers the owner.
 - A logout button. There's none today, and the session still expires after 7 days.
-- A custom domain for the Cognito login page (`auth.ashutosh-pandey.com`). It would need an ACM certificate and DNS records, and it makes no difference to one user. The prefix domain `ashutosh-pandey-login.auth.us-east-1.amazoncognito.com` is used instead.
 - Sign-in on the `*.vercel.app` URLs. Only the four registered callback hosts work: the apex, `dev.`, `stage.` and `localhost:3000`.
 
 ## 3. Decisions
@@ -36,7 +35,7 @@ Non-goals:
 | Client type | Public client, no secret, PKCE required | Nothing to leak. PKCE covers the code-interception risk a secret would cover. |
 | Feature plan | Essentials | Managed login, passkeys and email codes need it. Free up to 10,000 monthly active users, and this has one. |
 | First factors | `PASSWORD`, `EMAIL_OTP`, `WEB_AUTHN` | The owner user gets a random 32-character password that nobody knows. It exists so the user is `CONFIRMED` and so the policy is accepted in case AWS requires `PASSWORD` in the list. |
-| Cognito's email | `DEVELOPER` mode through phase 4's SES domain identity, from `no-reply@ashutosh-pandey.com` | Email codes need SES. The owner's address is already verified in SES, so the sandbox is enough. |
+| Cognito's email | `DEVELOPER` mode through an SES domain identity for `ashutosh-pandey.com`, from `no-reply@ashutosh-pandey.com` | Email codes need the Essentials plan and SES. The account is in the SES sandbox, which only delivers to verified addresses, so the owner's address becomes an SES identity too. That is enough for one recipient. |
 | Owner check | ID token `email` equals `OWNER_EMAIL` (case-insensitive) and `email_verified` is true | Google sign-in creates a Cognito user for any Google account. The app is the only gate for those. |
 | State and PKCE storage | One signed, short-lived cookie (`looper_oauth`, 10 min, path `/api/auth`) holding `{state, verifier, next}` | No server storage. Signed with `COOKIE_SECRET`, like the session. |
 | Rollout | Infra first. Then the web switch. Then remove `APP_PASSWORD` once the switch is on main. | Removing the Vercel env var earlier would break password login on stage and main. |
@@ -61,22 +60,39 @@ Non-goals:
 
 ## 5. Infrastructure
 
-Everything is in `infra/main/auth.tf` and shared by all environments, like `COOKIE_SECRET`.
+Everything is shared by all environments, like `COOKIE_SECRET`.
+
+SES and DNS, in `infra/main/email.tf` (the resources phase 4 had planned, moved here so this phase doesn't wait for it):
+
+- `aws_sesv2_email_identity.domain`: `ashutosh-pandey.com`, Easy DKIM with RSA 2048.
+- `vercel_dns_record` × 3: the DKIM CNAMEs, `<token>._domainkey` → `<token>.dkim.amazonses.com`.
+- `vercel_dns_record`: TXT `_dmarc` = `v=DMARC1; p=none;`, with no `rua` address.
+- `aws_sesv2_email_identity.owner` for `var.alert_email`. SES sends a verification link that the owner clicks once.
+- `local.site_hosts` (in `shared.tf`): the apex, `dev.` and `stage.` hosts, used for the callback URLs.
+
+The user pool can only use a verified identity, so these are applied first with `-target`, and the rest once DKIM shows `SUCCESS` and the owner has clicked the link.
+
+Cognito, in `infra/main/auth.tf`:
 
 - `aws_cognito_user_pool.owner`:
   - Essentials, email as the username, admin-created users only
   - no deletion protection, so the kill-switch `terraform destroy` of `infra/main` still works
   - the sign-in policy above
-  - WebAuthn with the relying party set to the Cognito domain
+  - WebAuthn with the relying party set to `auth.ashutosh-pandey.com`
   - SES developer email
-- `aws_sesv2_email_identity_policy` allowing `cognito-idp.amazonaws.com` to send as the domain, for this user pool only.
-- `aws_cognito_user_pool_domain` `ashutosh-pandey-login`, with `managed_login_version = 2`.
+- `aws_sesv2_email_identity_policy` allowing `cognito-idp.amazonaws.com` to send as the domain, for any user pool in the account (naming this pool would be a dependency cycle).
+- `aws_cognito_user_pool_domain` `auth.ashutosh-pandey.com`, a custom domain with `managed_login_version = 2`. Passkeys bind to the relying party's hostname, so a hostname the site owns keeps them working if the login service behind it ever changes; Cognito's prefix domain would not. It needs:
+  - `aws_acm_certificate` for that hostname in `us-east-1`, validated through a `vercel_dns_record`
+  - a CAA record at the apex allowing `amazon.com`, because Vercel's system CAA records allow only Sectigo, Let's Encrypt and Google
+  - a CNAME `auth` → the domain's CloudFront distribution
+  - all Vercel DNS records carry `team_id`; the domains API answers 403 without it
 - `aws_cognito_managed_login_branding` with Cognito's default look. Managed login v2 pages need a branding style assigned to the client.
 - `aws_cognito_identity_provider` Google:
   - `openid email profile`
+  - ignores the six endpoint keys Cognito adds to `provider_details`, which every plan would otherwise strip
   - maps `email` and `email_verified`
   - client ID and secret from two new required variables, `google_client_id` and `google_client_secret`
-  - the Google OAuth client itself is created by hand in Google Cloud Console, with the redirect URI `https://ashutosh-pandey-login.auth.us-east-1.amazoncognito.com/oauth2/idpresponse`
+  - the Google OAuth client itself is created by hand in Google Cloud Console, with the redirect URI `https://auth.ashutosh-pandey.com/oauth2/idpresponse`
 - `aws_cognito_user_pool_client` `web`:
   - public, code flow, scopes `openid email`
   - callback URLs for the four hosts

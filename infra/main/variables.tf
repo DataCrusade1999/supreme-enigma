@@ -73,3 +73,14 @@ variable "bootstrap_image_tag_stage" {
   type    = string
   default = "stage-0139b7ba435c89c79dc8c88bf6feb79f628753bb"
 }
+
+# Google OAuth client for Cognito's Google sign-in, created by hand in Google Cloud
+# Console (spec 2026-09-28-cognito-login-design.md §5).
+variable "google_client_id" {
+  type = string
+}
+
+variable "google_client_secret" {
+  type      = string
+  sensitive = true
+}

@@ -3,7 +3,7 @@
 **Date:** 2026-09-28
 **Status:** Approved 2026-09-28. Written without a brainstorming session, at the owner's request; the owner reviewed the §3 decisions afterwards.
 **Issue:** #289
-**Epic:** #285 (phase 4 of 5). Independent of phases 1–3. Phase 5 depends on its SES domain identity.
+**Epic:** #285 (phase 4 of 5). Independent of phases 1–3. Phase 5 (#290) was built first and already created the SES identities, DNS records and `local.site_hosts` listed in §5; this phase reuses them.
 
 ## 1. Problem
 
@@ -51,7 +51,7 @@ Non-goals:
 
 ## 5. Infrastructure
 
-SES and DNS:
+SES and DNS (created by phase 5, #290, in `infra/main/email.tf`; this phase adds nothing here):
 - `aws_sesv2_email_identity.domain`: `ashutosh-pandey.com`, Easy DKIM with RSA 2048.
 - `vercel_dns_record` × 3: CNAME records `<token>._domainkey` → `<token>.dkim.amazonses.com`. Uses `count = 3`, because the tokens aren't known until apply.
 - `vercel_dns_record`: TXT `_dmarc` = `v=DMARC1; p=none;`. No `rua` address, which would publish the owner's email in DNS.

@@ -4,13 +4,13 @@
 
 **Goal:** Replace the shared `APP_PASSWORD` with owner-only sign-in through Cognito managed login (Google, email code, passkey), keeping the existing signed session cookie and proxy.
 
-**Architecture:** `/login` links to `/api/auth/login`, which stores `{state, PKCE verifier, next}` in a signed 10-minute cookie and redirects to Cognito's `/oauth2/authorize`. `/api/auth/callback` checks state, exchanges the code with the verifier, verifies the ID token with `aws-jwt-verify`, requires the owner's verified email, and sets the same `looper_session` cookie the password route set. Terraform creates an Essentials user pool that sends email codes through phase 4's SES identity.
+**Architecture:** `/login` links to `/api/auth/login`, which stores `{state, PKCE verifier, next}` in a signed 10-minute cookie and redirects to Cognito's `/oauth2/authorize`. `/api/auth/callback` checks state, exchanges the code with the verifier, verifies the ID token with `aws-jwt-verify`, requires the owner's verified email, and sets the same `looper_session` cookie the password route set. Terraform creates an Essentials user pool that sends email codes through an SES identity for `ashutosh-pandey.com`, created in the same PR.
 
 **Tech Stack:** Terraform `aws` ~> 6.62 (Cognito user pool tiers, sign-in policy, managed login v2); Next.js 16 route handlers; `aws-jwt-verify`; Node `crypto`; Vitest; Playwright.
 
 **Spec:** `docs/superpowers/specs/2026-09-28-cognito-login-design.md`. Issue #290, epic #285.
 
-**Starts after:** phase 4's PR (its Tasks 1–5) is merged into `dev` and its SES identities are verified. `auth.tf` references `aws_sesv2_email_identity.domain` (phase 4 Task 1) and `local.site_hosts` (phase 4 Task 5), so both have to be in `dev`'s Terraform, not only applied.
+**Built before phase 4.** Task 1 creates the SES identities, DKIM/DMARC records and `local.site_hosts` that phase 4 had planned (phase 4's plan now reuses them). Nothing from phases 1–4 has to be in `dev` first.
 
 ## Global Constraints
 
@@ -19,8 +19,8 @@
 - Login error codes in `/login?error=`: `state`, `denied`, `not-allowed`, `failed`.
 - `safeNext`: a value starting with `/` that still resolves to the same origin once the URL parser has normalised it (tabs and newlines stripped, `\` read as `/`); returned as `pathname + search + hash`. Anything else → `/tools`. Same rule as the login page's `parseNext`.
 - Scopes `openid email`; `code_challenge_method=S256`; public client, no secret.
-- Env vars: `COGNITO_DOMAIN` (full `https://…amazoncognito.com`, no trailing slash), `COGNITO_CLIENT_ID`, `COGNITO_USER_POOL_ID`, `OWNER_EMAIL`, plus existing `COOKIE_SECRET`.
-- Cognito prefix domain `ashutosh-pandey-login`. Callback hosts: `ashutosh-pandey.com`, `dev.ashutosh-pandey.com`, `stage.ashutosh-pandey.com` (https) and `localhost:3000` (http).
+- Env vars: `COGNITO_DOMAIN` (`https://auth.ashutosh-pandey.com`, no trailing slash), `COGNITO_CLIENT_ID`, `COGNITO_USER_POOL_ID`, `OWNER_EMAIL`, plus existing `COOKIE_SECRET`.
+- Cognito custom domain `auth.ashutosh-pandey.com` (relying party for passkeys too). Callback hosts: `ashutosh-pandey.com`, `dev.ashutosh-pandey.com`, `stage.ashutosh-pandey.com` (https) and `localhost:3000` (http).
 - Owner check: `payload.email.toLowerCase() === OWNER_EMAIL.toLowerCase()` and `payload.email_verified` is `true` or `"true"`.
 - Terraform: plan against real state, apply with the owner's go-ahead before merge, then `No changes.`.
 - Commits end with `Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>`.
@@ -37,7 +37,7 @@
 
 | PR | Branch | Tasks | Merge only after |
 |---|---|---|---|
-| A | `feat/cognito-infra` | 1 | phase 4's PR merged into `dev` and the SES identities verified |
+| A | `feat/cognito-infra` | 1 | applied, SES identities verified, managed login checked |
 | B | `feat/cognito-login` | 2, 3, 4, 5, 6 | PR A applied |
 | C | `chore/remove-app-password` | 7 | PR B on `main` |
 
@@ -50,16 +50,18 @@ Each branch is cut from an up-to-date `dev`: `git switch dev && git pull && git 
 ### Task 1: Cognito in Terraform
 
 **Files:**
-- Create: `infra/main/auth.tf`
-- Modify: `infra/main/variables.tf`, `infra/main/terraform.tfvars.example`, `CLAUDE.md`
+- Create: `infra/main/email.tf`, `infra/main/auth.tf`
+- Modify: `infra/main/shared.tf`, `infra/main/variables.tf`, `infra/main/terraform.tfvars.example`, `CLAUDE.md`
 
 **Interfaces:**
-- Consumes: `aws_sesv2_email_identity.domain`, `var.alert_email`, `local.site_hosts` from phase 4 (`email.tf`), `local.env_targets`, `vercel_project.looper`.
-- Produces: Vercel env vars `COGNITO_DOMAIN`, `COGNITO_CLIENT_ID`, `COGNITO_USER_POOL_ID`, `OWNER_EMAIL`, which Tasks 3–4 read.
+- Consumes: `var.alert_email`, `local.env_targets`, `vercel_project.looper`, `vercel_project_domain.custom`.
+- Produces: Vercel env vars `COGNITO_DOMAIN`, `COGNITO_CLIENT_ID`, `COGNITO_USER_POOL_ID`, `OWNER_EMAIL`, which Tasks 3–4 read. `aws_sesv2_email_identity.domain`, `aws_sesv2_email_identity.owner` and `local.site_hosts`, which phase 4 reuses.
+
+- [ ] **Step 0: SES identities and DNS.** Create `infra/main/email.tf` with `aws_sesv2_email_identity.domain` (`vercel_project_domain.custom.domain`, Easy DKIM RSA 2048), three `vercel_dns_record.ses_dkim` CNAMEs (`count = 3`, `<token>._domainkey` → `<token>.dkim.amazonses.com`), `vercel_dns_record.dmarc` (TXT `_dmarc` = `v=DMARC1; p=none;`), each with `team_id = local.vercel_team_id` (without it the domains API answers 403) and `aws_sesv2_email_identity.owner` (`var.alert_email`). The owner identity is needed because the account is in the SES sandbox, which delivers only to verified addresses. In `shared.tf`, after `vercel_project_domain.custom_branch`, add `locals { site_hosts = { main = <apex>, dev = "dev.<apex>", stage = "stage.<apex>" } }`, built from `vercel_project_domain.custom.domain`.
 
 - [ ] **Step 1: Create the Google OAuth client by hand** (Terraform cannot). Google Cloud Console → APIs & Services → Credentials → Create OAuth client ID → Web application:
-  - Authorized JavaScript origin: `https://ashutosh-pandey-login.auth.us-east-1.amazoncognito.com`
-  - Authorized redirect URI: `https://ashutosh-pandey-login.auth.us-east-1.amazoncognito.com/oauth2/idpresponse`
+  - Authorized JavaScript origin: `https://auth.ashutosh-pandey.com`
+  - Authorized redirect URI: `https://auth.ashutosh-pandey.com/oauth2/idpresponse`
   - OAuth consent screen: External, in "Testing" with the owner's Google account as a test user is enough for one user.
   Put the client ID and secret into `infra/main/terraform.tfvars` as `google_client_id` and `google_client_secret`.
 
@@ -82,7 +84,7 @@ Append to `infra/main/terraform.tfvars.example`:
 
 ```hcl
 # Google OAuth client (Web application) used by Cognito for Google sign-in. Its
-# redirect URI is https://ashutosh-pandey-login.auth.us-east-1.amazoncognito.com/oauth2/idpresponse.
+# redirect URI is https://auth.ashutosh-pandey.com/oauth2/idpresponse.
 google_client_id     = "....apps.googleusercontent.com"
 google_client_secret = "..."
 ```
@@ -99,8 +101,9 @@ In `CLAUDE.md`'s Commands section, change "has **five required variables, none w
 # COOKIE_SECRET: the app turns a verified Cognito ID token into its own session.
 
 locals {
-  cognito_domain_prefix = "ashutosh-pandey-login"
-  cognito_domain_url    = "https://${local.cognito_domain_prefix}.auth.${var.aws_region}.amazoncognito.com"
+  # Managed login on the site's own domain, so passkeys bind to a hostname we own.
+  cognito_custom_domain = "auth.${vercel_project_domain.custom.domain}"
+  cognito_domain_url    = "https://${local.cognito_custom_domain}"
   login_callback_urls = concat(
     [for h in values(local.site_hosts) : "https://${h}/api/auth/callback"],
     ["http://localhost:3000/api/auth/callback"],
@@ -126,8 +129,13 @@ resource "aws_cognito_user_pool" "owner" {
     allowed_first_auth_factors = ["PASSWORD", "EMAIL_OTP", "WEB_AUTHN"]
   }
 
+  # Cognito accepts this relying party only once the custom domain below exists, so
+  # a from-scratch apply fails here after creating the pool. Recovery:
+  # .claude/rules/infra.md ("Cognito WebAuthn on a from-scratch apply").
+  # Passkeys are bound to this hostname: they keep working with any login service
+  # served at auth.ashutosh-pandey.com, and stop working if that hostname changes.
   web_authn_configuration {
-    relying_party_id  = "${local.cognito_domain_prefix}.auth.${var.aws_region}.amazoncognito.com"
+    relying_party_id  = local.cognito_custom_domain
     user_verification = "preferred"
   }
 
@@ -157,7 +165,9 @@ resource "aws_cognito_user_pool" "owner" {
 }
 
 # DEVELOPER mode sends as the domain identity, so the identity has to let Cognito
-# do that — and only for this pool.
+# do that. The condition allows any user pool in this account (userpool/*), not
+# only this one: naming aws_cognito_user_pool.owner.arn would be a dependency
+# cycle, since the pool depends on this policy.
 resource "aws_sesv2_email_identity_policy" "cognito" {
   email_identity = aws_sesv2_email_identity.domain.email_identity
   policy_name    = "cognito-owner-pool"
@@ -176,10 +186,62 @@ resource "aws_sesv2_email_identity_policy" "cognito" {
   })
 }
 
-resource "aws_cognito_user_pool_domain" "owner" {
-  domain                = local.cognito_domain_prefix
+# Cognito serves a custom domain through CloudFront, so the certificate has to be in
+# us-east-1 (var.aws_region already is).
+resource "aws_acm_certificate" "auth" {
+  domain_name       = local.cognito_custom_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Vercel's system CAA records allow only Sectigo, Let's Encrypt and Google, so ACM
+# fails with CAA_ERROR without this. It can't sit on auth. itself, which is a CNAME.
+resource "vercel_dns_record" "caa_amazon" {
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = ""
+  type    = "CAA"
+  value   = "0 issue \"amazon.com\""
+  ttl     = 60
+}
+
+# Vercel wants the record name relative to the domain and no trailing dots.
+resource "vercel_dns_record" "auth_acm" {
+  for_each = {
+    for o in aws_acm_certificate.auth.domain_validation_options : o.domain_name => o
+  }
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = trimsuffix(trimsuffix(each.value.resource_record_name, "."), ".${vercel_project_domain.custom.domain}")
+  type    = each.value.resource_record_type
+  value   = trimsuffix(each.value.resource_record_value, ".")
+  ttl     = 60
+}
+
+resource "aws_acm_certificate_validation" "auth" {
+  certificate_arn         = aws_acm_certificate.auth.arn
+  validation_record_fqdns = [for o in aws_acm_certificate.auth.domain_validation_options : o.resource_record_name]
+  depends_on              = [vercel_dns_record.auth_acm, vercel_dns_record.caa_amazon]
+}
+
+resource "aws_cognito_user_pool_domain" "custom" {
+  domain                = local.cognito_custom_domain
+  certificate_arn       = aws_acm_certificate_validation.auth.certificate_arn
   user_pool_id          = aws_cognito_user_pool.owner.id
   managed_login_version = 2
+}
+
+# The explicit record overrides Vercel's wildcard ALIAS for auth.
+resource "vercel_dns_record" "auth" {
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = "auth"
+  type    = "CNAME"
+  value   = aws_cognito_user_pool_domain.custom.cloudfront_distribution
+  ttl     = 300
 }
 
 resource "aws_cognito_identity_provider" "google" {
@@ -197,6 +259,18 @@ resource "aws_cognito_identity_provider" "google" {
     email          = "email"
     email_verified = "email_verified"
     username       = "sub"
+  }
+
+  # Cognito fills in Google's endpoints itself; without this every plan strips them.
+  lifecycle {
+    ignore_changes = [
+      provider_details["attributes_url"],
+      provider_details["attributes_url_add_attributes"],
+      provider_details["authorize_url"],
+      provider_details["oidc_issuer"],
+      provider_details["token_request_method"],
+      provider_details["token_url"],
+    ]
   }
 }
 
@@ -277,12 +351,12 @@ resource "vercel_project_environment_variable" "owner_email" {
 - [ ] **Step 4: Validate and plan**
 
 Run: `cd infra/main && terraform fmt && terraform validate && terraform plan -var-file=terraform.tfvars`
-Expected: creates 1 user pool, 1 identity policy, 1 domain, 1 identity provider, 1 client, 1 branding, 1 password, 1 user, 4 Vercel env vars. No other changes. If `validate` rejects an attribute (`user_pool_tier`, `sign_in_policy`, `web_authn_configuration`, `managed_login_version`, `aws_cognito_managed_login_branding`), check the provider docs for 6.63 (`terraform providers schema -json | node -e …` or the registry page) and adjust the name; do not drop the feature.
+Expected: `Plan: 23 to add, 0 to change, 0 to destroy.` — 2 SES identities, 4 SES DNS records, 1 CAA record, 1 certificate, 1 certificate validation, 1 validation record, 1 `auth` CNAME, 1 user pool, 1 identity policy, 1 custom domain, 1 identity provider, 1 client, 1 branding, 1 password, 1 user, 4 Vercel env vars. No other changes. If `validate` rejects an attribute (`user_pool_tier`, `sign_in_policy`, `web_authn_configuration`, `managed_login_version`, `aws_cognito_managed_login_branding`), check the provider docs for 6.63 (`terraform providers schema -json | node -e …` or the registry page) and adjust the name; do not drop the feature.
 
 - [ ] **Step 5: Commit, PR, apply**
 
 ```bash
-git add infra/main/auth.tf infra/main/variables.tf infra/main/terraform.tfvars.example CLAUDE.md
+git add infra/main/email.tf infra/main/auth.tf infra/main/shared.tf infra/main/variables.tf infra/main/terraform.tfvars.example CLAUDE.md
 git commit -m "feat(infra): Cognito user pool for owner sign-in
 
 Refs #290
@@ -294,7 +368,14 @@ gh pr create --base dev --title "feat(infra): Cognito user pool for owner sign-i
 Refs #290"
 ```
 
-With the owner's go-ahead: apply, then plan again. `aws_cognito_user` with `username_attributes = ["email"]` is known to report a `username` diff on the next plan, because Cognito stores the username as the user's `sub`. If the second plan shows only that, add `lifecycle { ignore_changes = [username] }` to `aws_cognito_user.owner` with a one-line comment saying why, and plan again until it shows `No changes.`. Verify managed login renders: open `https://ashutosh-pandey-login.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=<client id>&response_type=code&scope=openid+email&redirect_uri=http://localhost:3000/api/auth/callback` — it shows "Continue with Google" and an email field; entering the owner's email offers an email code, which arrives from `no-reply@ashutosh-pandey.com`. The redirect to localhost afterwards fails (nothing is listening); that is expected. Merge per `merging-a-pr`.
+With the owner's go-ahead, apply in two steps. The user pool's `source_arn` must be a verified SES identity, so SES and DNS go first:
+
+1. `terraform apply -var-file=terraform.tfvars -target=aws_sesv2_email_identity.domain -target=aws_sesv2_email_identity.owner -target=vercel_dns_record.ses_dkim -target=vercel_dns_record.dmarc`
+2. The owner clicks the SES verification link sent to their address.
+3. Within about an hour: `aws sesv2 get-email-identity --email-identity ashutosh-pandey.com --query "{verified: VerifiedForSendingStatus, dkim: DkimAttributes.Status}" --profile personal --region us-east-1` shows `verified: true, dkim: SUCCESS`, and the same command for the owner's address shows `verified: true`.
+4. `terraform apply -var-file=terraform.tfvars` for the rest. On a new pool this fails at `web_authn_configuration`, because the relying party must be the custom domain and Terraform creates that after the pool. Recover as `.claude/rules/infra.md` describes under "Cognito WebAuthn on a from-scratch apply". `aws_cognito_identity_provider.google` ignores the six `provider_details` keys Cognito fills in; without that, every plan strips them.
+
+Then plan again. `aws_cognito_user` with `username_attributes = ["email"]` is known to report a `username` diff on the next plan, because Cognito stores the username as the user's `sub`. If the second plan shows only that, add `lifecycle { ignore_changes = [username] }` to `aws_cognito_user.owner` with a one-line comment saying why, and plan again until it shows `No changes.`. Verify managed login renders: open `https://auth.ashutosh-pandey.com/oauth2/authorize?client_id=<client id>&response_type=code&scope=openid+email&redirect_uri=http://localhost:3000/api/auth/callback` — it shows "Continue with Google" and an email field; entering the owner's email offers an email code, which arrives from `no-reply@ashutosh-pandey.com`. The redirect to localhost afterwards fails (nothing is listening); that is expected. Merge per `merging-a-pr`.
 
 ---
 
