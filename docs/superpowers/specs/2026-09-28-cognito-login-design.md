@@ -46,7 +46,7 @@ Non-goals:
 1. The proxy redirects an unauthenticated request to `/login?next=/tools/x`, as now.
 2. `/login` shows a **Sign in** link to `/api/auth/login?next=/tools/x`.
 3. `GET /api/auth/login`:
-   - cleans up `next`: a relative path not starting `//`, otherwise `/tools`
+   - cleans up `next`: a path that still resolves to this site once parsed, otherwise `/tools`
    - creates a `state` and a PKCE verifier/challenge pair
    - sets `looper_oauth`
    - redirects to `<COGNITO_DOMAIN>/oauth2/authorize` with `response_type=code`, `client_id`, `redirect_uri=<origin>/api/auth/callback`, `scope=openid email`, `state`, `code_challenge`, `code_challenge_method=S256`
@@ -84,7 +84,7 @@ Everything is in `infra/main/auth.tf` and shared by all environments, like `COOK
   - `ALLOW_USER_AUTH` and `ALLOW_REFRESH_TOKEN_AUTH`
 - `aws_cognito_user` for the owner: `email_verified = true`, a random password, no invitation email.
 - Vercel env vars for production and preview: `COGNITO_DOMAIN`, `COGNITO_CLIENT_ID`, `COGNITO_USER_POOL_ID`, `OWNER_EMAIL`.
-- In the last PR: remove `var.app_password` and the `APP_PASSWORD` env var.
+- In the last PR: remove `var.app_password`, the `APP_PASSWORD` env var, and `vercel_firewall_config.looper`, whose only rule rate-limits the removed `/api/login`.
 
 The required variables go from five to seven with the Google pair, then to six once `app_password` is removed. `CLAUDE.md` and `terraform.tfvars.example` change with each step.
 
@@ -116,7 +116,7 @@ The required variables go from five to seven with the Google pair, then to six o
   - authorize URL parameters
   - code exchange: the request body, and an error when the response isn't OK
   - owner check: a match, a different email, a case difference, unverified email as `false` or `"false"`, and a verifier that throws
-  - `safeNext`: `//evil`, `https://evil` and `/\evil` are all rejected
+  - `safeNext`: `//evil`, `https://evil`, `/\evil` and `/<tab>/evil` are all rejected. It resolves the value as a URL and compares origins, like the login page's `parseNext`, because the parser strips the tab
   - login route: the redirect and the cookie
   - callback route:
     - success

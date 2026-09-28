@@ -29,7 +29,8 @@
 ## Review Focus
 
 - **Duplicate EventBridge delivery**: two executions for one key. The second must end in `AlreadyFinished`, never overwrite `done`. Checked in Task 4 with a manual double start.
-- **A job in flight during the switch** (row written `processing` by the SQS path, then the notification changes): the SQS message still completes through the SQS path, which stays in the Lambda until PR C merges. PR C's apply happens before its merge, so the SQS code outlives the queues.
+- **A job in flight during the switch**: PR C's apply destroys each queue and its event source mapping in the same run that moves the notification to EventBridge. A message still in a queue at that moment is deleted with it, and its row stays `processing`. Task 6 therefore switches the notifications first with a targeted apply, waits for the main and stage queues to drain, and only then applies the rest. An invocation already running when the mapping goes finishes normally, since the SQS code stays in the Lambda until PR C's image is deployed.
+- **Retries that outlast the page**: a Lambda that times out is retried twice, so the worst case before `MarkErrored` is about 210s (60 + 10 + 60 + 20 + 60), while the page gives up at `TOTAL_TIMEOUT_MS` (120s). The row still ends `failed`, but the page shows "Processing timed out" first. Fast failures (a missing object, S3 errors) finish in about 30s and reach the page as `failed`. Accepted: raising the page timeout is outside this phase (spec §2).
 - **A metadata object with a `null`** (`tempo_bpm: null` on the no-beat-grid path): `$string()` must keep it as JSON `null` and the page must still render "no beat grid found". Test in Task 2 (web) with a `resultJson` containing nulls.
 - **Retries exhausted**: the row must end `failed`, not `processing`. Checked in Task 4 by starting an execution for a missing object.
 - **A rejected file must not retry**: one Lambda invocation only. Checked in Task 4 by counting invocations in the execution history.
@@ -46,6 +47,8 @@
 
 ## PR A — Lambda accepts Step Functions input; web reads `resultJson`
 
+Branch `feat/looper-sfn-handler` from `dev`.
+
 ### Task 1: Step Functions entry point in the handler
 
 **Files:**
@@ -54,7 +57,7 @@
 
 **Interfaces:**
 - Consumes: phase 2 handler (`logger`, `tracer`, `metrics`, `_run_pipeline`, `_paths`, SQS path).
-- Produces: `class PipelineRejected(Exception)`; `_process_step(event: dict) -> dict` returning `{"outputKey": str, "meta": dict}`; `handler` dispatches on `"Records" in event`.
+- Produces: `class PipelineRejected(Exception)`; `_process_step(event: dict) -> dict` returning `{"outputKey": str, "meta": dict}` (its body in `_run_step(bucket, key)`); `handler` dispatches on `"Records" in event`.
 
 - [ ] **Step 1: Write the failing tests.** Append to `lambda/tests/test_handler.py`:
 
@@ -95,11 +98,15 @@ def test_step_input_rejection_raises_pipeline_rejected(aws, monkeypatch, capsys,
     assert "JobRejected" in line
 
 
-def test_step_input_s3_error_propagates_for_retry(aws, monkeypatch, lambda_context):
+def test_step_input_s3_error_propagates_for_retry(aws, monkeypatch, capsys, lambda_context):
     monkeypatch.setattr(handler_module, "process", fake_process)
 
     with pytest.raises(ClientError):
         handler_module.handler({"bucket": BUCKET, "key": UPLOAD_KEY}, lambda_context)
+
+    # Same as the SQS path: the failed-jobs query needs the key on the error line.
+    (failed,) = [line for line in printed_json(capsys) if line.get("level") == "ERROR"]
+    assert failed["job_key"] == UPLOAD_KEY
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -142,25 +149,34 @@ def _process_step(event: dict) -> dict:
     key = event["key"]
     logger.append_keys(job_key=key)
     try:
-        started = time.monotonic()
-        output_key = "outputs/" + key.removeprefix("uploads/")
-        input_path, output_path = _paths(key)
-        s3.download_file(bucket, key, input_path)
-        try:
-            meta = _run_pipeline(input_path, output_path)
-        except Exception as err:
-            logger.exception("Pipeline rejected the upload")
-            metrics.add_metric(name="JobRejected", unit=MetricUnit.Count, value=1)
-            raise PipelineRejected(str(err)) from err
-        s3.upload_file(output_path, bucket, output_key)
-        metrics.add_metric(name="JobSucceeded", unit=MetricUnit.Count, value=1)
-        logger.info(
-            "job finished",
-            extra={"duration_ms": round((time.monotonic() - started) * 1000)},
-        )
-        return {"outputKey": output_key, "meta": meta}
+        return _run_step(bucket, key)
+    except PipelineRejected:
+        raise  # already logged where it was raised
+    except Exception:
+        logger.exception("Job failed; the state machine will retry it")
+        raise
     finally:
         logger.remove_keys(["job_key"])
+
+
+def _run_step(bucket: str, key: str) -> dict:
+    started = time.monotonic()
+    output_key = "outputs/" + key.removeprefix("uploads/")
+    input_path, output_path = _paths(key)
+    s3.download_file(bucket, key, input_path)
+    try:
+        meta = _run_pipeline(input_path, output_path)
+    except Exception as err:
+        logger.exception("Pipeline rejected the upload")
+        metrics.add_metric(name="JobRejected", unit=MetricUnit.Count, value=1)
+        raise PipelineRejected(str(err)) from err
+    s3.upload_file(output_path, bucket, output_key)
+    metrics.add_metric(name="JobSucceeded", unit=MetricUnit.Count, value=1)
+    logger.info(
+        "job finished",
+        extra={"duration_ms": round((time.monotonic() - started) * 1000)},
+    )
+    return {"outputKey": output_key, "meta": meta}
 ```
 
 - [ ] **Step 4: Run the full suite**
@@ -183,7 +199,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 
 **Files:**
 - Modify: `web/lib/looper-jobs.ts`, `web/lib/looper-jobs.test.ts`
-- Modify: `web/lib/aws.ts:38-41`, `web/lib/aws.test.ts:14-24`
+- Modify: `web/lib/aws.ts` (`keyForUpload`), `web/lib/aws.test.ts` (`describe("keyForUpload", …)`)
 - Modify: `CHANGELOG.md`
 
 **Interfaces:**
@@ -295,6 +311,8 @@ Merge per `merging-a-pr` (touches `lambda/`: alone). Deploy dev's Lambda.
 ---
 
 ## PR B — State machines, rules and roles; dev switched
+
+Branch `feat/looper-sfn-infra` from `dev` after PR A merges.
 
 ### Task 3: Step Functions and EventBridge resources
 
@@ -438,6 +456,10 @@ resource "aws_sfn_state_machine" "looper" {
   tracing_configuration {
     enabled = true
   }
+
+  # CreateStateMachine checks the role can deliver logs; role_arn alone does not
+  # wait for the policy that grants it.
+  depends_on = [aws_iam_role_policy.looper_sfn]
 
   definition = jsonencode({
     Comment        = "BGM Looper job (${each.key})"
@@ -587,6 +609,10 @@ resource "aws_cloudwatch_event_target" "looper_uploads" {
     maximum_retry_attempts       = 3
     maximum_event_age_in_seconds = 3600
   }
+
+  # An upload between the target existing and the role being allowed to start
+  # executions would never get its execution.
+  depends_on = [aws_iam_role_policy.looper_events]
 }
 
 resource "aws_cloudwatch_metric_alarm" "looper_sfn_failed" {
@@ -647,7 +673,7 @@ resource "aws_lambda_event_source_mapping" "looper_jobs" {
 
 - [ ] **Step 5: Validate the definition with AWS before planning**
 
-Terraform does not check ASL; AWS only rejects a bad definition at apply time. Render dev's definition from a saved plan and ask AWS first:
+Terraform does not check ASL; AWS only rejects a bad definition at apply time. Render dev's definition from a saved plan and ask AWS first. The file goes in the working directory, not `/tmp`: in Git Bash, `> /tmp/x` writes under MSYS's temp directory while `aws.exe` resolves `file:///tmp/x` against the drive root, so the two never meet.
 
 ```bash
 cd infra/main && terraform fmt && terraform validate
@@ -656,11 +682,12 @@ terraform show -json phase3.plan | node -e '
   let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
     const rc = JSON.parse(s).resource_changes.find(r => r.address === "aws_sfn_state_machine.looper[\"dev\"]");
     process.stdout.write(rc.change.after.definition);
-  });' > /tmp/looper-sfn.json
+  });' > looper-sfn.json
 rm phase3.plan
+aws stepfunctions validate-state-machine-definition --definition file://looper-sfn.json --type STANDARD --profile personal --region us-east-1
+rm looper-sfn.json
 ```
 
-Run: `aws stepfunctions validate-state-machine-definition --definition file:///tmp/looper-sfn.json --type STANDARD --profile personal --region us-east-1`
 Expected: `"result": "OK"` and no diagnostics. Fix any `ERROR` diagnostic in the HCL before continuing.
 
 - [ ] **Step 6: Plan**
@@ -700,14 +727,20 @@ Refs #288"
 
 ```bash
 SM=$(aws stepfunctions list-state-machines --query "stateMachines[?name=='looper-jobs-dev'].stateMachineArn" --output text --profile personal --region us-east-1)
-aws stepfunctions describe-state-machine --state-machine-arn $SM --query definition --output text --profile personal --region us-east-1 > /tmp/def.json
+aws stepfunctions describe-state-machine --state-machine-arn $SM --query definition --output text --profile personal --region us-east-1 > def.json
 ROLE=$(aws iam get-role --role-name bgm-looper-looper-sfn --query Role.Arn --output text --profile personal)
-aws stepfunctions test-state --definition file:///tmp/def.json --state-name MarkProcessing --role-arn $ROLE --input '{"bucket":"x","key":"uploads/00000000-0000-4000-8000-000000000000.wav"}' --profile personal --region us-east-1
+aws stepfunctions test-state --definition file://def.json --state-name MarkProcessing --role-arn $ROLE --input '{"bucket":"x","key":"uploads/00000000-0000-4000-8000-000000000000.wav"}' --profile personal --region us-east-1
 ```
 
-Expected: `"status": "SUCCEEDED"`. Run it a second time: still `SUCCEEDED` (a `processing` row passes the condition). Delete the row: `aws dynamodb delete-item --table-name looper-jobs-dev --key '{"jobKey":{"S":"uploads/00000000-0000-4000-8000-000000000000.wav"}}' --profile personal --region us-east-1`.
+Expected: `"status": "SUCCEEDED"`. Run it a second time: still `SUCCEEDED` (a `processing` row passes the condition). Delete the row: `aws dynamodb delete-item --table-name looper-jobs-dev --key '{"jobKey":{"S":"uploads/00000000-0000-4000-8000-000000000000.wav"}}' --profile personal --region us-east-1`, then `rm def.json`.
 
-If `test-state` rejects `--definition` as a whole machine, pass only the state's JSON: `jq '.States.MarkProcessing' /tmp/def.json` with `"QueryLanguage": "JSONata"` added, and drop `--state-name`.
+If `test-state` rejects `--definition` as a whole machine, pass only the state's JSON and drop `--state-name` (`jq` is not installed here, so use node):
+
+```bash
+node -e 'const d = require("./def.json"); process.stdout.write(JSON.stringify({ ...d.States.MarkProcessing, QueryLanguage: "JSONata" }));' > state.json
+```
+
+then `--definition file://state.json`, and `rm state.json` afterwards.
 
 - [ ] **Step 5: Manual runs on dev**
 
@@ -733,7 +766,7 @@ Branch `chore/looper-sfn-switch` from `dev`. Confirm PR A is on `main` and both 
 - Modify: `lambda/tests/test_handler.py`
 - Modify: `web/lib/looper-jobs.ts`, `web/lib/looper-jobs.test.ts`
 
-- [ ] **Step 1: Remove the SQS tests.** Delete from `lambda/tests/test_handler.py` every test that calls `sqs_event(...)` or asserts on the `jobs` table written by the Lambda: `test_sqs_event_processes_upload_and_records_done`, `test_sqs_event_key_is_url_decoded`, `test_s3_test_event_is_skipped`, `test_pipeline_rejection_records_failed_without_raising`, `test_s3_error_raises_so_sqs_retries`, `test_redelivery_after_transient_failure_processes`, `test_duplicate_delivery_leaves_finished_job_alone`, `test_concurrent_duplicate_finishing_first_is_not_an_error`, phase 2's `test_done_job_emits_success_metric_and_duration`, `test_rejected_job_emits_rejection_metric`, `test_duplicate_that_loses_the_race_is_not_counted`, `test_job_key_is_cleared_after_a_transient_failure`, `test_metrics_flush_without_looper_env`, and phase 1 PR 4's `test_non_sqs_event_is_rejected`. Delete the `sqs_event` helper. In the `aws` fixture, remove the DynamoDB table creation and the `JOBS_TABLE_NAME` env var, and yield only `s3`; in the `step_input` tests change `s3, table = aws` / `s3, _ = aws` to `s3 = aws` and drop the `table.scan()` assertion.
+- [ ] **Step 1: Remove the SQS tests.** Delete from `lambda/tests/test_handler.py` every test that calls `sqs_event(...)` or asserts on the `jobs` table written by the Lambda: `test_sqs_event_processes_upload_and_records_done`, `test_sqs_event_key_is_url_decoded`, `test_s3_test_event_is_skipped`, `test_pipeline_rejection_records_failed_without_raising`, `test_s3_error_raises_so_sqs_retries`, `test_redelivery_after_transient_failure_processes`, `test_duplicate_delivery_leaves_finished_job_alone`, `test_concurrent_duplicate_finishing_first_is_not_an_error`, phase 2's `test_done_job_emits_success_metric_and_duration`, `test_rejected_job_emits_rejection_metric`, `test_duplicate_that_loses_the_race_is_not_counted`, `test_transient_failure_is_logged_with_its_key_then_the_key_is_cleared`, `test_metrics_flush_without_looper_env`, and phase 1 PR 4's `test_non_sqs_event_is_rejected`. Delete the `sqs_event` helper. In the `aws` fixture, remove the DynamoDB table creation and the `JOBS_TABLE_NAME` env var, and yield only `s3`; in the `step_input` tests change `s3, table = aws` / `s3, _ = aws` to `s3 = aws` and drop the `table.scan()` assertion.
 
 Add two tests that carry over what the deleted ones protected:
 
@@ -797,7 +830,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 
 **Files:**
 - Modify: `infra/main/variables.tf`, `infra/main/environments.tf`, `infra/main/shared.tf`
-- Modify: `CHANGELOG.md`, `ARCHITECTURE.md`, `README.md`, `CLAUDE.md`
+- Modify: `CHANGELOG.md`, `ARCHITECTURE.md`, `README.md`, `CLAUDE.md`, `docs/runbooks/incident-tool-down.md`
 
 - [ ] **Step 1: Edit**
   - Delete `variable "looper_sfn_envs"`.
@@ -819,12 +852,13 @@ Expected destroys: 3 queues, 3 DLQs, 3 queue policies, 2 event source mappings (
 - [ ] **Step 3: Docs.**
   - `ARCHITECTURE.md` and `README.md` flow diagrams: `S3 uploads/ event → SQS → Lambda` becomes `S3 uploads/ event → EventBridge → Step Functions (→ Lambda); job status in DynamoDB`.
   - `CLAUDE.md`'s `S3 objects` gotcha: `starts a looper job through SQS` becomes `starts a looper job (EventBridge → Step Functions)`.
+  - `docs/runbooks/incident-tool-down.md` (as phase 1 left it): in the request path, `S3 event → SQS → Lambda, which writes the job row in DynamoDB` becomes `S3 event → EventBridge → Step Functions, which writes the job row in DynamoDB and invokes the Lambda`. Under "A job fails or never finishes": for "never started", check the `looper-uploads-<env>` rule's `Invocations`/`FailedInvocations` metrics and that the bucket notification has EventBridge on, instead of the event source mapping; for "timed out", open the newest `looper-jobs-<env>` execution in the Step Functions console instead of checking the DLQ. Add: "Processing failed. Try again." means the state machine exhausted its retries — the execution's event history shows each attempt's error.
   - `CHANGELOG.md` under `### Changed`: `- All environments run BGM Looper jobs on Step Functions. The SQS queues, dead-letter queues and their alarms are removed (#288).`
 
 - [ ] **Step 4: Commit, PR, apply, merge**
 
 ```bash
-git add infra/main CHANGELOG.md ARCHITECTURE.md README.md CLAUDE.md
+git add infra/main CHANGELOG.md ARCHITECTURE.md README.md CLAUDE.md docs/runbooks/incident-tool-down.md
 git commit -m "chore(infra): run looper jobs on Step Functions everywhere; remove SQS
 
 Closes #288
@@ -836,4 +870,25 @@ gh pr create --base dev --title "chore: looper jobs on Step Functions everywhere
 Closes #288"
 ```
 
-With the owner's go-ahead, apply **before** merging — stage and main switch to Step Functions at apply time, while their deployed Lambda still accepts both shapes. Confirm `No changes.`, then merge (touches `lambda/`: alone), deploy dev's Lambda, and repeat Task 4 Step 5 items 1–2 on stage and main after each promotion and deploy.
+With the owner's go-ahead, apply **before** merging, in two steps so no queued job is lost (Review Focus):
+
+1. Switch the notifications only. Stage and main start sending uploads to Step Functions, while their queues and mappings still drain what is already queued:
+
+   ```bash
+   cd infra/main && terraform apply -var-file=terraform.tfvars \
+     -target='aws_s3_bucket_notification.looper_uploads["main"]' \
+     -target='aws_s3_bucket_notification.looper_uploads["stage"]'
+   ```
+
+2. Wait until both counts are `0` for `looper-jobs-main` and `looper-jobs-stage`. Dev's queue has had no consumer since PR B, so anything left in it is already stranded; don't wait on it.
+
+   ```bash
+   for env in main stage; do
+     URL=$(aws sqs get-queue-url --queue-name looper-jobs-$env --query QueueUrl --output text --profile personal --region us-east-1)
+     aws sqs get-queue-attributes --queue-url $URL --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible --profile personal --region us-east-1
+   done
+   ```
+
+3. `terraform apply -var-file=terraform.tfvars` for the rest (the destroys), then `terraform plan` shows `No changes.`.
+
+Their deployed Lambda still accepts both shapes throughout. Then merge (touches `lambda/`: alone), deploy dev's Lambda, and repeat Task 4 Step 5 items 1–2 on stage and main after each promotion and deploy.

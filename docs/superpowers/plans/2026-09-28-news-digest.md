@@ -34,6 +34,8 @@
 
 ---
 
+Tasks 1–5 are one PR on `feat/news-digest`: `git switch dev && git pull && git switch -c feat/news-digest`. Task 6 is a follow-up PR.
+
 ### Task 1: SES identities and DNS
 
 **Files:**
@@ -834,7 +836,8 @@ Expected: `FailedEntryCount: 0`; within a minute the digest email arrives (or, i
 
 **Files:**
 - Modify: `infra/main/email.tf`
-- Modify: `CHANGELOG.md` (no entry; the Task 5 entry covers it)
+
+No CHANGELOG entry: the Task 5 entry covers it. Branch `chore/enable-news-digest` from `dev`.
 
 - [ ] **Step 1: Confirm the route is live on production:** `curl -s -o /dev/null -w "%{http_code}" -X POST -H "x-digest-token: nope" https://ashutosh-pandey.com/api/digest/news-desk` returns `401` (not `404`).
 

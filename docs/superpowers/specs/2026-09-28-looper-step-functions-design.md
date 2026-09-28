@@ -35,7 +35,7 @@ Non-goals:
 | Query language | JSONata | The current recommended language for Step Functions. `$string()` turns the pipeline's metadata into a DynamoDB string without a Lambda. |
 | Result storage | New string attribute `resultJson` holding the metadata JSON | The direct DynamoDB integration needs typed AttributeValues. Turning an arbitrary object into those in JSONata is impractical, but storing a string is one expression. `getJobStatus` parses it. |
 | Permanent vs transient | The Lambda raises `PipelineRejected` for DSP failures. A retrier with `MaxAttempts: 0` sits before a `States.ALL` retrier. | Step Functions matches a Lambda error by its Python class name. |
-| Transient exhaustion | Row written `failed` ("Processing failed. Try again."), then a `Fail` state | The page shows the failure at once instead of timing out, and the `Fail` state feeds the `ExecutionsFailed` alarm. |
+| Transient exhaustion | Row written `failed` ("Processing failed. Try again."), then a `Fail` state | For errors that fail fast, the page shows the failure instead of timing out. Retried Lambda timeouts can take about 210s, longer than the page's 120s limit, so those still reach the page as a timeout. The `Fail` state feeds the `ExecutionsFailed` alarm. |
 | Key encoding | `keyForUpload` keeps only `[A-Za-z0-9]` in the extension (max 10 chars) | S3 URL-encodes keys in SQS notifications. The EventBridge form isn't clearly documented. Making keys that never need encoding removes the question. |
 | Rollout switch | `var.looper_sfn_envs`, default `["dev"]` | The same pattern phase 1 used, so dev runs on Step Functions while stage and main stay on SQS. |
 

@@ -46,6 +46,7 @@ Non-goals:
 - `Metrics(namespace="BgmLooper", service="looper")`, handler decorated with `@metrics.log_metrics`. Default dimension `environment` from a new env var `LOOPER_ENV`.
 - On `done`: `JobSucceeded` +1, and a log line `job finished` with `duration_ms` (download to final write).
 - On a pipeline rejection: `JobRejected` +1. The existing `logger.exception` stays.
+- On a transient error: a `logger.exception` line with the job key before the error propagates to SQS, so the failed-jobs query also shows jobs heading for the DLQ.
 
 Decorator order, outermost first: `inject_lambda_context`, `capture_lambda_handler`, `log_metrics`.
 

@@ -1061,6 +1061,8 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 - Modify: `web/app/tools/bgm-looper/page.test.tsx`
 - Delete: `web/app/api/looper/process/route.ts`
 - Modify: `web/lib/looper.ts`, `web/lib/looper.test.ts` (remove `parseLambdaPayload`, now unused)
+- Modify: `web/lib/aws.ts`, `web/lib/aws.test.ts`, `web/TESTING.md` (remove `deriveOutputKey`, now unused — the Lambda derives the output key itself)
+- Modify: `web/lib/route-gate.test.ts` (its example looper API path becomes `/api/looper/status`)
 - Modify: `web/package.json`, `web/package-lock.json` (remove `@aws-sdk/client-lambda`, now unused)
 
 **Interfaces:**
@@ -1366,10 +1368,14 @@ git rm web/app/api/looper/process/route.ts
 cd web && npm uninstall @aws-sdk/client-lambda
 ```
 
+The route was the only caller of `deriveOutputKey`. Delete the function from `web/lib/aws.ts`, its `describe("deriveOutputKey", …)` block and import from `web/lib/aws.test.ts`, and `deriveOutputKey` from the helper list in `web/TESTING.md`'s `lib/` bullet. In `web/lib/aws.ts`, the `DOWNLOAD_URL_TTL_SECONDS` comment's "Exported so the process route can tell the page" becomes "Exported so the status route can tell the page".
+
+In `web/lib/route-gate.test.ts`, change both `"/api/looper/process"` rows to `"/api/looper/status"` (same expected values): the rows test the gate's prefix, and should name a route that exists.
+
 - [ ] **Step 7: Run the web suite, lint and build**
 
 Run: `cd web && npm test && npm run lint && KEYSTATIC_GITHUB_CLIENT_ID=dummy KEYSTATIC_GITHUB_CLIENT_SECRET=dummy KEYSTATIC_SECRET=dummy npm run build`
-Expected: all pass. Grep for leftovers: `grep -rn "looper/process\|client-lambda\|parseLambdaPayload" web --include=*.ts --include=*.tsx -l | grep -v node_modules | grep -v .next` returns nothing.
+Expected: all pass. Grep for leftovers: `grep -rn "looper/process\|client-lambda\|parseLambdaPayload\|deriveOutputKey" web --include=*.ts --include=*.tsx --include=*.md -l | grep -v node_modules | grep -v .next` returns nothing.
 
 - [ ] **Step 8: Commit**
 
@@ -1391,6 +1397,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 - Modify: `infra/main/variables.tf` (`looper_async_envs` default)
 - Modify: `ARCHITECTURE.md:28`, `README.md:50`
 - Modify: `CLAUDE.md` (the "S3 objects" gotcha line)
+- Modify: `docs/runbooks/incident-tool-down.md` (request path, the `processing failed` and `504` sections)
 - Modify: `CHANGELOG.md`
 
 - [ ] **Step 1: Confirm PR 1 is on `main`**
@@ -1435,6 +1442,17 @@ In `.claude/rules/web.md`, at the end of the sentence `The looper's API routes w
 
 In `CLAUDE.md`, the gotcha line starting `- S3 objects: uploads under \`uploads/\``, append: ` An object created under \`uploads/\` starts a looper job through SQS (see the looper async jobs spec), so nothing else should write there.`
 
+In `docs/runbooks/incident-tool-down.md`, which describes the synchronous flow throughout:
+- The request path (lines 23-24) becomes: `browser → Next route on Vercel → presigned S3 PUT → S3 event → SQS → Lambda, which writes the job row in DynamoDB → the page polls GET /api/looper/status → presigned S3 GET.`
+- Replace the heading `### \`processing failed\` (500 from \`/api/looper/process\`)` and its first paragraph with a heading `### A job fails or never finishes` and a list keyed on the message the page shows:
+  - "This file could not be processed…": the pipeline rejected the file. The row is `failed`; the Lambda log has the traceback.
+  - "Processing never started. Try again.": no row after 60s, so the S3 event never reached the Lambda. Check the bucket's notification (`aws s3api get-bucket-notification-configuration`) and the event source mapping (`aws lambda list-event-source-mappings --function-name <f>`), both with `--profile personal --region us-east-1`.
+  - "Processing timed out. Try again.": the row stayed `processing`. A transient failure is being retried or has reached the DLQ; check `looper-jobs-dlq-<env>` with `aws sqs get-queue-attributes --attribute-names ApproximateNumberOfMessages`, then the Lambda log.
+  - A 500 from `/api/looper/status` itself: a DynamoDB read failed or the row has an unknown status; the Vercel runtime log has the error.
+
+  Keep the `aws logs tail` command and the "What to look for" list below it; they still apply.
+- Delete the `### 504 / gateway timeout instead of a 500` section and the "This is the fork worth getting right" paragraph after it: no route waits on the Lambda any more.
+
 - [ ] **Step 4: CHANGELOG** under `## [Unreleased]`, add a `### Changed` section if absent:
 
 ```markdown
@@ -1444,7 +1462,7 @@ In `CLAUDE.md`, the gotcha line starting `- S3 objects: uploads under \`uploads/
 - [ ] **Step 5: Commit, open PR 3, apply before merge**
 
 ```bash
-git add infra/main/variables.tf ARCHITECTURE.md README.md CLAUDE.md .claude/rules/web.md CHANGELOG.md
+git add infra/main/variables.tf ARCHITECTURE.md README.md CLAUDE.md .claude/rules/web.md docs/runbooks/incident-tool-down.md CHANGELOG.md
 git commit -m "feat(infra): enable async looper jobs on stage and main
 
 Refs #286
@@ -1511,7 +1529,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 - Modify: `infra/main/variables.tf` (delete `looper_async_envs`)
 - Modify: `infra/main/environments.tf` (notification + mapping over all envs; delete the three `lambda_function_name_*` Vercel env vars)
 - Modify: `infra/main/shared.tf` (delete the `InvokeProcessor` statement; delete `local.all_lambda_function_arns` if nothing else references it)
-- Modify: `CHANGELOG.md`
+- Modify: `ARCHITECTURE.md`, `CLAUDE.md`, `CHANGELOG.md`
 
 - [ ] **Step 1: Edit**
   - Delete `variable "looper_async_envs"` and its comment.
@@ -1520,6 +1538,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
   - Delete the `InvokeProcessor` statement from `aws_iam_role_policy.vercel`.
   - Run `grep -n all_lambda_function_arns infra/main/*.tf`; if the definition is the only hit left, delete it and the `lambda_function_arn` local if that is then unused too.
   - In `ARCHITECTURE.md`, the `bgm-looper-vercel` bullet (around line 59) says the role has "S3 put/get + Lambda invoke". Change that to "S3 put/get + DynamoDB GetItem on the looper job tables" and drop the clause about the Lambda functions it is scoped to, keeping the rest of the bullet.
+  - In `CLAUDE.md`'s Branching & releases bullet "Vercel picks the right `S3_BUCKET_NAME`/`LAMBDA_FUNCTION_NAME` per branch", replace `LAMBDA_FUNCTION_NAME` with `JOBS_TABLE_NAME`.
 
 - [ ] **Step 2: Plan**
 
@@ -1535,7 +1554,7 @@ Expected: destroys exactly the 3 `LAMBDA_FUNCTION_NAME` env vars; updates `verce
 - [ ] **Step 4: Commit, open PR 4, apply after merge**
 
 ```bash
-git add infra/main CHANGELOG.md ARCHITECTURE.md
+git add infra/main CHANGELOG.md ARCHITECTURE.md CLAUDE.md
 git commit -m "chore(infra): remove the looper async rollout switch and invoke grant
 
 Closes #286

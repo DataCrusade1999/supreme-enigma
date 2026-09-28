@@ -10,14 +10,14 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-28-cognito-login-design.md`. Issue #290, epic #285.
 
-**Starts after:** phase 4 Task 1 (`aws_sesv2_email_identity.domain` and `.owner` exist and are verified).
+**Starts after:** phase 4's PR (its Tasks 1–5) is merged into `dev` and its SES identities are verified. `auth.tf` references `aws_sesv2_email_identity.domain` (phase 4 Task 1) and `local.site_hosts` (phase 4 Task 5), so both have to be in `dev`'s Terraform, not only applied.
 
 ## Global Constraints
 
 - Cookie names: session `looper_session` (unchanged, `COOKIE_NAME`); OAuth state `looper_oauth`, path `/api/auth`, `maxAge` 600s, httpOnly, secure, sameSite lax.
 - Routes: `GET /api/auth/login?next=…`, `GET /api/auth/callback?code&state` (or `?error`).
 - Login error codes in `/login?error=`: `state`, `denied`, `not-allowed`, `failed`.
-- `safeNext`: a value starting with `/` but not `//` or `/\`; anything else → `/tools`.
+- `safeNext`: a value starting with `/` that still resolves to the same origin once the URL parser has normalised it (tabs and newlines stripped, `\` read as `/`); returned as `pathname + search + hash`. Anything else → `/tools`. Same rule as the login page's `parseNext`.
 - Scopes `openid email`; `code_challenge_method=S256`; public client, no secret.
 - Env vars: `COGNITO_DOMAIN` (full `https://…amazoncognito.com`, no trailing slash), `COGNITO_CLIENT_ID`, `COGNITO_USER_POOL_ID`, `OWNER_EMAIL`, plus existing `COOKIE_SECRET`.
 - Cognito prefix domain `ashutosh-pandey-login`. Callback hosts: `ashutosh-pandey.com`, `dev.ashutosh-pandey.com`, `stage.ashutosh-pandey.com` (https) and `localhost:3000` (http).
@@ -27,7 +27,7 @@
 
 ## Review Focus
 
-- **Open redirect through `next`** (`//evil.example`, `https://evil.example`, `/\evil.example`): must land on `/tools`. Tests in Task 3 (`safeNext`) and Task 4 (login route).
+- **Open redirect through `next`** (`//evil.example`, `https://evil.example`, `/\evil.example`, and `/%09/evil.example`, whose tab the URL parser strips to leave `//evil.example`): must land on `/tools`. A prefix check alone misses the tab case, which `web/app/login/page.test.tsx` already covers for the page's `parseNext`. Tests in Task 3 (`safeNext`) and Task 4 (login route); the callback also re-applies `safeNext` before redirecting.
 - **A callback without the state cookie, or with another tab's state**: must not set a session. Tests in Task 4.
 - **Another person's Google account**: Cognito signs them in (federated users are auto-created); the callback must refuse and set no session. Test in Task 4.
 - **The owner's email in a different case from Google** (`Owner@Gmail.com`): must be accepted. Test in Task 3.
@@ -37,9 +37,11 @@
 
 | PR | Branch | Tasks | Merge only after |
 |---|---|---|---|
-| A | `feat/cognito-infra` | 1 | phase 4 Task 1 applied and the SES identities verified |
+| A | `feat/cognito-infra` | 1 | phase 4's PR merged into `dev` and the SES identities verified |
 | B | `feat/cognito-login` | 2, 3, 4, 5, 6 | PR A applied |
 | C | `chore/remove-app-password` | 7 | PR B on `main` |
+
+Each branch is cut from an up-to-date `dev`: `git switch dev && git pull && git switch -c <branch>`.
 
 ---
 
@@ -441,9 +443,12 @@ describe("safeNext", () => {
     ["", "/tools"],
     ["//evil.example", "/tools"],
     ["/\\evil.example", "/tools"],
+    // The URL parser strips the tab, leaving "//evil.example".
+    ["/\t/evil.example", "/tools"],
+    ["/\n/evil.example", "/tools"],
     ["https://evil.example", "/tools"],
     ["tools", "/tools"],
-  ])("%s -> %s", (input, expected) => {
+  ])("%j -> %s", (input, expected) => {
     expect(safeNext(input)).toBe(expected);
   });
 });
@@ -533,14 +538,23 @@ import { createHash, randomBytes } from "crypto";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 const FALLBACK = "/tools";
+// Only resolved against, never visited: it stands in for "this site".
+const SAME_ORIGIN = "https://same-origin.invalid";
 
-/** Where to go after sign-in: a same-origin path, or the tools hub. "//x" and
- * "/\x" are protocol-relative to a browser, so they are refused too. */
+/** Where to go after sign-in: a same-origin path, or the tools hub. Resolved the
+ * way the browser will resolve the redirect, because a prefix check is not
+ * enough: the parser strips tabs and newlines and reads "\" as "/", so "/\t/x"
+ * and "/\x" both become "//x", another host. The login page's parseNext does
+ * the same for the same reason. */
 export function safeNext(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) {
+  if (!value?.startsWith("/")) return FALLBACK;
+  try {
+    const url = new URL(value, SAME_ORIGIN);
+    if (url.origin !== SAME_ORIGIN) return FALLBACK;
+    return url.pathname + url.search + url.hash;
+  } catch {
     return FALLBACK;
   }
-  return value;
 }
 
 export function randomState(): string {
@@ -671,7 +685,7 @@ describe("GET /api/auth/login", () => {
     expect(saved.next).toBe("/tools/news-desk");
   });
 
-  it.each(["//evil.example", "https://evil.example", undefined])("replaces next=%s with the hub", async (next) => {
+  it.each(["//evil.example", "https://evil.example", "/\t/evil.example", undefined])("replaces next=%j with the hub", async (next) => {
     const res = await get(next);
     expect(readOAuthState(res.cookies.get(OAUTH_COOKIE)!.value, "secret")!.next).toBe("/tools");
   });
@@ -802,7 +816,7 @@ export async function GET(request: NextRequest) {
 ```ts
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, createSessionCookieValue } from "@/lib/auth";
-import { exchangeCode, isOwner } from "@/lib/cognito";
+import { exchangeCode, isOwner, safeNext } from "@/lib/cognito";
 import { OAUTH_COOKIE, readOAuthState } from "@/lib/oauth-state";
 
 export const dynamic = "force-dynamic";
@@ -839,7 +853,9 @@ export async function GET(request: NextRequest) {
 
   if (!(await isOwner(idToken))) return toLogin(request, "not-allowed");
 
-  const response = NextResponse.redirect(new URL(saved.next, request.url));
+  // saved.next was cleaned by the login route and is signed, but this is the
+  // redirect that matters, so it is cleaned again here.
+  const response = NextResponse.redirect(new URL(safeNext(saved.next), request.url));
   response.cookies.set(OAUTH_COOKIE, "", { path: "/api/auth", maxAge: 0 });
   // Same cookie and attributes the password route set, so proxy.ts is unchanged.
   response.cookies.set(COOKIE_NAME, createSessionCookieValue(process.env.COOKIE_SECRET!), {
@@ -1035,7 +1051,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 - Modify: `web/playwright.config.ts` (remove `APP_PASSWORD`; add Cognito env vars)
 - Modify: `web/e2e/tools.spec.ts`, `web/e2e/news-desk.spec.ts`, `web/e2e/money-planner.spec.ts`, `web/e2e/resume-admin.spec.ts`, `web/e2e/pages.spec.ts`
 - Delete: `web/e2e/login-rate-limit.spec.ts`
-- Modify: `.claude/rules/web.md`, `CHANGELOG.md`
+- Modify: `.claude/rules/web.md`, `CLAUDE.md`, `README.md`, `ARCHITECTURE.md`, `docs/runbooks/incident-tool-down.md`, `docs/aws-devops-agent.md`, `CHANGELOG.md`
 
 - [ ] **Step 1: Helper** `web/e2e/session.ts`:
 
@@ -1114,6 +1130,10 @@ Run: `cd web && npm run test:e2e` — Expected: PASS. `grep -rn "password\|test1
   - In the bullet on gated paths, change "require the shared password" to "require a session", and "`ALWAYS_ALLOWED_PATHS` (`/login`, `/api/login`)" to "`ALWAYS_ALLOWED_PATHS` (`/login`)".
   - In the `playwright.config.ts` bullet, change "injects `APP_PASSWORD`/`COOKIE_SECRET`/all three `KEYSTATIC_*`" to "injects `COOKIE_SECRET`, dummy `COGNITO_*`/`OWNER_EMAIL` and all three `KEYSTATIC_*`".
   - In `CLAUDE.md`'s Structure section, "and the Keystatic admin (`/keystatic`, `/api/keystatic/*`)" is unchanged; in Commands, the App dev line becomes `cd web && COOKIE_SECRET=devsecret npm run dev` plus the four Cognito variables, and a note that local sign-in needs the real `COGNITO_*` values (the `localhost:3000` callback is registered).
+  - `README.md`: the "**The gate.**" paragraph's first two sentences become "Owner-only sign-in through Cognito (Google, an email code or a passkey), exchanged for an HMAC-signed HttpOnly cookie. No session store." and the local-dev command `APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev` becomes the same line as `CLAUDE.md`'s.
+  - `ARCHITECTURE.md`'s `## Auth` paragraph: replace "Single shared password (Vercel env var), constant-time compare in `/api/login`, HttpOnly signed cookie (`COOKIE_SECRET`, payload is just the literal string `"authenticated"`) — no accounts, no per-user state." with "Owner-only sign-in through Cognito managed login (`/api/auth/login` → Cognito → `/api/auth/callback`, authorization code with PKCE), then an HttpOnly cookie HMAC-signed with `COOKIE_SECRET` whose payload is its issue time." Its payload description was already out of date.
+  - `docs/runbooks/incident-tool-down.md`: replace the three bullets under "### Cannot log in" with: `/login?error=not-allowed` — the account is not `OWNER_EMAIL`, or its email is unverified; `/login?error=state` — the sign-in took over 10 minutes or began in another tab, retry from `/login`; `/login?error=failed` — the code exchange failed, and the Vercel runtime log has `auth: code exchange failed`; a Cognito error page before any redirect — the host is not in the client's callback URLs (only the apex, `dev.`, `stage.` and `localhost:3000` are); signed in but bounced back — `COOKIE_SECRET` changed or is missing (keep the existing bullet). Also drop "cannot log in" wording that mentions a password in the "When to use this" line.
+  - `docs/aws-devops-agent.md` (the bullet on `/tools/bgm-looper` not being reachable): "behind `APP_PASSWORD` independently" becomes "behind the Cognito sign-in independently", and the last sentence becomes "Scope `test_requirement` to the public portfolio pages; the agent cannot complete a Google, email-code or passkey sign-in."
 
   `CHANGELOG.md` under `### Changed`:
 
@@ -1124,7 +1144,7 @@ Run: `cd web && npm run test:e2e` — Expected: PASS. `grep -rn "password\|test1
 - [ ] **Step 5: Commit and open PR B**
 
 ```bash
-git add -A web/e2e web/playwright.config.ts .claude/rules/web.md CLAUDE.md CHANGELOG.md
+git add -A web/e2e web/playwright.config.ts .claude/rules/web.md CLAUDE.md README.md ARCHITECTURE.md docs/runbooks/incident-tool-down.md docs/aws-devops-agent.md CHANGELOG.md
 git commit -m "test(e2e): sign in by minting a session; document Cognito sign-in
 
 Refs #290
@@ -1139,7 +1159,7 @@ Refs #290"
 - [ ] **Step 6: Verify on dev** after merge and deploy:
   1. `https://dev.ashutosh-pandey.com/tools` → `/login?next=/tools` → Sign in → Cognito → Continue with Google (owner) → back on `/tools`.
   2. Clear cookies; sign in with the owner's email and an emailed code.
-  3. After signing in, Cognito offers to add a passkey (or visit the authorize URL again and choose passkey); register one, clear cookies, sign in with it.
+  3. While still signed in to managed login (its own cookie, set in step 2), open `<COGNITO_DOMAIN>/passkeys/add?client_id=<client id>&redirect_uri=https://dev.ashutosh-pandey.com/api/auth/callback` and register a passkey. The redirect back to the callback lands on `/login?error=state`, since that visit did not start at `/api/auth/login`; that is expected. Clear cookies, then sign in through the Sign in link and choose the passkey.
   4. Sign in with a different Google account → `/login?error=not-allowed` and the message shows; `/tools` still redirects to `/login`.
 
 Repeat 1 on stage and main after each promotion.
@@ -1151,12 +1171,14 @@ Repeat 1 on stage and main after each promotion.
 ### Task 7: Terraform and docs drop the password
 
 **Files:**
-- Modify: `infra/main/shared.tf`, `infra/main/variables.tf`, `infra/main/terraform.tfvars.example`, `CLAUDE.md`, `CHANGELOG.md`
+- Modify: `infra/main/shared.tf`, `infra/main/variables.tf`, `infra/main/terraform.tfvars.example`, `.claude/rules/infra.md`, `CLAUDE.md`, `CHANGELOG.md`
 
 - [ ] **Step 1: Confirm PR B is on main:** `curl -s -o /dev/null -w "%{http_code}" "https://ashutosh-pandey.com/api/auth/login?next=%2Ftools"` returns `307`.
 
 - [ ] **Step 2: Edit**
   - `infra/main/shared.tf`: delete `resource "vercel_project_environment_variable" "app_password"`; in the two comments that say the tools are "protected by APP_PASSWORD" / "stay behind APP_PASSWORD", say "behind the Cognito sign-in" instead.
+  - `infra/main/shared.tf`: delete `resource "vercel_firewall_config" "looper"` and the `# --- Firewall ---` comment block above it. Its only rule rate-limits `/api/login`, which PR B removed; Cognito throttles its own sign-in endpoints. Deleting it also frees the Hobby plan's one rate-limit rule.
+  - `.claude/rules/infra.md`: delete the bullet starting "**`vercel_firewall_config.looper` spends scarce Hobby-plan slots.**", and in the "**Preview deployments are public.**" bullet change "behind `APP_PASSWORD`" to "behind the Cognito sign-in".
   - `infra/main/variables.tf`: delete `variable "app_password"`.
   - `infra/main/terraform.tfvars.example`: delete the `app_password` lines and change "until all seven are set" to "until all six are set".
   - `CLAUDE.md`: "**seven required variables** … `vercel_api_token`, `app_password`, `github_repo`, …" becomes "**six required variables** … `vercel_api_token`, `github_repo`, `alert_email`, `openrouter_api_key`, `google_client_id`, `google_client_secret`".
@@ -1165,18 +1187,18 @@ Repeat 1 on stage and main after each promotion.
 - [ ] **Step 3: Plan**
 
 Run: `cd infra/main && terraform plan -var-file=terraform.tfvars`
-Expected: destroys exactly `vercel_project_environment_variable.app_password`. Nothing else.
+Expected: destroys exactly `vercel_project_environment_variable.app_password` and `vercel_firewall_config.looper`. Nothing else.
 
 - [ ] **Step 4: CHANGELOG** under `### Removed`:
 
 ```markdown
-- The `APP_PASSWORD` Vercel variable and the `app_password` Terraform variable (#290).
+- The `APP_PASSWORD` Vercel variable, the `app_password` Terraform variable, and the Vercel firewall rule that rate-limited the old `/api/login` (#290).
 ```
 
 - [ ] **Step 5: Commit, PR, apply, merge**
 
 ```bash
-git add infra/main/shared.tf infra/main/variables.tf infra/main/terraform.tfvars.example CLAUDE.md CHANGELOG.md
+git add infra/main/shared.tf infra/main/variables.tf infra/main/terraform.tfvars.example .claude/rules/infra.md CLAUDE.md CHANGELOG.md
 git commit -m "chore(infra): remove APP_PASSWORD
 
 Closes #290

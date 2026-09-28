@@ -27,7 +27,7 @@
 ## Review Focus
 
 - **`LOOPER_ENV` unset** (image deployed before Terraform applied, or a local run): metrics must still flush with `environment=unknown`, not raise. Test in Task 1.
-- **A job that raises a transient error**: the `job_key` must be removed from the logger afterwards, or the next record in a warm container logs under the wrong key. Test in Task 1.
+- **A job that raises a transient error**: it must log an `ERROR` line carrying its `job_key` before the exception leaves the handler, or the failed-jobs query and dashboard widget never see a job on its way to the DLQ (the runtime's own traceback line has no `level` or `job_key`). The `job_key` must then be removed from the logger, or the next record in a warm container logs under the wrong key. Test in Task 1.
 - **A log group that does not exist yet**: its `import` block fails the plan. Task 2 checks existence before writing the block.
 - **Duplicate delivery that loses the final-write race**: must not count `JobSucceeded`, or the metric double-counts. Test in Task 1.
 - **Cold-start query on booleans**: Powertools writes `"cold_start": true`; the query must match it. Checked by running the query on dev in Task 2.
@@ -45,6 +45,8 @@
 **Interfaces:**
 - Consumes: phase 1's `handler.py` (functions `handler`, `_process_record`, `_process_upload`, `_write_status -> bool`, `_to_dynamo`, `_paths`, constants `TMP_DIR`, `FAILED_MESSAGE`).
 - Produces: module globals `logger`, `tracer`, `metrics`; new function `_run_pipeline(input_path, output_path) -> dict`; `lambda_context` pytest fixture in `conftest.py`. EMF metrics and log fields as in Global Constraints, which Task 2's queries and dashboard read.
+
+- [ ] **Step 0: Branch** — `git switch dev && git pull && git switch -c feat/looper-observability`
 
 - [ ] **Step 1: Add the dependency and install it**
 
@@ -168,17 +170,23 @@ def test_duplicate_that_loses_the_race_is_not_counted(aws, monkeypatch, capsys, 
     assert all("JobSucceeded" not in line for line in metric_lines(capsys))
 
 
-def test_job_key_is_cleared_after_a_transient_failure(aws, monkeypatch, capsys, lambda_context):
-    # Nothing uploaded, so the download raises. A warm container must not carry
-    # this key into the next record's log lines.
+def test_transient_failure_is_logged_with_its_key_then_the_key_is_cleared(
+    aws, monkeypatch, capsys, lambda_context
+):
+    # Nothing uploaded, so the download raises. The failure has to reach the
+    # failed-jobs query with its key, and a warm container must not carry the
+    # key into the next record's log lines.
     monkeypatch.setattr(handler_module, "process", fake_process)
 
     with pytest.raises(ClientError):
         handler_module.handler(sqs_event(UPLOAD_KEY), lambda_context)
 
     handler_module.logger.info("after")
-    after = [line for line in printed_json(capsys) if line.get("message") == "after"]
-    assert "job_key" not in after[0]
+    lines = printed_json(capsys)
+    (failed,) = [line for line in lines if line.get("level") == "ERROR"]
+    assert failed["job_key"] == UPLOAD_KEY
+    (after,) = [line for line in lines if line.get("message") == "after"]
+    assert "job_key" not in after
 
 
 def test_metrics_flush_without_looper_env(aws, monkeypatch, capsys, lambda_context):
@@ -252,6 +260,12 @@ def _process_upload(bucket: str, key: str) -> None:
     logger.append_keys(job_key=key)
     try:
         _run_job(bucket, key)
+    except Exception:
+        # Raised again for SQS to retry. Logged first so the failed-jobs query
+        # sees a job on its way to the DLQ, with its key; the runtime's own
+        # traceback line has neither.
+        logger.exception("Job failed; SQS will retry it")
+        raise
     finally:
         # A warm container handles the next record with the same logger.
         logger.remove_keys(["job_key"])
@@ -325,7 +339,9 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 
 - [ ] **Step 1: Check which log groups exist**
 
-Run: `aws logs describe-log-groups --log-group-name-prefix /aws/lambda/bgm-looper-processor --query "logGroups[].[logGroupName,retentionInDays]" --output text --profile personal --region us-east-1`
+Run: `MSYS_NO_PATHCONV=1 aws logs describe-log-groups --log-group-name-prefix /aws/lambda/bgm-looper-processor --query "logGroups[].[logGroupName,retentionInDays]" --output text --profile personal --region us-east-1`
+
+(`MSYS_NO_PATHCONV=1`: Git Bash otherwise rewrites the leading-`/` prefix into a Windows path and the query matches nothing, which reads as "no log groups exist".)
 Expected: up to three names, retention `None`. Note any that are missing; Step 3's import map leaves them out.
 
 - [ ] **Step 2: Turn on tracing and set `LOOPER_ENV`.** In `resource "aws_lambda_function" "looper"`, add after `memory_size = 1024` and extend the existing `environment` block:
