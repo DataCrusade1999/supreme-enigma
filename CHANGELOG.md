@@ -9,6 +9,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- Favicon: the home page's loop ring reduced to 10 bars on a dark tile, with the twelve o'clock bar in red. It is served as `/icon.svg`, plus a 180×180 PNG apple-touch icon for Safari and iOS, which ignore SVG favicons (#281).
 - The site is served at https://ashutosh-pandey.com, with `www.` redirecting to it, and the `dev` and `stage` branches at https://dev.ashutosh-pandey.com and https://stage.ashutosh-pandey.com. The `vercel.app` URLs still work (#275).
 - Every environment except production sends `X-Robots-Tag: noindex`, so search engines do not list the `dev` and `stage` copies of the site (#275).
 - News Desk Local and International tabs: headlines are split by where their feed is based (FT, Reuters, Bloomberg and The Economist are international; the rest are local), with the topic tabs counting within the selected region. Headlines saved before this change count as local until a Refresh sees them in a feed again.
