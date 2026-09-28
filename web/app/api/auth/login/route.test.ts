@@ -31,6 +31,15 @@ describe("GET /api/auth/login", () => {
     expect(saved.next).toBe("/tools/news-desk");
   });
 
+  it("sends the browser back to /login rather than failing when Cognito is not configured", async () => {
+    delete process.env.COGNITO_DOMAIN;
+    const res = await get("/tools");
+    expect(new URL(res.headers.get("location")!).pathname + new URL(res.headers.get("location")!).search).toBe(
+      "/login?error=failed",
+    );
+    expect(res.cookies.get(OAUTH_COOKIE)).toBeUndefined();
+  });
+
   it.each(["//evil.example", "https://evil.example", "/\t/evil.example", undefined])("replaces next=%j with the hub", async (next) => {
     const res = await get(next);
     expect(readOAuthState(res.cookies.get(OAUTH_COOKIE)!.value, "secret")!.next).toBe("/tools");

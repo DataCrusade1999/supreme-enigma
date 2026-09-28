@@ -10,7 +10,16 @@ export async function GET(request: NextRequest) {
   const { verifier, challenge } = pkcePair();
   const redirectUri = `${request.nextUrl.origin}/api/auth/callback`;
 
-  const response = NextResponse.redirect(authorizeUrl({ redirectUri, state, challenge }));
+  let target: string;
+  try {
+    target = authorizeUrl({ redirectUri, state, challenge });
+  } catch (err) {
+    // COGNITO_DOMAIN missing or malformed: the URL constructor throws.
+    console.error("auth: cannot build the Cognito sign-in URL", err);
+    return NextResponse.redirect(new URL("/login?error=failed", request.url));
+  }
+
+  const response = NextResponse.redirect(target);
   response.cookies.set(OAUTH_COOKIE, createOAuthState({ state, verifier, next }, process.env.COOKIE_SECRET!), {
     httpOnly: true,
     secure: true,

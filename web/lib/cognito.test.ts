@@ -100,4 +100,11 @@ describe("isOwner", () => {
   it("refuses a token that does not verify", async () => {
     expect(await isOwner("t", { verify: vi.fn(async () => { throw new Error("bad sig"); }) })).toBe(false);
   });
+
+  it("names the missing variable when OWNER_EMAIL is not set", async () => {
+    delete process.env.OWNER_EMAIL;
+    await expect(
+      isOwner("t", verifierFor({ email: "owner@example.com", email_verified: true })),
+    ).rejects.toThrow("OWNER_EMAIL is not set");
+  });
 });

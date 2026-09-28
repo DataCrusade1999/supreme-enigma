@@ -77,6 +77,22 @@ describe("GET /api/auth/callback", () => {
     expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
   });
 
+  it("reports a cancel as cancelled even when the state cookie has expired", async () => {
+    const res = await callback({ error: "access_denied", state: "s1" });
+    expect(redirectedTo(res)).toBe("/login?error=denied");
+    expect(exchangeCode).not.toHaveBeenCalled();
+    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+  });
+
+  it("redirects rather than failing when the owner check throws", async () => {
+    vi.mocked(exchangeCode).mockResolvedValue("idtok");
+    vi.mocked(isOwner).mockRejectedValue(new Error("OWNER_EMAIL is not set"));
+
+    const res = await callback({ code: "c", state: "s1" }, cookieFor("s1"));
+    expect(redirectedTo(res)).toBe("/login?error=failed");
+    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+  });
+
   it("reports a failed code exchange", async () => {
     vi.mocked(exchangeCode).mockRejectedValue(new Error("token exchange failed: 400"));
     const res = await callback({ code: "c", state: "s1" }, cookieFor("s1"));

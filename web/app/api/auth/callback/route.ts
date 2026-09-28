@@ -16,8 +16,12 @@ export async function GET(request: NextRequest) {
   const saved = readOAuthState(request.cookies.get(OAUTH_COOKIE)?.value, process.env.COOKIE_SECRET!);
 
   // The state check comes first: without it, anyone could send the owner's
-  // browser a callback carrying the attacker's own code.
-  if (!saved || params.get("state") !== saved.state) return toLogin(request, "state");
+  // browser a callback carrying the attacker's own code. A Cognito error on a
+  // failed check only picks the message (a cancel after the cookie expired
+  // should say cancelled); nothing is exchanged either way.
+  if (!saved || params.get("state") !== saved.state) {
+    return toLogin(request, params.get("error") ? "denied" : "state");
+  }
   if (params.get("error")) return toLogin(request, "denied");
 
   const code = params.get("code");
@@ -35,7 +39,14 @@ export async function GET(request: NextRequest) {
     return toLogin(request, "failed");
   }
 
-  if (!(await isOwner(idToken))) return toLogin(request, "not-allowed");
+  let owner: boolean;
+  try {
+    owner = await isOwner(idToken);
+  } catch (err) {
+    console.error("auth: owner check failed", err);
+    return toLogin(request, "failed");
+  }
+  if (!owner) return toLogin(request, "not-allowed");
 
   // saved.next was cleaned by the login route and is signed, but this is the
   // redirect that matters, so it is cleaned again here.

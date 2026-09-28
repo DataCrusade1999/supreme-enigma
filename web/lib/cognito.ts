@@ -78,6 +78,11 @@ function defaultVerifier(): IdTokenVerifier {
 /** Google sign-in creates a Cognito user for any Google account, so this is the
  * only thing standing between another account and a session. */
 export async function isOwner(idToken: string, verifier: IdTokenVerifier = defaultVerifier()): Promise<boolean> {
+  // A thrown error, not false: refusing the owner as "not allowed" would hide a
+  // missing env var behind the message for someone else's account.
+  const owner = process.env.OWNER_EMAIL;
+  if (!owner) throw new Error("OWNER_EMAIL is not set");
+
   let payload: Record<string, unknown>;
   try {
     payload = await verifier.verify(idToken);
@@ -86,5 +91,5 @@ export async function isOwner(idToken: string, verifier: IdTokenVerifier = defau
   }
   const email = typeof payload.email === "string" ? payload.email.toLowerCase() : null;
   const verified = payload.email_verified === true || payload.email_verified === "true";
-  return verified && email !== null && email === process.env.OWNER_EMAIL!.toLowerCase();
+  return verified && email !== null && email === owner.toLowerCase();
 }
