@@ -234,8 +234,8 @@ export function CommandBar() {
                     index === selectedIndex ? "text-[var(--color-terminal-accent)]" : ""
                   }`}
                 >
-                  <span>{command.label}</span>
-                  <span className="text-[0.75rem] text-[var(--color-terminal-fg)]/50">
+                  <span className="shrink-0 whitespace-nowrap">{command.label}</span>
+                  <span className="min-w-0 truncate text-[0.75rem] text-[var(--color-terminal-fg)]/50">
                     {command.hint}
                   </span>
                 </button>
