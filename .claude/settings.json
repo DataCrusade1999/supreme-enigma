@@ -12,7 +12,18 @@
   "permissions": {
     "allow": [
       "mcp__plugin_context-mode_context-mode__ctx_execute",
-      "Bash(terraform plan:*)"
+      "Bash(terraform plan:*)",
+      "PowerShell(terraform plan *)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git log *)",
+      "PowerShell(npm test *)",
+      "PowerShell(npm run lint *)",
+      "PowerShell(npx vitest run *)",
+      "PowerShell(npx playwright test *)",
+      "PowerShell(gh pr view *)",
+      "PowerShell(gh issue view *)",
+      "PowerShell(gh run view *)"
     ]
   }
 }
