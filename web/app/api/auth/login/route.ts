@@ -5,6 +5,12 @@ import { createOAuthState, OAUTH_COOKIE, OAUTH_STATE_MAX_AGE_MS } from "@/lib/oa
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const secret = process.env.COOKIE_SECRET;
+  if (!secret) {
+    console.error("auth: COOKIE_SECRET is not set");
+    return NextResponse.redirect(new URL("/login?error=failed", request.url));
+  }
+
   const next = safeNext(request.nextUrl.searchParams.get("next"));
   const state = randomState();
   const { verifier, challenge } = pkcePair();
@@ -20,7 +26,7 @@ export async function GET(request: NextRequest) {
   }
 
   const response = NextResponse.redirect(target);
-  response.cookies.set(OAUTH_COOKIE, createOAuthState({ state, verifier, next }, process.env.COOKIE_SECRET!), {
+  response.cookies.set(OAUTH_COOKIE, createOAuthState({ state, verifier, next }, secret), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",

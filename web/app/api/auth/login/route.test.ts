@@ -40,6 +40,14 @@ describe("GET /api/auth/login", () => {
     expect(res.cookies.get(OAUTH_COOKIE)).toBeUndefined();
   });
 
+  it("sends the browser back to /login rather than failing when COOKIE_SECRET is not set", async () => {
+    delete process.env.COOKIE_SECRET;
+    const res = await get("/tools");
+    const location = new URL(res.headers.get("location")!);
+    expect(location.pathname + location.search).toBe("/login?error=failed");
+    expect(res.cookies.get(OAUTH_COOKIE)).toBeUndefined();
+  });
+
   it.each(["//evil.example", "https://evil.example", "/\t/evil.example", undefined])("replaces next=%j with the hub", async (next) => {
     const res = await get(next);
     expect(readOAuthState(res.cookies.get(OAUTH_COOKIE)!.value, "secret")!.next).toBe("/tools");

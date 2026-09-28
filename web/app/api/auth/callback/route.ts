@@ -12,8 +12,14 @@ function toLogin(request: NextRequest, error: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const secret = process.env.COOKIE_SECRET;
+  if (!secret) {
+    console.error("auth: COOKIE_SECRET is not set");
+    return toLogin(request, "failed");
+  }
+
   const params = request.nextUrl.searchParams;
-  const saved = readOAuthState(request.cookies.get(OAUTH_COOKIE)?.value, process.env.COOKIE_SECRET!);
+  const saved = readOAuthState(request.cookies.get(OAUTH_COOKIE)?.value, secret);
 
   // The state check comes first: without it, anyone could send the owner's
   // browser a callback carrying the attacker's own code. A Cognito error on a
@@ -53,7 +59,7 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(new URL(safeNext(saved.next), request.url));
   response.cookies.set(OAUTH_COOKIE, "", { path: "/api/auth", maxAge: 0 });
   // Same cookie and attributes the password route set, so proxy.ts is unchanged.
-  response.cookies.set(COOKIE_NAME, createSessionCookieValue(process.env.COOKIE_SECRET!), {
+  response.cookies.set(COOKIE_NAME, createSessionCookieValue(secret), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",

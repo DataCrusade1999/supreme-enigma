@@ -93,6 +93,15 @@ describe("GET /api/auth/callback", () => {
     expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
   });
 
+  it("redirects rather than failing when COOKIE_SECRET is not set", async () => {
+    const stateCookie = cookieFor("s1");
+    delete process.env.COOKIE_SECRET;
+    const res = await callback({ code: "c", state: "s1" }, stateCookie);
+    expect(redirectedTo(res)).toBe("/login?error=failed");
+    expect(exchangeCode).not.toHaveBeenCalled();
+    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+  });
+
   it("reports a failed code exchange", async () => {
     vi.mocked(exchangeCode).mockRejectedValue(new Error("token exchange failed: 400"));
     const res = await callback({ code: "c", state: "s1" }, cookieFor("s1"));
