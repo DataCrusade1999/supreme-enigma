@@ -16,7 +16,8 @@ describe("isGatedPath", () => {
     ["/tools/", true],
     ["/tools/something-new", true],
     ["/login", false],
-    ["/api/login", false],
+    ["/api/auth/login", false],
+    ["/api/auth/callback", false],
     // The old login path moved to /login and is no longer carved out, so it
     // now falls under the /tools/bgm-looper prefix like any other subpath.
     ["/tools/bgm-looper/login", true],
