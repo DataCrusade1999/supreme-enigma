@@ -17,6 +17,7 @@ const SNAPSHOT: Snapshot = {
       publishedAt: "2026-09-25T09:00:00.000Z",
       direct: false,
       tag: "Economy",
+      region: "local",
     },
     {
       id: "b",
@@ -27,6 +28,7 @@ const SNAPSHOT: Snapshot = {
       publishedAt: "2026-09-25T08:00:00.000Z",
       direct: true,
       tag: "Legislation",
+      region: "local",
     },
     {
       id: "c",
@@ -36,6 +38,7 @@ const SNAPSHOT: Snapshot = {
       publishedAt: "2026-09-25T07:00:00.000Z",
       direct: false,
       tag: "Drop",
+      region: "local",
     },
     {
       id: "d",
@@ -45,6 +48,7 @@ const SNAPSHOT: Snapshot = {
       publishedAt: "2026-09-25T06:00:00.000Z",
       direct: true,
       tag: "Untagged",
+      region: "local",
     },
   ],
   indicators: [
@@ -232,6 +236,15 @@ describe("NewsDesk", () => {
     fireEvent.click(screen.getByRole("button", { name: "International 1" }));
     // Switching region goes back to All.
     expect(screen.getByRole("button", { name: "All 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
+      "Moody's raises India FY27 GDP forecast to 7%",
+    ]);
+  });
+
+  it("files a headline saved before regions by its publisher", () => {
+    const noRegions: Snapshot = { ...SNAPSHOT, headlines: SNAPSHOT.headlines.map((h) => ({ ...h, region: undefined })) };
+    render(<NewsDesk initial={noRegions} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "International 1" }));
     expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
       "Moody's raises India FY27 GDP forecast to 7%",
     ]);

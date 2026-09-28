@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatAge } from "../../lib/news-desk/format";
 import { TOPICS, type Topic } from "../../lib/news-desk/tags";
-import type { IndicatorValue, Region, Snapshot } from "../../lib/news-desk/types";
+import { regionOf, type IndicatorValue, type Region, type Snapshot } from "../../lib/news-desk/types";
 import { ChatPanel } from "./ChatPanel";
 import { HeadlineList } from "./HeadlineList";
 import { IndicatorTable } from "./IndicatorTable";
@@ -77,10 +77,8 @@ export function NewsDesk({
   // Drop items stay in the snapshot so they are not re-tagged on the next
   // refresh. They are kept out of All and listed under Hidden, so a real story
   // the model got wrong can still be found. Untagged items appear only under All.
-  // Topic tabs count and filter within the selected region. A headline saved
-  // before regions existed has none and counts as local.
+  // Topic tabs count and filter within the selected region.
   const everything = snapshot?.headlines ?? [];
-  const regionOf = (h: (typeof everything)[number]) => h.region ?? "local";
   const regionTabs = REGION_TABS.map((r) => ({
     ...r,
     count: everything.filter((h) => regionOf(h) === r.region && h.tag !== "Drop").length,

@@ -31,12 +31,25 @@ export const headlineSchema = z.object({
   // Defaulted rather than required so a Phase 1 snapshot, which has no tags,
   // still reads; the next refresh tags its items.
   tag: z.enum(STORED_TAGS).default("Untagged"),
-  // Optional so a snapshot saved before regions still reads; readers treat a
-  // missing region as local, and the next refresh fills it on any item a feed
-  // still carries.
+  // Optional so a snapshot saved before regions still reads; readers go through
+  // regionOf, and the next refresh fills it on any item a feed still carries.
   region: z.enum(REGIONS).optional(),
 });
 export type Headline = z.infer<typeof headlineSchema>;
+
+// The international outlets as their items name them: the direct FT feed, and
+// Google News publishers, which come as "Reuters" or "reuters.com",
+// "Bloomberg" or "Bloomberg.com".
+const INTERNATIONAL_PUBLISHERS = new Set(["ft", "financial times", "reuters", "bloomberg", "the economist", "economist"]);
+
+/** A headline's region. One saved before regions has none, and most of a
+ * snapshot's items age out of the feeds before a refresh can fill it, so it is
+ * inferred from the publisher. */
+export function regionOf(h: Pick<Headline, "region" | "source">): Region {
+  if (h.region) return h.region;
+  const publisher = h.source.trim().toLowerCase().replace(/^www\./, "").replace(/\.com$/, "");
+  return INTERNATIONAL_PUBLISHERS.has(publisher) ? "international" : "local";
+}
 
 /** A headline as parsed from a feed, before it has an id or a tag. */
 export type RawHeadline = Omit<Headline, "id" | "tag">;
