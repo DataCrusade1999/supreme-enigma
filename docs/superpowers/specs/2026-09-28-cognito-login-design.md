@@ -3,7 +3,7 @@
 **Date:** 2026-09-28
 **Status:** Approved 2026-09-28. Written without a brainstorming session, at the owner's request; the owner reviewed the §3 decisions afterwards.
 **Issue:** #290
-**Epic:** #285 (phase 5 of 5). Depends on phase 4 (#289) for the SES domain identity.
+**Epic:** #285 (phase 5 of 5). Built before phase 4 (#289): it creates the SES identities and DNS records phase 4 had planned, and phase 4 reuses them.
 
 ## 1. Problem
 
@@ -36,7 +36,7 @@ Non-goals:
 | Client type | Public client, no secret, PKCE required | Nothing to leak. PKCE covers the code-interception risk a secret would cover. |
 | Feature plan | Essentials | Managed login, passkeys and email codes need it. Free up to 10,000 monthly active users, and this has one. |
 | First factors | `PASSWORD`, `EMAIL_OTP`, `WEB_AUTHN` | The owner user gets a random 32-character password that nobody knows. It exists so the user is `CONFIRMED` and so the policy is accepted in case AWS requires `PASSWORD` in the list. |
-| Cognito's email | `DEVELOPER` mode through phase 4's SES domain identity, from `no-reply@ashutosh-pandey.com` | Email codes need SES. The owner's address is already verified in SES, so the sandbox is enough. |
+| Cognito's email | `DEVELOPER` mode through an SES domain identity for `ashutosh-pandey.com`, from `no-reply@ashutosh-pandey.com` | Email codes need the Essentials plan and SES. The account is in the SES sandbox, which only delivers to verified addresses, so the owner's address becomes an SES identity too. That is enough for one recipient. |
 | Owner check | ID token `email` equals `OWNER_EMAIL` (case-insensitive) and `email_verified` is true | Google sign-in creates a Cognito user for any Google account. The app is the only gate for those. |
 | State and PKCE storage | One signed, short-lived cookie (`looper_oauth`, 10 min, path `/api/auth`) holding `{state, verifier, next}` | No server storage. Signed with `COOKIE_SECRET`, like the session. |
 | Rollout | Infra first. Then the web switch. Then remove `APP_PASSWORD` once the switch is on main. | Removing the Vercel env var earlier would break password login on stage and main. |
@@ -61,7 +61,19 @@ Non-goals:
 
 ## 5. Infrastructure
 
-Everything is in `infra/main/auth.tf` and shared by all environments, like `COOKIE_SECRET`.
+Everything is shared by all environments, like `COOKIE_SECRET`.
+
+SES and DNS, in `infra/main/email.tf` (the resources phase 4 had planned, moved here so this phase doesn't wait for it):
+
+- `aws_sesv2_email_identity.domain`: `ashutosh-pandey.com`, Easy DKIM with RSA 2048.
+- `vercel_dns_record` × 3: the DKIM CNAMEs, `<token>._domainkey` → `<token>.dkim.amazonses.com`.
+- `vercel_dns_record`: TXT `_dmarc` = `v=DMARC1; p=none;`, with no `rua` address.
+- `aws_sesv2_email_identity.owner` for `var.alert_email`. SES sends a verification link that the owner clicks once.
+- `local.site_hosts` (in `shared.tf`): the apex, `dev.` and `stage.` hosts, used for the callback URLs.
+
+The user pool can only use a verified identity, so these are applied first with `-target`, and the rest once DKIM shows `SUCCESS` and the owner has clicked the link.
+
+Cognito, in `infra/main/auth.tf`:
 
 - `aws_cognito_user_pool.owner`:
   - Essentials, email as the username, admin-created users only

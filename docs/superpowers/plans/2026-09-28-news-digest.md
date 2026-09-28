@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-28-news-digest-design.md`. Issue #289, epic #285.
 
-**Independent of phases 1–3.** Phase 5 needs Task 1's `aws_sesv2_email_identity.domain`.
+**Independent of phases 1–3.** Phase 5 (#290) was built first: the SES identities, DKIM/DMARC records and `local.site_hosts` already exist, and this plan reuses them.
 
 ## Global Constraints
 
@@ -21,7 +21,7 @@
 - Section order: Economy, Reforms, Legislation, Untagged. `Drop` never appears.
 - Every manual `aws` CLI call: `--profile personal --region us-east-1`.
 - Terraform: plan against real state, apply with the owner's go-ahead before merge, then `No changes.`.
-- New required Terraform variables: none. `CLAUDE.md`'s "five required variables" stays true.
+- New required Terraform variables: none. `CLAUDE.md`'s required-variable count doesn't change.
 - Commits end with `Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>`.
 
 ## Review Focus
@@ -36,59 +36,17 @@
 
 Tasks 1–5 are one PR on `feat/news-digest`: `git switch dev && git pull && git switch -c feat/news-digest`. Task 6 is a follow-up PR.
 
-### Task 1: SES identities and DNS
+### Task 1: Let Vercel send through SES
+
+The SES identities (`aws_sesv2_email_identity.domain` and `.owner`), the DKIM and DMARC records and `local.site_hosts` already exist: phase 5 (#290) was built first and created them in `infra/main/email.tf` and `infra/main/shared.tf`. Check before starting: `aws sesv2 get-email-identity --email-identity ashutosh-pandey.com --query "{verified: VerifiedForSendingStatus, dkim: DkimAttributes.Status}" --profile personal --region us-east-1` shows `verified: true, dkim: SUCCESS`.
 
 **Files:**
-- Create: `infra/main/email.tf`
 - Modify: `infra/main/shared.tf` (`aws_iam_role_policy.vercel`)
 
 **Interfaces:**
-- Produces: `aws_sesv2_email_identity.domain` (phase 5 uses its ARN for Cognito's email configuration), `aws_sesv2_email_identity.owner`.
+- Consumes: `aws_sesv2_email_identity.domain`, `aws_sesv2_email_identity.owner` (phase 5).
 
-- [ ] **Step 1: Write `infra/main/email.tf`**
-
-```hcl
-# SES for mail sent from ashutosh-pandey.com: the News Desk digest (spec
-# 2026-09-28-news-digest-design.md) and, later, Cognito sign-in codes. The account
-# stays in the SES sandbox: the only recipient is the owner, a verified identity.
-
-resource "aws_sesv2_email_identity" "domain" {
-  email_identity = vercel_project_domain.custom.domain
-
-  dkim_signing_attributes {
-    next_signing_key_length = "RSA_2048_BIT"
-  }
-}
-
-# Easy DKIM: three CNAMEs. count, not for_each, because the tokens are unknown
-# until the identity exists.
-resource "vercel_dns_record" "ses_dkim" {
-  count  = 3
-  domain = vercel_project_domain.custom.domain
-  name   = "${aws_sesv2_email_identity.domain.dkim_signing_attributes[0].tokens[count.index]}._domainkey"
-  type   = "CNAME"
-  value  = "${aws_sesv2_email_identity.domain.dkim_signing_attributes[0].tokens[count.index]}.dkim.amazonses.com"
-  ttl    = 1800
-}
-
-# p=none: report nothing, reject nothing, but DMARC-aware receivers see a policy.
-# No rua= address, which would publish the owner's email in DNS.
-resource "vercel_dns_record" "dmarc" {
-  domain = vercel_project_domain.custom.domain
-  name   = "_dmarc"
-  type   = "TXT"
-  value  = "v=DMARC1; p=none;"
-  ttl    = 1800
-}
-
-# In the sandbox SES delivers only to verified addresses. SES emails a link to this
-# address on first apply; it must be clicked once.
-resource "aws_sesv2_email_identity" "owner" {
-  email_identity = var.alert_email
-}
-```
-
-- [ ] **Step 2: Let Vercel send.** In `aws_iam_role_policy.vercel`, add a statement:
+- [ ] **Step 1: Let Vercel send.** In `aws_iam_role_policy.vercel`, add a statement:
 
 ```hcl
       {
@@ -99,21 +57,18 @@ resource "aws_sesv2_email_identity" "owner" {
       },
 ```
 
-- [ ] **Step 3: Plan, apply, verify**
+- [ ] **Step 2: Plan, apply, verify**
 
 Run: `cd infra/main && terraform fmt && terraform validate && terraform plan -var-file=terraform.tfvars`
-Expected: 2 identities, 4 DNS records created; `vercel` policy updated in place. Nothing else.
+Expected: `vercel` policy updated in place. Nothing else.
 
-This task has no web code and is safe to apply on its own. With the owner's go-ahead, `terraform apply -var-file=terraform.tfvars`. Then:
-1. The owner clicks the SES verification link sent to their address.
-2. Within about an hour: `aws sesv2 get-email-identity --email-identity ashutosh-pandey.com --query "{verified: VerifiedForSendingStatus, dkim: DkimAttributes.Status}" --profile personal --region us-east-1` shows `verified: true, dkim: SUCCESS`.
-3. `aws sesv2 send-email --from-email-address "digest@ashutosh-pandey.com" --destination "ToAddresses=<owner email>" --content "Simple={Subject={Data=SES test},Body={Text={Data=hello}}}" --profile personal --region us-east-1` delivers; Gmail's "Show original" shows `DKIM: PASS` and `DMARC: PASS`.
+With the owner's go-ahead, `terraform apply -var-file=terraform.tfvars`. Then `aws sesv2 send-email --from-email-address "digest@ashutosh-pandey.com" --destination "ToAddresses=<owner email>" --content "Simple={Subject={Data=SES test},Body={Text={Data=hello}}}" --profile personal --region us-east-1` delivers; Gmail's "Show original" shows `DKIM: PASS` and `DMARC: PASS`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add infra/main/email.tf infra/main/shared.tf
-git commit -m "feat(infra): SES identity for ashutosh-pandey.com with DKIM and DMARC
+git add infra/main/shared.tf
+git commit -m "feat(infra): let the Vercel role send email through SES
 
 Refs #289
 
@@ -639,14 +594,6 @@ resource "vercel_project_environment_variable" "digest_to" {
 
 ```hcl
 # --- Scheduled digest: Scheduler -> looper bus -> rule -> API destination -> Vercel ---
-
-locals {
-  site_hosts = {
-    main  = vercel_project_domain.custom.domain
-    dev   = "dev.${vercel_project_domain.custom.domain}"
-    stage = "stage.${vercel_project_domain.custom.domain}"
-  }
-}
 
 resource "aws_cloudwatch_event_bus" "looper" {
   name = "looper"
