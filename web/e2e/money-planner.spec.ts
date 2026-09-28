@@ -1,10 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { signIn } from "./session";
 
-test("the money planner is reachable from the hub and answers", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByLabel(/password/i).fill("test123");
-  await page.getByRole("button", { name: /log in/i }).click();
-  await expect(page).toHaveURL(/\/tools$/);
+test("the money planner is reachable from the hub and answers", async ({ page, baseURL }) => {
+  await signIn(page, baseURL!);
+  await page.goto("/tools");
 
   await page.getByRole("link", { name: /Money Planner/ }).click();
   await expect(page).toHaveURL(/\/tools\/money-planner/);
@@ -23,11 +22,8 @@ test("the money planner is reachable from the hub and answers", async ({ page })
   await expect(page.getByText(/(months?|days?) away/)).toBeVisible();
 });
 
-test("the planner remembers a plan across a reload", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByLabel(/password/i).fill("test123");
-  await page.getByRole("button", { name: /log in/i }).click();
-  await expect(page).toHaveURL(/\/tools$/);
+test("the planner remembers a plan across a reload", async ({ page, baseURL }) => {
+  await signIn(page, baseURL!);
   await page.goto("/tools/money-planner");
 
   await page.getByLabel("Monthly salary").fill("80000");

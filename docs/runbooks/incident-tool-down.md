@@ -3,7 +3,7 @@
 ## When to use this
 
 A user (realistically: you) cannot get a looped track out of
-`/tools/bgm-looper` on any environment. Symptoms that route here: cannot log
+`/tools/bgm-looper` on any environment. Symptoms that route here: cannot sign
 in, upload fails, `processing failed`, a download link that 403s.
 
 If the pipeline is merely running old code, go to
@@ -24,17 +24,20 @@ The request path is: browser → Next route on Vercel → presigned S3 PUT →
 `POST /api/looper/process` → synchronous Lambda invoke → presigned S3 GET.
 Each symptom below isolates one hop.
 
-### Cannot log in
+### Cannot sign in
 
-- **429 `too many attempts`** — the rate limiter, or the Vercel WAF rule on
-  `/api/login`, is holding the client down. Both are working as designed;
-  wait out `Retry-After`. The in-process limiter refunds the window on a
-  correct password, so this should not persist.
-- **401 `invalid password`** — check `APP_PASSWORD` is set for that
-  environment's Vercel target. It is Terraform-managed, so a missing value
-  means a failed apply, not a dashboard edit.
-- **Logged in but immediately bounced** — `COOKIE_SECRET` changed or is
-  missing, invalidating every issued cookie. Same check.
+- **`/login?error=not-allowed`** — the account is not `OWNER_EMAIL`, or its
+  email is unverified.
+- **`/login?error=state`** — the sign-in took over 10 minutes or began in
+  another tab. Retry from `/login`.
+- **`/login?error=failed`** — the code exchange failed; the Vercel runtime log
+  has `auth: code exchange failed`.
+- **A Cognito error page before any redirect** — the host is not in the app
+  client's callback URLs. Only the apex, `dev.`, `stage.` and `localhost:3000`
+  are registered.
+- **Signed in but immediately bounced** — `COOKIE_SECRET` changed or is
+  missing, invalidating every issued cookie. It is Terraform-managed, so a
+  missing value means a failed apply, not a dashboard edit.
 
 ### Upload fails
 
