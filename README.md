@@ -2,7 +2,7 @@
 
 A personal portfolio site with a small workshop of private tools attached.
 The portfolio half (home, about, projects, resume, blog, contact) is public
-and needs no login. The tools half sits behind a single shared password —
+and needs no login. The tools half sits behind an owner-only sign-in —
 these are things built for one user, not a product with accounts.
 
 Live at **https://ashutosh-pandey.com**.
@@ -63,9 +63,8 @@ Portfolio content is hand-written data (`web/content/projects.ts`,
 `resume.ts`); blog posts are MDX in the repo-root `content/` directory,
 git-backed and edited through Keystatic.
 
-**The gate.** One shared password (a Vercel env var) checked with a
-constant-time compare in `/api/login`, exchanged for an HMAC-signed HttpOnly
-cookie. No accounts, no per-user state, no session store.
+**The gate.** Owner-only sign-in through Cognito (Google, an email code or a
+passkey), exchanged for an HMAC-signed HttpOnly cookie. No session store.
 `web/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth for
 what's protected — adding a new tool means adding its prefix there and
 nothing else.
@@ -133,7 +132,7 @@ npm test                                              # vitest (unit/component)
 npx playwright install chromium                       # once, per checkout
 npm run test:e2e                                      # playwright (e2e + a11y)
 npm run lint
-APP_PASSWORD=test123 COOKIE_SECRET=devsecret npm run dev
+COOKIE_SECRET=devsecret COGNITO_DOMAIN=https://auth.ashutosh-pandey.com COGNITO_CLIENT_ID=… COGNITO_USER_POOL_ID=… OWNER_EMAIL=… npm run dev   # real COGNITO_* values: see CLAUDE.md
 
 # Lambda DSP pipeline (into a local venv, to leave the global interpreter alone)
 cd lambda
@@ -160,9 +159,9 @@ needs them.
 
 Requires Terraform ≥1.10, an AWS account, a Vercel account + API token, and
 a gitignored `infra/main/terraform.tfvars`. Copy
-`infra/main/terraform.tfvars.example` across and fill it in — all five inputs
+`infra/main/terraform.tfvars.example` across and fill it in — all seven inputs
 (`vercel_api_token`, `app_password`, `github_repo`, `alert_email`,
-`openrouter_api_key`) are required, so `terraform plan` fails with `No value for
+`openrouter_api_key`, `google_client_id`, `google_client_secret`) are required, so `terraform plan` fails with `No value for
 required variable` until each is set. The Lambda container image is built and
 pushed by GitHub Actions, never locally, so bootstrap order matters:
 

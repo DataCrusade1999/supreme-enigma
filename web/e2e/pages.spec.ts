@@ -51,8 +51,8 @@ test("the head links an SVG favicon and a PNG apple-touch icon that both serve",
 });
 
 // The gate has no SiteHeader, so ⌘K is its only nav — including from the
-// password box, which is the first thing a visitor clicks there.
-test("the command bar opens on the gate, even from the password field", async ({
+// Sign in link, which is the first thing a visitor reaches there.
+test("the command bar opens on the gate, even from the Sign in link", async ({
   page,
 }) => {
   await page.goto("/login");
@@ -70,7 +70,7 @@ test("the command bar opens on the gate, even from the password field", async ({
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 
-  await page.getByLabel("Password").click();
+  await page.getByRole("link", { name: "Sign in" }).focus();
   await page.keyboard.press("ControlOrMeta+k");
   await expect(dialog).toBeVisible();
 });

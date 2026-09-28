@@ -68,7 +68,7 @@ const GATED_PREFIXES = [
   "/keystatic",
   "/api/keystatic",
 ];
-const ALWAYS_ALLOWED_PATHS = ["/login", "/api/login"];
+const ALWAYS_ALLOWED_PATHS = ["/login"];
 
 // Derived from TOOLS so the strip can never name a tool the hub doesn't list,
 // or go quiet on one it does. Key order follows TOOLS, which matters to the
