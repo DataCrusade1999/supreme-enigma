@@ -55,6 +55,6 @@ test("the old login path redirects to the gate, aimed back at the tool", async (
   page,
 }) => {
   await page.goto("/tools/bgm-looper/login");
-  await expect(page).toHaveURL(/\/login\?next=%2Ftools%2Fbgm-looper$/);
+  await expect(page).toHaveURL(/\/login\?next=\/tools\/bgm-looper$/);
   await expect(page.getByText("BGM Looper")).toBeVisible();
 });

@@ -43,6 +43,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- The login redirect reads `/login?next=/tools/news-desk` instead of `/login?next=%2Ftools%2Fnews-desk` (#277).
 - The S3 buckets are now `portfolio-data-<account>` (plus `-dev-` and `-stage-`), replacing `bgm-looper-audio-*`. They hold the resume and News Desk data as well as audio. S3 cannot rename a bucket, so the resume and News Desk data were copied into new buckets and the old ones deleted (#273).
 - Buttons and the News Desk "sources failed" toggle show a pointer cursor across the site. News Desk links no longer change colour on hover, Refresh sits above the headline column, and the indicator table is centred in the window from the first paint and stays there while the headlines scroll.
 - The ⌘K command bar opens with six pinned commands (`cd projects`, `cd resume`, `cd blog`, `cd contact`, `cd tools`, `theme`) and a count of the rest; typing still searches every command. `theme dark` and `theme light` are now one `theme` toggle.

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("the tools hub is behind the login gate", async ({ page }) => {
   await page.goto("/tools");
-  await expect(page).toHaveURL(/\/login\?next=%2Ftools/);
+  await expect(page).toHaveURL(/\/login\?next=\/tools$/);
 });
 
 test("a password-first login lands on the hub, not on a tool", async ({ page }) => {
