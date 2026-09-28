@@ -93,8 +93,8 @@ promotion works.
 | Branch  | URL | Purpose |
 |---------|-----|---------|
 | `main`  | https://ashutosh-pandey.com | Production |
-| `stage` | https://bgm-looper-git-stage-ashutosh-pandeys-projects-77cb3a00.vercel.app | Pre-prod QA |
-| `dev`   | https://bgm-looper-git-dev-ashutosh-pandeys-projects-77cb3a00.vercel.app | Default branch, integration |
+| `stage` | https://stage.ashutosh-pandey.com | Pre-prod QA |
+| `dev`   | https://dev.ashutosh-pandey.com | Default branch, integration |
 
 Promote by PR: `dev` → `stage` → `main`.
 

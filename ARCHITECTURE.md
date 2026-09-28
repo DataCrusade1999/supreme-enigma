@@ -38,7 +38,7 @@ AWS (personal account 223376380711, us-east-1, Terraform-managed)
 |---|---|---|---|
 | Lambda function | `bgm-looper-processor` | `-dev` | `-stage` |
 | S3 bucket | `portfolio-data-<acct>` | `-dev-<acct>` | `-stage-<acct>` |
-| Vercel deploy | `ashutosh-pandey.com` | `-git-dev-...` | `-git-stage-...` |
+| Vercel deploy | `ashutosh-pandey.com` | `dev.ashutosh-pandey.com` | `stage.ashutosh-pandey.com` |
 
 Each Lambda: container image (`librosa`, `numpy`, `soundfile`,
 `pyloudnorm`, static `ffmpeg`), 1024MB, 60s timeout. Each S3 bucket: public

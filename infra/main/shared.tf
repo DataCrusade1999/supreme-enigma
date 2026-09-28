@@ -397,6 +397,24 @@ resource "vercel_project_domain" "custom" {
   domain     = "ashutosh-pandey.com"
 }
 
+resource "vercel_project_domain" "custom_www" {
+  project_id           = vercel_project.looper.id
+  domain               = "www.ashutosh-pandey.com"
+  redirect             = vercel_project_domain.custom.domain
+  redirect_status_code = 308
+}
+
+# Branch domains: each serves the latest deployment of its branch, so they pick
+# up the same git_branch-scoped env vars (bucket, Lambda) as the vercel.app
+# branch URLs. Previews have no Vercel Authentication (see above), so these
+# are public; the tools stay behind APP_PASSWORD.
+resource "vercel_project_domain" "custom_branch" {
+  for_each   = toset(["dev", "stage"])
+  project_id = vercel_project.looper.id
+  domain     = "${each.key}.${vercel_project_domain.custom.domain}"
+  git_branch = each.key
+}
+
 # --- Firewall ---
 
 # web/lib/rate-limit.ts caps /api/login at 5 attempts per 15 minutes, but its
