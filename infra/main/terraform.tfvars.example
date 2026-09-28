@@ -25,6 +25,6 @@ openrouter_api_key = "sk-or-v1-..."
 # news_desk_model = "anthropic/claude-haiku-4.5"
 
 # Google OAuth client (Web application) used by Cognito for Google sign-in. Its
-# redirect URI is https://ashutosh-pandey-login.auth.us-east-1.amazoncognito.com/oauth2/idpresponse.
+# redirect URI is https://auth.ashutosh-pandey.com/oauth2/idpresponse.
 google_client_id     = "....apps.googleusercontent.com"
 google_client_secret = "..."

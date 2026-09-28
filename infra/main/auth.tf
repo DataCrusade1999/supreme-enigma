@@ -3,8 +3,9 @@
 # COOKIE_SECRET: the app turns a verified Cognito ID token into its own session.
 
 locals {
-  cognito_domain_prefix = "ashutosh-pandey-login"
-  cognito_domain_url    = "https://${local.cognito_domain_prefix}.auth.${var.aws_region}.amazoncognito.com"
+  # Managed login on the site's own domain, so passkeys bind to a hostname we own.
+  cognito_custom_domain = "auth.${vercel_project_domain.custom.domain}"
+  cognito_domain_url    = "https://${local.cognito_custom_domain}"
   login_callback_urls = concat(
     [for h in values(local.site_hosts) : "https://${h}/api/auth/callback"],
     ["http://localhost:3000/api/auth/callback"],
@@ -30,13 +31,13 @@ resource "aws_cognito_user_pool" "owner" {
     allowed_first_auth_factors = ["PASSWORD", "EMAIL_OTP", "WEB_AUTHN"]
   }
 
-  # Cognito accepts this relying party only once the prefix domain below exists, so
+  # Cognito accepts this relying party only once the custom domain below exists, so
   # a from-scratch apply fails here after creating the pool. Recovery:
   # .claude/rules/infra.md ("Cognito WebAuthn on a from-scratch apply").
-  # Passkeys are bound to this relying party: renaming the prefix, changing region
-  # or moving to a custom domain invalidates every registered passkey.
+  # Passkeys are bound to this hostname: they keep working with any login service
+  # served at auth.ashutosh-pandey.com, and stop working if that hostname changes.
   web_authn_configuration {
-    relying_party_id  = "${local.cognito_domain_prefix}.auth.${var.aws_region}.amazoncognito.com"
+    relying_party_id  = local.cognito_custom_domain
     user_verification = "preferred"
   }
 
@@ -87,10 +88,62 @@ resource "aws_sesv2_email_identity_policy" "cognito" {
   })
 }
 
-resource "aws_cognito_user_pool_domain" "owner" {
-  domain                = local.cognito_domain_prefix
+# Cognito serves a custom domain through CloudFront, so the certificate has to be in
+# us-east-1 (var.aws_region already is).
+resource "aws_acm_certificate" "auth" {
+  domain_name       = local.cognito_custom_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Vercel's system CAA records allow only Sectigo, Let's Encrypt and Google, so ACM
+# fails with CAA_ERROR without this. It can't sit on auth. itself, which is a CNAME.
+resource "vercel_dns_record" "caa_amazon" {
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = ""
+  type    = "CAA"
+  value   = "0 issue \"amazon.com\""
+  ttl     = 60
+}
+
+# Vercel wants the record name relative to the domain and no trailing dots.
+resource "vercel_dns_record" "auth_acm" {
+  for_each = {
+    for o in aws_acm_certificate.auth.domain_validation_options : o.domain_name => o
+  }
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = trimsuffix(trimsuffix(each.value.resource_record_name, "."), ".${vercel_project_domain.custom.domain}")
+  type    = each.value.resource_record_type
+  value   = trimsuffix(each.value.resource_record_value, ".")
+  ttl     = 60
+}
+
+resource "aws_acm_certificate_validation" "auth" {
+  certificate_arn         = aws_acm_certificate.auth.arn
+  validation_record_fqdns = [for o in aws_acm_certificate.auth.domain_validation_options : o.resource_record_name]
+  depends_on              = [vercel_dns_record.auth_acm, vercel_dns_record.caa_amazon]
+}
+
+resource "aws_cognito_user_pool_domain" "custom" {
+  domain                = local.cognito_custom_domain
+  certificate_arn       = aws_acm_certificate_validation.auth.certificate_arn
   user_pool_id          = aws_cognito_user_pool.owner.id
   managed_login_version = 2
+}
+
+# The explicit record overrides Vercel's wildcard ALIAS for auth.
+resource "vercel_dns_record" "auth" {
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = "auth"
+  type    = "CNAME"
+  value   = aws_cognito_user_pool_domain.custom.cloudfront_distribution
+  ttl     = 300
 }
 
 resource "aws_cognito_identity_provider" "google" {
