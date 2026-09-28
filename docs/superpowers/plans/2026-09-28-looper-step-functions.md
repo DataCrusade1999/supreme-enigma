@@ -693,7 +693,7 @@ Expected: `"result": "OK"` and no diagnostics. Fix any `ERROR` diagnostic in the
 - [ ] **Step 6: Plan**
 
 Run: `terraform plan -var-file=terraform.tfvars`
-Expected creates: 2 roles + 2 policies, 3 log groups, 3 state machines, 3 rules, 3 targets, 3 alarms. Updates in place: `aws_s3_bucket_notification.looper_uploads["dev"]` (queue → eventbridge). Destroys: exactly `aws_lambda_event_source_mapping.looper_jobs["dev"]`. Nothing else destroyed or replaced.
+Expected creates: 2 roles + 2 policies, 3 log groups, 3 state machines, 3 rules, 3 targets, 3 alarms. Updates in place: `aws_s3_bucket_notification.looper_uploads["dev"]` (queue → eventbridge). Destroys: exactly `aws_lambda_event_source_mapping.looper_jobs["dev"]`. Nothing else destroyed or replaced. A message still in `looper-jobs-dev` when the mapping goes is never consumed; upload nothing on dev during this apply.
 
 ### Task 4: Apply, test on dev, open PR B
 
