@@ -40,11 +40,37 @@
 | PR | Branch | Tasks | Merge only after |
 |---|---|---|---|
 | 1 | `feat/looper-async-lambda` (carries spec + plan) | 1 | — |
-| 2 | `feat/looper-async-infra` | 2, 3 | PR 1 merged into `dev` and dev's `deploy` job green |
+| 2 | `feat/looper-async-infra` | 2, 3 | PR 1 merged into `dev` and dev's Lambda confirmed on the new image |
 | 3 | `feat/looper-async-web` | 4, 5, 6, 7 | PR 1 promoted to `main` (so all three Lambdas accept SQS events) |
 | 4 | `chore/looper-async-cleanup` | 8, 9 | PR 3 promoted to `main` (so nothing calls `/process` or invokes the Lambda directly) |
 
 Each PR body says `Refs #286`; PR 4 says `Closes #286`.
+
+Every `infra/` change is applied **before** its PR merges, right after `terraform plan` shows the expected diff and the owner gives the go-ahead, then a second plan confirms `No changes.` — the order CLAUDE.md implies. Every step below that applies uses that order.
+
+### Deploying the Lambda while Actions is blocked
+
+As of 2026-09-28 every GitHub Actions job fails before starting ("recent account payments have failed or your spending limit needs to be increased"), so `deploy.yml` never builds the image, and CI does not gate merges. Until that is fixed:
+
+- The gate is the local suites (`pytest -q`, `npm test`, `npm run lint`, the build) plus the owner's explicit go-ahead on each PR.
+- After a `lambda/`-touching PR merges, deploy it by hand, doing what `deploy.yml`'s `deploy` job does. For branch `<b>` (`dev`, `stage` or `main`), function `<f>` (`bgm-looper-processor-dev`, `-stage`, or `bgm-looper-processor` for main) and the merge commit `<sha>` on that branch:
+
+  ```bash
+  REG=223376380711.dkr.ecr.us-east-1.amazonaws.com
+  TAG=<b>-<sha>
+  aws ecr get-login-password --profile personal --region us-east-1 | docker login --username AWS --password-stdin $REG
+  git switch --detach <sha>
+  # --provenance=false: Docker Desktop otherwise pushes a multi-manifest index
+  # with an attestation, which Lambda rejects.
+  docker build --platform linux/amd64 --provenance=false -t $REG/bgm-looper-lambda:$TAG lambda
+  docker push $REG/bgm-looper-lambda:$TAG
+  aws lambda update-function-code --function-name <f> --image-uri $REG/bgm-looper-lambda:$TAG --profile personal --region us-east-1
+  aws lambda wait function-updated --function-name <f> --profile personal --region us-east-1
+  git switch -
+  ```
+
+  Confirm with `aws lambda get-function --function-name <f> --query Code.ImageUri --profile personal --region us-east-1`.
+- If Actions is working again by then, skip this and check the `deploy` job instead.
 
 ---
 
@@ -202,12 +228,29 @@ def test_duplicate_delivery_leaves_finished_job_alone(aws, monkeypatch):
         "status": "done",
         "outputKey": "outputs/x.wav",
     }
+
+
+def test_concurrent_duplicate_finishing_first_is_not_an_error(aws, monkeypatch):
+    # Two deliveries of one event running at once: the other invocation marks
+    # the job done while this one is still in process(). Raising here would send
+    # a finished job through 3 retries into the DLQ.
+    s3, table = aws
+    s3.put_object(Bucket=BUCKET, Key=UPLOAD_KEY, Body=b"audio")
+
+    def other_invocation_finishes(input_path, output_path, target_lufs=-14.0):
+        table.put_item(Item={"jobKey": UPLOAD_KEY, "status": "done", "outputKey": "outputs/other.wav"})
+        return fake_process(input_path, output_path)
+
+    monkeypatch.setattr(handler_module, "process", other_invocation_finishes)
+
+    assert handler_module.handler(sqs_event(UPLOAD_KEY), None) is None
+    assert table.get_item(Key={"jobKey": UPLOAD_KEY})["Item"]["outputKey"] == "outputs/other.wav"
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `cd lambda && .venv/Scripts/python -m pytest tests/test_handler.py -q`
-Expected: the existing test passes; the seven new ones fail (`KeyError: 'bucket'` from the old handler, and `AttributeError: ... FAILED_MESSAGE`).
+Expected: the existing test passes; the eight new ones fail (`KeyError: 'bucket'` from the old handler, and `AttributeError: ... FAILED_MESSAGE`).
 
 - [ ] **Step 3: Replace `lambda/src/looper/handler.py`**
 
@@ -283,12 +326,7 @@ def _process_upload(bucket: str, key: str) -> None:
     table = boto3.resource("dynamodb").Table(os.environ["JOBS_TABLE_NAME"])
     output_key = "outputs/" + key.removeprefix("uploads/")
 
-    try:
-        _write_status(table, key, "processing")
-    except ClientError as err:
-        if err.response["Error"]["Code"] != "ConditionalCheckFailedException":
-            raise
-        logger.info("Skipping %s: job already finished (duplicate delivery)", key)
+    if not _write_status(table, key, "processing"):
         return
 
     # Errors around process() are transient: raising hands the message back to
@@ -309,7 +347,11 @@ def _process_upload(bucket: str, key: str) -> None:
     _write_status(table, key, "done", outputKey=output_key, result=_to_dynamo(meta))
 
 
-def _write_status(table, job_key: str, status: str, **fields) -> None:
+def _write_status(table, job_key: str, status: str, **fields) -> bool:
+    """Record a status. False means the job had already finished: S3 -> SQS is
+    at-least-once and two invocations can run at once, so a duplicate delivery
+    can lose the race at any of the three writes. That is not an error — raising
+    would send a finished job through 3 retries into the DLQ."""
     now = datetime.now(timezone.utc)
     values = {
         "status": status,
@@ -320,16 +362,23 @@ def _write_status(table, job_key: str, status: str, **fields) -> None:
     # A finished row never changes, so a duplicate delivery cannot move a
     # done/failed job back to processing. "status" is a DynamoDB reserved word,
     # hence the #name placeholders.
-    table.update_item(
-        Key={"jobKey": job_key},
-        UpdateExpression="SET " + ", ".join(f"#{k} = :{k}" for k in values),
-        ConditionExpression="attribute_not_exists(#status) OR #status = :processing",
-        ExpressionAttributeNames={f"#{k}": k for k in values},
-        ExpressionAttributeValues={
-            **{f":{k}": v for k, v in values.items()},
-            ":processing": "processing",
-        },
-    )
+    try:
+        table.update_item(
+            Key={"jobKey": job_key},
+            UpdateExpression="SET " + ", ".join(f"#{k} = :{k}" for k in values),
+            ConditionExpression="attribute_not_exists(#status) OR #status = :processing",
+            ExpressionAttributeNames={f"#{k}": k for k in values},
+            ExpressionAttributeValues={
+                **{f":{k}": v for k, v in values.items()},
+                ":processing": "processing",
+            },
+        )
+    except ClientError as err:
+        if err.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
+        logger.info("Job %s already finished; not recording %s (duplicate delivery)", job_key, status)
+        return False
+    return True
 
 
 def _to_dynamo(meta: dict) -> dict:
@@ -345,7 +394,7 @@ Expected: all tests pass, including the original direct-invoke test.
 - [ ] **Step 5: Commit and open PR 1**
 
 ```bash
-git add lambda/src/looper/handler.py lambda/tests/test_handler.py docs/superpowers/plans/2026-09-28-looper-async-jobs.md
+git add lambda/src/looper/handler.py lambda/tests/test_handler.py
 git commit -m "feat(lambda): accept SQS-wrapped S3 events and record job status
 
 The direct-invoke path is unchanged, so this deploys with no behaviour
@@ -362,7 +411,7 @@ gh pr create --base dev --title "feat(lambda): accept SQS events and record job 
 Refs #286"
 ```
 
-Merge per the `merging-a-pr` skill. Confirm dev's `deploy` job ran and passed before starting PR 2.
+Merge per the `merging-a-pr` skill. Then confirm dev's Lambda runs the new code before starting PR 2 — see "Deploying the Lambda while Actions is blocked" below.
 
 ---
 
@@ -648,7 +697,7 @@ gh pr create --base dev --title "feat(infra): looper job queues, tables and DLQ 
 Refs #286"
 ```
 
-After merge: `cd infra/main && terraform apply -var-file=terraform.tfvars`, confirm the same resource counts as the plan.
+With the owner's go-ahead, before merging: `cd infra/main && terraform apply -var-file=terraform.tfvars`, confirm the same resource counts as the plan, then `terraform plan -var-file=terraform.tfvars` shows `No changes.`. Then merge per the `merging-a-pr` skill.
 
 - [ ] **Step 7: Verify on dev by hand**
 
@@ -1349,6 +1398,16 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 Run: `git fetch origin && git log origin/main --oneline -- lambda/src/looper/handler.py | head -1`
 Expected: the PR 1 squash commit. If it is not there, stop: PR 3 waits for the next promotion.
 
+Being on the branch is not enough while Actions is blocked. Confirm both functions run an image built at or after that commit:
+
+```bash
+for f in bgm-looper-processor-stage bgm-looper-processor; do
+  aws lambda get-function --function-name $f --query Code.ImageUri --output text --profile personal --region us-east-1
+done
+```
+
+Each tag's `<sha>` must contain the PR 1 commit (`git merge-base --is-ancestor <pr1 sha> <tag sha>`). If not, deploy by hand first (see "Deploying the Lambda while Actions is blocked").
+
 - [ ] **Step 2: Enable all three environments.** In `infra/main/variables.tf`: `default = ["dev", "stage", "main"]`.
 
 Run: `cd infra/main && terraform plan -var-file=terraform.tfvars`
@@ -1372,6 +1431,8 @@ Stage and main then process each upload twice (old `/process` plus the event) un
 
 Check each file's following line (`returns presigned S3 GET URL` / `presigned S3 GET URL back`) still reads correctly after the change.
 
+In `.claude/rules/web.md`, at the end of the sentence `The looper's API routes were renamed from … to \`/api/looper/upload-url\`/\`/api/looper/process\` to share one gated prefix with the page.`, append: ` \`/api/looper/process\` was later replaced by \`GET /api/looper/status\` (#286).`
+
 In `CLAUDE.md`, the gotcha line starting `- S3 objects: uploads under \`uploads/\``, append: ` An object created under \`uploads/\` starts a looper job through SQS (see the looper async jobs spec), so nothing else should write there.`
 
 - [ ] **Step 4: CHANGELOG** under `## [Unreleased]`, add a `### Changed` section if absent:
@@ -1383,7 +1444,7 @@ In `CLAUDE.md`, the gotcha line starting `- S3 objects: uploads under \`uploads/
 - [ ] **Step 5: Commit, open PR 3, apply before merge**
 
 ```bash
-git add infra/main/variables.tf ARCHITECTURE.md README.md CLAUDE.md CHANGELOG.md
+git add infra/main/variables.tf ARCHITECTURE.md README.md CLAUDE.md .claude/rules/web.md CHANGELOG.md
 git commit -m "feat(infra): enable async looper jobs on stage and main
 
 Refs #286
@@ -1458,6 +1519,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
   - Delete `vercel_project_environment_variable.lambda_function_name_production`, `_preview`, `_stage` and the `LAMBDA_FUNCTION_NAME` mention in the comment above the env var block.
   - Delete the `InvokeProcessor` statement from `aws_iam_role_policy.vercel`.
   - Run `grep -n all_lambda_function_arns infra/main/*.tf`; if the definition is the only hit left, delete it and the `lambda_function_arn` local if that is then unused too.
+  - In `ARCHITECTURE.md`, the `bgm-looper-vercel` bullet (around line 59) says the role has "S3 put/get + Lambda invoke". Change that to "S3 put/get + DynamoDB GetItem on the looper job tables" and drop the clause about the Lambda functions it is scoped to, keeping the rest of the bullet.
 
 - [ ] **Step 2: Plan**
 
@@ -1473,7 +1535,7 @@ Expected: destroys exactly the 3 `LAMBDA_FUNCTION_NAME` env vars; updates `verce
 - [ ] **Step 4: Commit, open PR 4, apply after merge**
 
 ```bash
-git add infra/main CHANGELOG.md
+git add infra/main CHANGELOG.md ARCHITECTURE.md
 git commit -m "chore(infra): remove the looper async rollout switch and invoke grant
 
 Closes #286
@@ -1485,4 +1547,4 @@ gh pr create --base dev --title "chore: remove looper async transition code" --b
 Closes #286"
 ```
 
-This PR touches `lambda/`: merge it alone, per the repo rule. After merge, `terraform apply -var-file=terraform.tfvars`, then tick Phase 1 in epic #285.
+With the owner's go-ahead, apply before merging (`terraform apply -var-file=terraform.tfvars`, then a plan showing `No changes.`) — nothing reads `LAMBDA_FUNCTION_NAME` or invokes the Lambda by then. This PR touches `lambda/`: merge it alone, per the repo rule, then deploy the Lambda (manually if Actions is still blocked) and repeat on stage and main as it is promoted. Tick Phase 1 in epic #285.

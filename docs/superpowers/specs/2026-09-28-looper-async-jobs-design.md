@@ -64,7 +64,7 @@ The `uploads/` prefix filter is required: the same buckets hold resume and News 
 
 A bucket takes only one `aws_s3_bucket_notification` resource. None exists today; any later notification has to be added to this one.
 
-New variable in `infra/main/variables.tf`: `looper_async_envs` (`list(string)`, default `[]`). It exists only for the rollout (§7) and is removed at the end.
+New variable in `infra/main/variables.tf`: `looper_async_envs` (`list(string)`, default `["dev"]`). It exists only for the rollout (§7) and is removed at the end.
 
 IAM changes in `infra/main/shared.tf`:
 
