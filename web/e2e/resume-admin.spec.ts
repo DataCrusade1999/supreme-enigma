@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("the resume admin page is behind the login gate", async ({ page }) => {
   await page.goto("/tools/resume-admin");
-  await expect(page).toHaveURL(/\/login\?next=%2Ftools%2Fresume-admin/);
+  await expect(page).toHaveURL(/\/login\?next=\/tools\/resume-admin/);
 });
 
 test("the gate names the resume admin as the destination", async ({ page }) => {
