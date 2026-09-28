@@ -1,6 +1,6 @@
 # Copy to terraform.tfvars (gitignored via *.tfvars) and fill in real values.
 # Every variable here is required — none has a default, so `terraform plan` fails
-# with "No value for required variable" until all five are set.
+# with "No value for required variable" until all seven are set.
 
 # Vercel API token with access to the project.
 vercel_api_token = "..."
@@ -23,3 +23,8 @@ openrouter_api_key = "sk-or-v1-..."
 # Optional — defaults to anthropic/claude-haiku-4.5.
 # openrouter_model = "anthropic/claude-haiku-4.5"
 # news_desk_model = "anthropic/claude-haiku-4.5"
+
+# Google OAuth client (Web application) used by Cognito for Google sign-in. Its
+# redirect URI is https://ashutosh-pandey-login.auth.us-east-1.amazoncognito.com/oauth2/idpresponse.
+google_client_id     = "....apps.googleusercontent.com"
+google_client_secret = "..."

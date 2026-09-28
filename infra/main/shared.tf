@@ -415,6 +415,16 @@ resource "vercel_project_domain" "custom_branch" {
   git_branch = each.key
 }
 
+# The host each branch is served at: Cognito's callback URLs and, later, the
+# digest's API destinations.
+locals {
+  site_hosts = {
+    main  = vercel_project_domain.custom.domain
+    dev   = "dev.${vercel_project_domain.custom.domain}"
+    stage = "stage.${vercel_project_domain.custom.domain}"
+  }
+}
+
 # --- Firewall ---
 
 # web/lib/rate-limit.ts caps /api/login at 5 attempts per 15 minutes, but its
