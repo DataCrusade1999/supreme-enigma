@@ -14,22 +14,24 @@ resource "aws_sesv2_email_identity" "domain" {
 # Easy DKIM: three CNAMEs. count, not for_each, because the tokens are unknown
 # until the identity exists.
 resource "vercel_dns_record" "ses_dkim" {
-  count  = 3
-  domain = vercel_project_domain.custom.domain
-  name   = "${aws_sesv2_email_identity.domain.dkim_signing_attributes[0].tokens[count.index]}._domainkey"
-  type   = "CNAME"
-  value  = "${aws_sesv2_email_identity.domain.dkim_signing_attributes[0].tokens[count.index]}.dkim.amazonses.com"
-  ttl    = 1800
+  count   = 3
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = "${aws_sesv2_email_identity.domain.dkim_signing_attributes[0].tokens[count.index]}._domainkey"
+  type    = "CNAME"
+  value   = "${aws_sesv2_email_identity.domain.dkim_signing_attributes[0].tokens[count.index]}.dkim.amazonses.com"
+  ttl     = 1800
 }
 
 # p=none: report nothing, reject nothing, but DMARC-aware receivers see a policy.
 # No rua= address, which would publish the owner's email in DNS.
 resource "vercel_dns_record" "dmarc" {
-  domain = vercel_project_domain.custom.domain
-  name   = "_dmarc"
-  type   = "TXT"
-  value  = "v=DMARC1; p=none;"
-  ttl    = 1800
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = "_dmarc"
+  type    = "TXT"
+  value   = "v=DMARC1; p=none;"
+  ttl     = 1800
 }
 
 # In the sandbox SES delivers only to verified addresses. SES emails a link to this

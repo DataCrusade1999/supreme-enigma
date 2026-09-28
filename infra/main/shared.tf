@@ -19,6 +19,11 @@ locals {
   # personal scope, but OIDC still keys on the slug.
   vercel_team_slug = "ashutosh-pandeys-projects-77cb3a00"
 
+  # The same scope's ID. The provider sets no team, and project calls resolve
+  # through the token's default team, but the domains API does not: without an
+  # explicit teamId it answers 403 for ashutosh-pandey.com.
+  vercel_team_id = "team_bSWug4zpM7jfChbYKg7G4PMI"
+
   lambda_function_name = "${var.project_name}-processor"
   lambda_function_arn  = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.lambda_function_name}"
 
