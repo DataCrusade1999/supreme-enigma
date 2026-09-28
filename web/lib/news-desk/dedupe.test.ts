@@ -50,6 +50,13 @@ describe("withId", () => {
 });
 
 describe("mergeHeadlines", () => {
+  it("gives a stored item saved before regions the region of a fresh copy", () => {
+    const stored = { ...item(), tag: "Economy" as const };
+    const fresh = item({ region: "international" });
+    const [merged] = mergeHeadlines([stored], [fresh], NOW);
+    expect(merged).toMatchObject({ region: "international", tag: "Economy" });
+  });
+
   it("keeps one item per story and prefers the publisher's own link", () => {
     const viaGoogle = item({ title: "Cabinet approves BIT template", source: "Mint" });
     const direct = item({

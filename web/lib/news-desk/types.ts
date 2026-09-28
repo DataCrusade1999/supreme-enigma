@@ -3,6 +3,9 @@ import { STORED_TAGS } from "./tags";
 
 export * from "./tags";
 
+export const REGIONS = ["local", "international"] as const;
+export type Region = (typeof REGIONS)[number];
+
 export type SourceDef = {
   name: string;
   url: string;
@@ -12,6 +15,9 @@ export type SourceDef = {
   // Only some feeds have a description worth showing. RBI's is an HTML table and
   // SEBI's repeats the title. See the design spec §5.2.
   summary: boolean;
+  // Which News Desk tab the feed's headlines go under: Indian outlets and
+  // government sources are local, foreign outlets international.
+  region: Region;
 };
 
 export const headlineSchema = z.object({
@@ -25,6 +31,10 @@ export const headlineSchema = z.object({
   // Defaulted rather than required so a Phase 1 snapshot, which has no tags,
   // still reads; the next refresh tags its items.
   tag: z.enum(STORED_TAGS).default("Untagged"),
+  // Optional so a snapshot saved before regions still reads; readers treat a
+  // missing region as local, and the next refresh fills it on any item a feed
+  // still carries.
+  region: z.enum(REGIONS).optional(),
 });
 export type Headline = z.infer<typeof headlineSchema>;
 

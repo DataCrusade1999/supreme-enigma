@@ -9,6 +9,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- News Desk Local and International tabs: headlines are split by where their feed is based (FT, Reuters, Bloomberg and The Economist are international; the rest are local), with the topic tabs counting within the selected region. Headlines saved before this change count as local until a Refresh sees them in a feed again.
 - News Desk tool at `/tools/news-desk`: headlines on the Indian economy, reforms and legislation from 13 free RSS sources (FT, RBI, SEBI, Mint, Business Standard directly; Reuters, Bloomberg, The Economist, PRS and PIB through Google News), refreshed only when you press Refresh. Items older than 14 days are dropped and duplicates across sources are merged.
 - News Desk topic tags: each Refresh tags new headlines as Economy, Reforms or Legislation with Claude Haiku 4.5 through OpenRouter, and moves off-topic ones to a Hidden tab. The page has a tab per topic with counts. A first refresh of 886 headlines measured ₹7; later refreshes should cost about ₹0.008 per new headline, extrapolated from that run (#253).
 - News Desk indicators: a table of official MoSPI figures beside the headlines (retail inflation, food and beverages inflation, IIP growth, real GDP growth and urban unemployment), with the latest and previous values. Refresh updates them along with the headlines; a figure that fails to refresh keeps its last value and is marked stale (#253).
@@ -40,6 +41,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- Buttons and the News Desk "sources failed" toggle show a pointer cursor across the site. News Desk links no longer change colour on hover, Refresh sits above the headline column, and the indicator table is centred in the window from the first paint and stays there while the headlines scroll.
 - The ⌘K command bar opens with six pinned commands (`cd projects`, `cd resume`, `cd blog`, `cd contact`, `cd tools`, `theme`) and a count of the rest; typing still searches every command. `theme dark` and `theme light` are now one `theme` toggle.
 - CI no longer emits Node 20 deprecation warnings or Ubuntu migration notices.
   `actions/upload-artifact` moves v4 to v7 and `actions/download-artifact` v4

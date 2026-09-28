@@ -215,4 +215,31 @@ describe("NewsDesk", () => {
     render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
     expect(screen.getByRole("button", { name: "Ask MoSPI" })).toBeInTheDocument();
   });
+  it("splits headlines into Local and International tabs, counting topics within each", () => {
+    const withRegions: Snapshot = {
+      ...SNAPSHOT,
+      headlines: SNAPSHOT.headlines.map((h) => (h.id === "a" ? { ...h, region: "international" } : { ...h, region: "local" })),
+    };
+    render(<NewsDesk initial={withRegions} problem={null} nowIso={NOW} />);
+    expect(within(screen.getByRole("group", { name: "Regions" })).getAllByRole("button").map((t) => t.textContent)).toEqual([
+      "Local 2",
+      "International 1",
+    ]);
+    expect(screen.getByRole("button", { name: "Local 2" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Moody's raises India FY27 GDP forecast to 7%")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Legislation 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "International 1" }));
+    // Switching region goes back to All.
+    expect(screen.getByRole("button", { name: "All 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
+      "Moody's raises India FY27 GDP forecast to 7%",
+    ]);
+  });
+
+  it("says so when a region has no headlines", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "International 0" }));
+    expect(screen.getByText("No international headlines saved.")).toBeInTheDocument();
+  });
 });

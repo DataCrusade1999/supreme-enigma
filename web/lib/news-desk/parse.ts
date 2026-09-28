@@ -105,6 +105,7 @@ export function parseFeed(xml: string, source: SourceDef): RawHeadline[] {
       ...(summary ? { summary } : {}),
       publishedAt,
       direct: source.kind === "direct",
+      region: source.region,
     });
   }
   return out;

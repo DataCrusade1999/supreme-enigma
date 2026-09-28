@@ -13,12 +13,14 @@ const direct = (name: string, summary = false): SourceDef => ({
   url: "https://example.test/feed",
   kind: "direct",
   summary,
+  region: "local",
 });
 const google: SourceDef = {
   name: "Google News: Reuters",
   url: "https://news.google.com/rss/search?q=x",
   kind: "google",
   summary: false,
+  region: "international",
 };
 
 describe("parsePubDate", () => {
@@ -61,6 +63,7 @@ describe("parseFeed", () => {
         "Foreign investors have oversold the correction, the billionaire investor says in our latest India Business Briefing Q&A",
       publishedAt: "2026-09-25T01:30:06.000Z",
       direct: true,
+      region: "local",
     });
   });
 
@@ -101,6 +104,12 @@ describe("parseFeed", () => {
     // entities are decoded once.
     expect(second.title).toBe("Tata & Sons – a profile - Mumbai edition");
     expect(second.source).toBe("Business Standard");
+  });
+
+  it("files each item under its feed's region, whatever the publisher", () => {
+    const items = parseFeed(fixture("google-news.xml"), google);
+    expect(new Set(items.map((i) => i.region))).toEqual(new Set(["international"]));
+    expect(parseFeed(fixture("sebi.xml"), direct("SEBI"))[0].region).toBe("local");
   });
 
   it("falls back to the title suffix when a Google News item has no <source>", () => {

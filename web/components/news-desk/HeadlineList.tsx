@@ -13,7 +13,7 @@ export function HeadlineList({ headlines, now }: { headlines: Headline[]; now: D
             href={headline.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[0.9375rem] font-semibold leading-snug text-fg hover:text-accent"
+            className="text-[0.9375rem] font-semibold leading-snug text-fg"
           >
             {headline.title}
           </a>

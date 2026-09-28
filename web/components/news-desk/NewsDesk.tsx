@@ -3,12 +3,17 @@
 import { useState } from "react";
 import { formatAge } from "../../lib/news-desk/format";
 import { TOPICS, type Topic } from "../../lib/news-desk/tags";
-import type { IndicatorValue, Snapshot } from "../../lib/news-desk/types";
+import type { IndicatorValue, Region, Snapshot } from "../../lib/news-desk/types";
 import { ChatPanel } from "./ChatPanel";
 import { HeadlineList } from "./HeadlineList";
 import { IndicatorTable } from "./IndicatorTable";
 
 type Tab = "All" | Topic | "Hidden";
+
+const REGION_TABS: { region: Region; label: string }[] = [
+  { region: "local", label: "Local" },
+  { region: "international", label: "International" },
+];
 
 export function NewsDesk({
   initial,
@@ -22,6 +27,7 @@ export function NewsDesk({
   const [snapshot, setSnapshot] = useState(initial);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [region, setRegion] = useState<Region>("local");
   const [tab, setTab] = useState<Tab>("All");
   // Ages are computed against the server's render time, never `new Date()` in
   // render: the server and the browser would print different "Nm ago" strings
@@ -71,7 +77,15 @@ export function NewsDesk({
   // Drop items stay in the snapshot so they are not re-tagged on the next
   // refresh. They are kept out of All and listed under Hidden, so a real story
   // the model got wrong can still be found. Untagged items appear only under All.
-  const all = snapshot?.headlines ?? [];
+  // Topic tabs count and filter within the selected region. A headline saved
+  // before regions existed has none and counts as local.
+  const everything = snapshot?.headlines ?? [];
+  const regionOf = (h: (typeof everything)[number]) => h.region ?? "local";
+  const regionTabs = REGION_TABS.map((r) => ({
+    ...r,
+    count: everything.filter((h) => regionOf(h) === r.region && h.tag !== "Drop").length,
+  }));
+  const all = everything.filter((h) => regionOf(h) === region);
   const shown = all.filter((h) => h.tag !== "Drop");
   const hidden = all.filter((h) => h.tag === "Drop");
   const tabs: { label: Tab; count: number }[] = [
@@ -82,57 +96,82 @@ export function NewsDesk({
   const visible =
     tab === "All" ? shown : tab === "Hidden" ? hidden : shown.filter((h) => h.tag === tab);
 
+  function pickRegion(next: Region) {
+    setRegion(next);
+    setTab("All");
+  }
+
+  const regionLabel = REGION_TABS.find((r) => r.region === region)!.label;
+
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-3">
-        <div className="text-xs text-muted">
-          {snapshot ? <span>Refreshed {formatAge(snapshot.refreshedAt, now)}</span> : <span>Never refreshed</span>}
-          {failed.length > 0 && (
-            <details className="mt-1">
-              <summary className="cursor-pointer">
-                {failed.length} {failed.length === 1 ? "source" : "sources"} failed
-              </summary>
-              <ul className="mt-1">
-                {failed.map((f) => (
-                  <li key={f.source}>
-                    {f.source}: {f.message}
-                  </li>
-                ))}
-              </ul>
-            </details>
+      <div className="grid grid-cols-12 gap-y-6 lg:gap-x-10">
+        <div className="col-span-12 lg:col-span-8 lg:col-start-1 lg:row-start-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-3">
+            <div className="text-xs text-muted">
+              {snapshot ? <span>Refreshed {formatAge(snapshot.refreshedAt, now)}</span> : <span>Never refreshed</span>}
+              {failed.length > 0 && (
+                <details className="mt-1">
+                  <summary>
+                    {failed.length} {failed.length === 1 ? "source" : "sources"} failed
+                  </summary>
+                  <ul className="mt-1">
+                    {failed.map((f) => (
+                      <li key={f.source}>
+                        {f.source}: {f.message}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={refreshing}
+              className="rounded-md border border-rule px-3 py-1.5 text-sm text-fg disabled:opacity-50"
+            >
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+
+          {error && (
+            <p role="alert" className="mt-3 text-sm text-accent">
+              {error}
+            </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={refresh}
-          disabled={refreshing}
-          className="rounded-md border border-rule px-3 py-1.5 text-sm text-fg disabled:opacity-50"
-        >
-          {refreshing ? "Refreshing…" : "Refresh"}
-        </button>
-      </div>
 
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-accent">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-6 grid grid-cols-12 gap-y-8 lg:gap-x-10">
-        {/* First in the DOM so narrow screens show it above the headlines (spec §4). */}
-        {/* On desktop the aside is a viewport-tall sticky box that centres the table,
-            so it stays centred beside the scrolling headlines. A transform would
-            lift it over the refresh bar when the headline column is short. */}
-        <aside className="col-span-12 lg:sticky lg:top-0 lg:order-2 lg:col-span-4 lg:flex lg:h-screen lg:items-center lg:self-start">
-          <div className="w-full">
-            <IndicatorTable indicators={snapshot?.indicators ?? []} now={now} onRemove={remove} />
-          </div>
+        {/* Between the refresh bar and the headlines in the DOM, so narrow screens
+            show it above the headlines (spec §4). On desktop it spans both rows
+            and sticks with its centre at the middle of the viewport, so it is
+            centred from the first paint and stays there while the headlines
+            scroll. Nothing sits above it in its column, so when the headline
+            column is too short for it to stick, the lift lands on empty space. */}
+        <aside className="col-span-12 lg:sticky lg:top-1/2 lg:col-span-4 lg:col-start-9 lg:row-span-2 lg:row-start-1 lg:-translate-y-1/2 lg:self-start">
+          <IndicatorTable indicators={snapshot?.indicators ?? []} now={now} onRemove={remove} />
         </aside>
-        <div className="col-span-12 lg:order-1 lg:col-span-8">
+
+        <div className="col-span-12 lg:col-span-8 lg:col-start-1 lg:row-start-2">
           {problem ? (
             <p className="text-sm text-muted">{problem}</p>
           ) : snapshot && snapshot.headlines.length > 0 ? (
             <>
+              <div role="group" aria-label="Regions" className="mb-5 flex flex-wrap gap-8 border-b-2 border-rule-heavy">
+                {regionTabs.map((r) => (
+                  <button
+                    key={r.region}
+                    type="button"
+                    aria-pressed={region === r.region}
+                    onClick={() => pickRegion(r.region)}
+                    className={`-mb-0.5 border-b-4 pb-3 font-display text-2xl leading-tight ${
+                      region === r.region ? "border-accent text-fg" : "border-transparent text-muted"
+                    }`}
+                  >
+                    {r.label} <span className="font-ui text-xs text-muted">{r.count}</span>
+                  </button>
+                ))}
+              </div>
               <div role="group" aria-label="Topics" className="flex flex-wrap gap-4 border-b border-rule">
                 {tabs.map(({ label, count }) => (
                   <button
@@ -153,11 +192,13 @@ export function NewsDesk({
                 <HeadlineList headlines={visible} now={now} />
               ) : (
                 <p className="mt-6 text-sm text-muted">
-                  {tab === "Hidden"
-                    ? "No hidden headlines."
-                    : tab === "All"
-                      ? "Every saved headline is hidden."
-                      : `No headlines tagged ${tab}.`}
+                  {all.length === 0
+                    ? `No ${regionLabel.toLowerCase()} headlines saved.`
+                    : tab === "Hidden"
+                      ? "No hidden headlines."
+                      : tab === "All"
+                        ? "Every saved headline is hidden."
+                        : `No headlines tagged ${tab}.`}
                 </p>
               )}
             </>

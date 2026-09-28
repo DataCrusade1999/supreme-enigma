@@ -7,9 +7,9 @@ import type { SourceDef } from "./types";
 
 const FT = readFileSync(join(__dirname, "__fixtures__", "ft.xml"), "utf8");
 
-const ok: SourceDef = { name: "FT", url: "https://ok.test/rss", kind: "direct", summary: true };
-const broken: SourceDef = { name: "Broken", url: "https://broken.test/rss", kind: "direct", summary: false };
-const slow: SourceDef = { name: "Slow", url: "https://slow.test/rss", kind: "direct", summary: false };
+const ok: SourceDef = { name: "FT", url: "https://ok.test/rss", kind: "direct", summary: true, region: "international" };
+const broken: SourceDef = { name: "Broken", url: "https://broken.test/rss", kind: "direct", summary: false, region: "local" };
+const slow: SourceDef = { name: "Slow", url: "https://slow.test/rss", kind: "direct", summary: false, region: "local" };
 
 // A fetch that answers per URL and, like the real one, rejects when its signal aborts.
 const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -22,6 +22,16 @@ const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 }) as typeof fetch;
 
 describe("SOURCES", () => {
+  it("files the foreign outlets as international and the rest as local", () => {
+    expect(SOURCES.filter((s) => s.region === "international").map((s) => s.name)).toEqual([
+      "FT",
+      "Google News: Reuters",
+      "Google News: Bloomberg",
+      "Google News: The Economist",
+    ]);
+    expect(SOURCES.filter((s) => s.region === "local")).toHaveLength(9);
+  });
+
   it("has 13 sources with unique names and https URLs", () => {
     expect(SOURCES).toHaveLength(13);
     expect(new Set(SOURCES.map((s) => s.name)).size).toBe(13);

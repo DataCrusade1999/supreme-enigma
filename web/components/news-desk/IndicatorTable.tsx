@@ -56,7 +56,7 @@ export function IndicatorTable({
                   type="button"
                   aria-label={`Remove ${row.label}`}
                   onClick={() => onRemove(row.id)}
-                  className="ml-1.5 text-muted hover:text-accent"
+                  className="ml-1.5 text-muted"
                 >
                   ×
                 </button>
