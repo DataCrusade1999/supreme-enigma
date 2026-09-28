@@ -1,0 +1,53 @@
+import { NextRequest, NextResponse } from "next/server";
+import { COOKIE_NAME, createSessionCookieValue } from "@/lib/auth";
+import { exchangeCode, isOwner, safeNext } from "@/lib/cognito";
+import { OAUTH_COOKIE, readOAuthState } from "@/lib/oauth-state";
+
+export const dynamic = "force-dynamic";
+
+function toLogin(request: NextRequest, error: string) {
+  const response = NextResponse.redirect(new URL(`/login?error=${error}`, request.url));
+  response.cookies.set(OAUTH_COOKIE, "", { path: "/api/auth", maxAge: 0 });
+  return response;
+}
+
+export async function GET(request: NextRequest) {
+  const params = request.nextUrl.searchParams;
+  const saved = readOAuthState(request.cookies.get(OAUTH_COOKIE)?.value, process.env.COOKIE_SECRET!);
+
+  // The state check comes first: without it, anyone could send the owner's
+  // browser a callback carrying the attacker's own code.
+  if (!saved || params.get("state") !== saved.state) return toLogin(request, "state");
+  if (params.get("error")) return toLogin(request, "denied");
+
+  const code = params.get("code");
+  if (!code) return toLogin(request, "failed");
+
+  let idToken: string;
+  try {
+    idToken = await exchangeCode({
+      code,
+      verifier: saved.verifier,
+      redirectUri: `${request.nextUrl.origin}/api/auth/callback`,
+    });
+  } catch (err) {
+    console.error("auth: code exchange failed", err);
+    return toLogin(request, "failed");
+  }
+
+  if (!(await isOwner(idToken))) return toLogin(request, "not-allowed");
+
+  // saved.next was cleaned by the login route and is signed, but this is the
+  // redirect that matters, so it is cleaned again here.
+  const response = NextResponse.redirect(new URL(safeNext(saved.next), request.url));
+  response.cookies.set(OAUTH_COOKIE, "", { path: "/api/auth", maxAge: 0 });
+  // Same cookie and attributes the password route set, so proxy.ts is unchanged.
+  response.cookies.set(COOKIE_NAME, createSessionCookieValue(process.env.COOKIE_SECRET!), {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+  return response;
+}
