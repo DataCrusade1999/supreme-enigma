@@ -1,7 +1,7 @@
 # Cognito login — Design
 
 **Date:** 2026-09-28
-**Status:** Draft. Written without a brainstorming session, at the owner's request to have every phase's plan in place. The decisions in §3 have not been reviewed yet. The owner-only, Google and "remove the password" decisions come from the dropped Auth0 brainstorm (memory: "Auth0 dropped for Cognito").
+**Status:** Approved 2026-09-28. Written without a brainstorming session, at the owner's request; the owner reviewed the §3 decisions afterwards.
 **Issue:** #290
 **Epic:** #285 (phase 5 of 5). Depends on phase 4 (#289) for the SES domain identity.
 

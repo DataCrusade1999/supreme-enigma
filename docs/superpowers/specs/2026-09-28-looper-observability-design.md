@@ -1,7 +1,7 @@
 # Looper observability — Design
 
 **Date:** 2026-09-28
-**Status:** Draft. Written without a brainstorming session, at the owner's request to have every phase's plan in place. The decisions in §3 have not been reviewed yet.
+**Status:** Approved 2026-09-28. Written without a brainstorming session, at the owner's request; the owner reviewed the §3 decisions afterwards.
 **Issue:** #287
 **Epic:** #285 (phase 2 of 5). Builds on phase 1 (#286) as it stands after its cleanup PR.
 

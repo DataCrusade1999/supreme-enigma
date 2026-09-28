@@ -1,7 +1,7 @@
 # News Desk daily digest — Design
 
 **Date:** 2026-09-28
-**Status:** Draft. Written without a brainstorming session, at the owner's request to have every phase's plan in place. The decisions in §3 have not been reviewed yet.
+**Status:** Approved 2026-09-28. Written without a brainstorming session, at the owner's request; the owner reviewed the §3 decisions afterwards.
 **Issue:** #289
 **Epic:** #285 (phase 4 of 5). Independent of phases 1–3. Phase 5 depends on its SES domain identity.
 

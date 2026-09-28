@@ -1,7 +1,7 @@
 # Looper jobs on Step Functions — Design
 
 **Date:** 2026-09-28
-**Status:** Draft. Written without a brainstorming session, at the owner's request to have every phase's plan in place. The decisions in §3 have not been reviewed yet.
+**Status:** Approved 2026-09-28. Written without a brainstorming session, at the owner's request; the owner reviewed the §3 decisions afterwards.
 **Issue:** #288
 **Epic:** #285 (phase 3 of 5). Builds on phases 1 (#286) and 2 (#287) as they stand when complete.
 
