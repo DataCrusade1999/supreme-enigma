@@ -17,7 +17,7 @@ a CLI to drive it locally. Two follow-up phases are intentionally deferred
 and get their own specs later:
 
 - **Phase 2**: a gated tool page in the existing Next.js app
-  (`app/app/tools/pdf-restorer/`), following the same shared-password-gate
+  (`web/app/tools/pdf-restorer/`), following the same shared-password-gate
   and S3-upload shape as BGM Looper / BGM Extractor.
 - **Phase 3**: an AWS Lambda container handler (triggered by an S3 upload,
   writing the processed PDF back to S3), following `lambda/`'s
@@ -52,7 +52,7 @@ Three approaches were considered:
 
 ## 3. Architecture
 
-New top-level directory, sibling to `lambda/` and `app/`, matching this
+New top-level directory, sibling to `lambda/` and `web/`, matching this
 repo's "independent sibling projects" convention:
 
 ```
@@ -60,7 +60,7 @@ pdf-restorer/
   requirements.txt
   pytest.ini                    # pythonpath = src, same as lambda/pytest.ini
   README.md                     # incl. system deps: Tesseract OCR engine,
-                                 # qpdf — apt/brew/choco install steps
+                                 # Ghostscript — apt/brew/choco install steps
   src/pdfrestore/
     __init__.py
     cli.py                      # argparse entrypoint, local-only, no AWS
@@ -129,13 +129,13 @@ itself required.
 
 4. **OCR + finalize** (`ocr.py`): the intermediate PDF is passed to
    `ocrmypdf.ocr()` (Python API, not shelling out to its CLI) with:
-   - `force_ocr=True` — the source has no existing text layer, so OCR
-     should always run rather than being skipped.
+   - No `force_ocr` and no `deskew`. Both make ocrmypdf re-rasterize the
+     page and replace the lossless image from step 3, and our own stage
+     has already deskewed. The intermediate PDF has no text layer, so the
+     default mode OCRs every page anyway.
    - `optimize=1` — the safe, effectively-lossless optimization level
      (image recompression without quality-reducing transforms), not the
      lossier `optimize=3`.
-   - `deskew=True` left on as a cheap redundant safety net on top of our
-     own deskew — harmless if our stage already corrected the page.
    - `output_type="pdf"` — a plain PDF, not forced to PDF/A, to stay
      closest to a normal viewable/printable output; nothing in the
      requirements calls for archival PDF/A.
@@ -160,7 +160,7 @@ python -m pdfrestore --batch INPUT_DIR [-o OUTPUT_DIR] [--dpi 300] [--dewarp] [-
 Batch mode processes every `.pdf` in a directory, continues past
 individual file failures (doesn't abort the whole batch on one bad file),
 and prints a per-file pass/fail summary at the end, exiting non-zero if
-any file failed. A missing system dependency (Tesseract binary, `qpdf`) is
+any file failed. A missing system dependency (Tesseract, Ghostscript) is
 detected at startup with an actionable error message naming the install
 command for the current platform, rather than failing deep inside the
 pipeline with an opaque traceback.
