@@ -135,14 +135,14 @@ it deletes the published resume PDF and its archive. Save what you want
 first:
 
 ```bash
-aws s3 cp s3://bgm-looper-audio-223376380711/resume/ ./resume-backup/ \
+aws s3 cp s3://portfolio-data-223376380711/resume/ ./resume-backup/ \
   --recursive --profile personal --region us-east-1
 
-aws s3 rm s3://bgm-looper-audio-223376380711 --recursive \
+aws s3 rm s3://portfolio-data-223376380711 --recursive \
   --profile personal --region us-east-1
-aws s3 rm s3://bgm-looper-audio-dev-223376380711 --recursive \
+aws s3 rm s3://portfolio-data-dev-223376380711 --recursive \
   --profile personal --region us-east-1
-aws s3 rm s3://bgm-looper-audio-stage-223376380711 --recursive \
+aws s3 rm s3://portfolio-data-stage-223376380711 --recursive \
   --profile personal --region us-east-1
 ```
 

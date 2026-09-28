@@ -117,7 +117,7 @@ exactly like an expired signature. Discriminate server-side rather than
 guessing:
 
 ```bash
-aws s3api head-object --bucket bgm-looper-audio-dev-223376380711   --key outputs/<uuid>.<ext> --profile personal --region us-east-1
+aws s3api head-object --bucket portfolio-data-dev-223376380711   --key outputs/<uuid>.<ext> --profile personal --region us-east-1
 ```
 
 Either way the fix is to reprocess; this only tells you whether to also
@@ -133,7 +133,7 @@ aws lambda get-function --function-name bgm-looper-processor \
   --query 'Configuration.{state:State,reason:StateReason,last:LastUpdateStatus}' \
   --profile personal --region us-east-1
 
-aws s3api head-bucket --bucket bgm-looper-audio-223376380711 \
+aws s3api head-bucket --bucket portfolio-data-223376380711 \
   --profile personal --region us-east-1
 ```
 

@@ -167,7 +167,7 @@ Gotchas:
   the check attaches to a `dev` commit. Promote through `dev → stage → main` as
   usual and this resolves itself.
 - **The agent performs real writes** (POST/PUT/DELETE) while exploring. Against
-  stage that means real uploads to `bgm-looper-audio-stage-*` and real
+  stage that means real uploads to `portfolio-data-stage-*` and real
   `bgm-looper-processor-stage` invocations. Objects expire after 1 day, so the
   cost is bounded but not zero.
 - **`/tools/bgm-looper` is not reachable by the agent.** The Vercel bypass gets
