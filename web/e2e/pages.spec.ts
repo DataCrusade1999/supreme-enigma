@@ -23,6 +23,33 @@ for (const { path, heading } of PAGES) {
   });
 }
 
+test("the head links an SVG favicon and a PNG apple-touch icon that both serve", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  const icon = await page.locator('link[rel="icon"][type="image/svg+xml"]').getAttribute("href");
+  const apple = await page.locator('link[rel="apple-touch-icon"]').getAttribute("href");
+
+  const svg = await request.get(icon!);
+  expect(svg.ok()).toBe(true);
+  expect(svg.headers()["content-type"]).toContain("image/svg+xml");
+  // A browser draws nothing for an SVG that isn't well-formed XML, and the
+  // PNG below is rendered from the same file.
+  const parseError = await page.evaluate(
+    (text) =>
+      new DOMParser()
+        .parseFromString(text, "image/svg+xml")
+        .querySelector("parsererror")?.textContent ?? null,
+    await svg.text(),
+  );
+  expect(parseError).toBeNull();
+
+  const png = await request.get(apple!);
+  expect(png.ok()).toBe(true);
+  expect(png.headers()["content-type"]).toContain("image/png");
+});
+
 // The gate has no SiteHeader, so ⌘K is its only nav — including from the
 // password box, which is the first thing a visitor clicks there.
 test("the command bar opens on the gate, even from the password field", async ({
