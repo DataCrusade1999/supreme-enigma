@@ -389,6 +389,14 @@ resource "vercel_project" "looper" {
   vercel_authentication = { deployment_type = "none" }
 }
 
+# Bought through Vercel on 2026-09-28, so it lives in the same team and Vercel
+# runs its DNS. No git_branch, so it serves production (main).
+# bgm-looper.vercel.app keeps working alongside it.
+resource "vercel_project_domain" "custom" {
+  project_id = vercel_project.looper.id
+  domain     = "ashutosh-pandey.com"
+}
+
 # --- Firewall ---
 
 # web/lib/rate-limit.ts caps /api/login at 5 attempts per 15 minutes, but its

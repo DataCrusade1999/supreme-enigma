@@ -9,6 +9,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
+- The site is served at https://ashutosh-pandey.com. https://bgm-looper.vercel.app still works (#275).
 - News Desk Local and International tabs: headlines are split by where their feed is based (FT, Reuters, Bloomberg and The Economist are international; the rest are local), with the topic tabs counting within the selected region. Headlines saved before this change count as local until a Refresh sees them in a feed again.
 - News Desk tool at `/tools/news-desk`: headlines on the Indian economy, reforms and legislation from 13 free RSS sources (FT, RBI, SEBI, Mint, Business Standard directly; Reuters, Bloomberg, The Economist, PRS and PIB through Google News), refreshed only when you press Refresh. Items older than 14 days are dropped and duplicates across sources are merged.
 - News Desk topic tags: each Refresh tags new headlines as Economy, Reforms or Legislation with Claude Haiku 4.5 through OpenRouter, and moves off-topic ones to a Hidden tab. The page has a tab per topic with counts. A first refresh of 886 headlines measured ₹7; later refreshes should cost about ₹0.008 per new headline, extrapolated from that run (#253).
