@@ -30,12 +30,7 @@ locals {
     [local.lambda_function_name],
     [for f in aws_lambda_function.looper_env : f.function_name]
   )
-  # TEMPORARY: includes the old bgm-looper-audio-* buckets until the cutover to
-  # portfolio-data-* is complete (#273). Remove the second list afterwards.
-  all_data_bucket_arns = concat(
-    [for b in aws_s3_bucket.data : b.arn],
-    concat([aws_s3_bucket.audio.arn], [for b in aws_s3_bucket.audio_env : b.arn])
-  )
+  all_data_bucket_arns = [for b in aws_s3_bucket.data : b.arn]
 }
 
 # --- ECR (one repo, per-branch tag prefixes — see environments.tf's Lambda functions
@@ -144,8 +139,6 @@ locals {
   # Only main's bucket holds resume data — dev/stage read and write it too, via the
   # env-agnostic RESUME_BUCKET_NAME. See the design spec §4.1.
   resume_bucket_arn = aws_s3_bucket.data["main"].arn
-  # TEMPORARY (#273): the old main bucket, readable until every deployment has cut over.
-  legacy_resume_bucket_arn = aws_s3_bucket.audio.arn
 }
 
 # --- GitHub Actions OIDC: how deploy.yml authenticates to AWS. It replaced an IAM user
@@ -286,7 +279,7 @@ resource "aws_iam_role_policy" "vercel" {
         Sid      = "ResumeObjects"
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = ["${local.resume_bucket_arn}/resume/*", "${local.legacy_resume_bucket_arn}/resume/*"]
+        Resource = ["${local.resume_bucket_arn}/resume/*"]
       },
       {
         # HeadObject on a key that does not exist returns 403, not 404, unless the
@@ -300,7 +293,7 @@ resource "aws_iam_role_policy" "vercel" {
         Sid      = "ResumeHeadObjectNotFound"
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]
-        Resource = [local.resume_bucket_arn, local.legacy_resume_bucket_arn]
+        Resource = [local.resume_bucket_arn]
       },
       {
         Sid      = "NewsDeskObjects"
