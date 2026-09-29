@@ -190,11 +190,49 @@ resource "aws_cognito_user_pool_client" "web" {
   prevent_user_existence_errors        = "ENABLED"
 }
 
+locals {
+  branding_assets = {
+    "header-logo" = "PAGE_HEADER_LOGO"
+    "form-logo"   = "FORM_LOGO"
+    "background"  = "PAGE_BACKGROUND"
+  }
+}
+
 # Managed login v2 serves no pages for a client without a branding style.
+# branding.json is Cognito's full merged settings document with the site's
+# colours, square corners and left-aligned form written over the defaults.
+# Managed login has no font setting, so the site's type only appears in the
+# SVGs under branding/, where it is outlined to paths.
 resource "aws_cognito_managed_login_branding" "web" {
-  user_pool_id                = aws_cognito_user_pool.owner.id
-  client_id                   = aws_cognito_user_pool_client.web.id
-  use_cognito_provided_values = true
+  user_pool_id = aws_cognito_user_pool.owner.id
+  client_id    = aws_cognito_user_pool_client.web.id
+  settings     = jsonencode(jsondecode(file("${path.module}/branding.json")))
+
+  # One file per category and colour mode: branding/<file>-dark.svg and -light.svg.
+  dynamic "asset" {
+    for_each = {
+      for pair in setproduct(keys(local.branding_assets), ["dark", "light"]) :
+      "${pair[0]}-${pair[1]}" => { category = local.branding_assets[pair[0]], mode = upper(pair[1]) }
+    }
+    content {
+      category   = asset.value.category
+      color_mode = asset.value.mode
+      extension  = "SVG"
+      bytes      = filebase64("${path.module}/branding/${asset.key}.svg")
+    }
+  }
+
+  # The page asks for the favicon of its own colour mode and ignores a DYNAMIC
+  # one, so the same file goes in once per mode.
+  dynamic "asset" {
+    for_each = toset(["DARK", "LIGHT"])
+    content {
+      category   = "FAVICON_SVG"
+      color_mode = asset.value
+      extension  = "SVG"
+      bytes      = filebase64("${path.module}/branding/favicon.svg")
+    }
+  }
 }
 
 resource "random_password" "owner_cognito" {

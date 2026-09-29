@@ -45,6 +45,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- The Cognito sign-in page at `auth.ashutosh-pandey.com` uses the site's dark theme: its colours, square corners, the wordmark, the column rules and the loop ring, with the form on the left as on `/login`. The settings and images are in Terraform (`infra/main/branding.json`, `infra/main/branding/`), so a recreate restores them. Managed login has no font setting, so only the logos and background use the site's typefaces (#296).
 - Signing in to the tools uses Cognito (Google, an email code or a passkey) at `auth.ashutosh-pandey.com`, and only the site owner's account is accepted. The shared password, its login endpoint and its rate limiter are removed (#290).
 - The login redirect reads `/login?next=/tools/news-desk` instead of `/login?next=%2Ftools%2Fnews-desk` (#277).
 - The S3 buckets are now `portfolio-data-<account>` (plus `-dev-` and `-stage-`), replacing `bgm-looper-audio-*`. They hold the resume and News Desk data as well as audio. S3 cannot rename a bucket, so the resume and News Desk data were copied into new buckets and the old ones deleted (#273).
