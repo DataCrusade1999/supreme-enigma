@@ -45,6 +45,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- Mail sent through SES from `ashutosh-pandey.com` (Cognito sign-in codes, and later access emails) uses `mail.ashutosh-pandey.com` as its envelope sender, so SPF passes for the domain as well as DKIM. The bare domain publishes `v=spf1 -all`, since nothing sends with it as the envelope sender (#300).
 - The Cognito sign-in page at `auth.ashutosh-pandey.com` uses the site's dark theme: its colours, square corners, the wordmark, the column rules and the loop ring, with the form on the left as on `/login`. The settings and images are in Terraform (`infra/main/branding.json`, `infra/main/branding/`), so a recreate restores them. Managed login has no font setting, so only the logos and background use the site's typefaces (#296).
 - Signing in to the tools uses Cognito (Google, an email code or a passkey) at `auth.ashutosh-pandey.com`, and only the site owner's account is accepted. The shared password, its login endpoint and its rate limiter are removed (#290).
 - The login redirect reads `/login?next=/tools/news-desk` instead of `/login?next=%2Ftools%2Fnews-desk` (#277).
