@@ -33,7 +33,7 @@ Non-goals:
 - An email to the owner when someone new signs in. The invitee's written email is the request; the Pending list shows who is waiting.
 - Caching authorization decisions. A cache would lengthen the revocation window.
 - CloudTrail data events for Verified Permissions or DynamoDB. They are billed, and one admin doesn't need them.
-- Email codes for invitees. SES stays in the sandbox for Cognito's own mail until production access is granted (§7), and even after that, Google is the invitees' first factor. They can add a passkey once signed in.
+- Email codes for invitees. The pool only lets an admin create native users, and an email code needs a native user, so Google is the invitees' first factor. They can add a passkey once signed in.
 
 ## 3. Decisions
 
@@ -294,7 +294,7 @@ SES already holds `ashutosh-pandey.com` as a verified identity with DKIM and a D
 - `aws_lambda_function.mail_forwarder` from `archive_file`, its role (`s3:GetObject` on `inbound-mail/*`, `ses:SendRawEmail` on the domain identity, CloudWatch Logs), and `aws_lambda_permission` for `ses.amazonaws.com` with `source_account`
 - `aws_sesv2_account_suppression_attributes`
 
-No new required variables.
+No new required variables. `archive_file` needs the `hashicorp/archive` provider, which `backend.tf`'s `required_providers` and the lock file don't have yet; PR 3 adds it. `hashicorp/aws` is already at `~> 6.62`, which has the Verified Permissions resources.
 
 ### The owner's Google identity
 
@@ -358,6 +358,7 @@ After that, Google, email code and passkey all sign in as the same user, with on
 Three PRs into `dev`, in order. Each runs `terraform plan` against real state before merging. CI is blocked by Actions billing, so each follows the manual deploy path.
 
 1. **Authorization core.**
+   - First, prove that `awsCredentials()` (`@vercel/oidc-aws-credentials-provider`) gets credentials inside `proxy.ts` on a `dev` deployment. Every check in §5 depends on it, and the Vercel OIDC token has so far only been used from route handlers. If it doesn't work, the checks move out of the proxy into a shared `authorize()` called by each gated route handler and each gated page's layout, with the same `ROUTE_ACTIONS` table; the rest of the design stays the same.
    - Infra: the policy store, schema, identity source, policies, groups, owner membership, token lifetimes, Vercel env vars, and the IAM statements for Verified Permissions. The table and the SES statements wait for PRs 2 and 3.
    - Web: the token session and refresh, `lib/authz/`, `ROUTE_ACTIONS`, the proxy checks, `/access-requested`, the 403 page, hub filtering, and removal of `isOwner`.
    - Metered actions work only for the owner at this point, since no grants exist.
@@ -367,7 +368,7 @@ Three PRs into `dev`, in order. Each runs `terraform plan` against real state be
 2. **Grants and the Access page.** The table, the grant context and consumption in the proxy, the Access page and its API, and the IAM statements for Cognito admin calls and DynamoDB.
 3. **Email.** The MX record, receipt rules, `mail_forwarder`, the suppression list, the SES send permission, the three emails, and the production access request with its text.
 
-Docs updated along the way: `CLAUDE.md` (what `route-gate.ts` now holds, the new env vars), `.claude/rules/infra.md` (the receipt rule set is account-wide, the forwarder deploys through Terraform), `.claude/rules/web.md` (the session format and `AUTHZ_MODE`), `ARCHITECTURE.md`, and `CHANGELOG.md` under `[Unreleased]` in each PR.
+Docs updated along the way: `CLAUDE.md` (what `route-gate.ts` now holds, the new env vars), `.claude/rules/infra.md` (the receipt rule set is account-wide, the forwarder deploys through Terraform), the header comment in `infra/main/email.tf` (it says the account stays in the SES sandbox, which PR 3 ends), `.claude/rules/web.md` (the session format and `AUTHZ_MODE`), `ARCHITECTURE.md`, and `CHANGELOG.md` under `[Unreleased]` in each PR.
 
 ## 12. Cost
 
@@ -380,6 +381,6 @@ Assumed monthly use: 10,000 gated requests, 300 hub loads, 1,000 DynamoDB reads 
 | SES sending | $0.10 per 1,000 | $0.005 |
 | SES receiving | $0.10 per 1,000 emails, $0.09 per 1,000 incoming 256 KB chunks | $0.01 |
 | `mail_forwarder` Lambda, S3 | inside the free tier | $0 |
-| **Total** | | **about $0.08, ₹8** |
+| **Total** | | **about ₹8 ($0.08)** |
 
 At ₹96.07 to the dollar (29 September 2026). The existing `$5` budget alarm covers all of it.
