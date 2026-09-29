@@ -373,11 +373,18 @@ function dynamoStore(table: string): GrantStore {
   return store;
 }
 
-const unconfigured: GrantStore = new Proxy({} as GrantStore, {
-  get: () => async () => {
-    throw new Error("grants: ACCESS_GRANTS_TABLE is not set");
-  },
-});
+function notConfigured(): never {
+  throw new Error("grants: ACCESS_GRANTS_TABLE is not set");
+}
+
+const unconfigured: GrantStore = {
+  get: async () => notConfigured(),
+  consume: async () => notConfigured(),
+  put: async () => notConfigured(),
+  remove: async () => notConfigured(),
+  list: async () => notConfigured(),
+  removeAll: async () => notConfigured(),
+};
 
 // e2e has no AWS. Same guard as the local authorizer: never on a deployment.
 const memory = new Map<string, Grant>();

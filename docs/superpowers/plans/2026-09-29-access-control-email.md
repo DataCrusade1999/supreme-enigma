@@ -58,6 +58,7 @@ from mail_forwarder.handler import handler, rewrite
 RAW = (
     b'From: "Doe, Jane" <jane@example.com>\r\n'
     b"To: access@ashutosh-pandey.com\r\n"
+    b"Cc: someone-else@example.com\r\n"
     b"Reply-To: list@example.org\r\n"
     b"Subject: Could I try the assistant?\r\n"
     b"Message-ID: <abc@example.com>\r\n"
@@ -92,6 +93,13 @@ def test_rewrite_removes_headers_ses_rejects_on_resend():
     out = parsed(rewrite(RAW, forward_to="o@x", from_address="access@ashutosh-pandey.com"))
     for header in ("Return-Path", "Sender", "Message-ID", "DKIM-Signature"):
         assert out[header] is None
+
+
+def test_rewrite_sends_only_to_the_owner():
+    # A kept Cc would resend the forward to the original sender's other recipients.
+    out = parsed(rewrite(RAW, forward_to="o@x", from_address="access@ashutosh-pandey.com"))
+    assert out["Cc"] is None
+    assert out.get_all("To") == ["o@x"]
 
 
 def test_rewrite_keeps_the_body():
@@ -459,10 +467,12 @@ In `infra/main/access.tf`, add a statement to `aws_iam_role_policy.vercel_access
 
 ```hcl
       {
+        # The owner's identity too: in the sandbox SES also checks the recipient,
+        # so the owner can test these emails before production access arrives.
         Sid      = "SendAccessEmail"
         Effect   = "Allow"
         Action   = ["ses:SendEmail"]
-        Resource = [aws_sesv2_email_identity.domain.arn]
+        Resource = [aws_sesv2_email_identity.domain.arn, aws_sesv2_email_identity.owner.arn]
         Condition = {
           StringEquals = { "ses:FromAddress" = local.access_address }
         }
@@ -481,7 +491,7 @@ resource "vercel_project_environment_variable" "access_from_email" {
 }
 ```
 
-In the sandbox, SESv2 also checks the recipient identity. Until production access (Task 3) is granted, sends to anyone but the owner fail with `MessageRejected`, which the page reports; don't widen the IAM resource to work around it.
+Until production access (Task 3) is granted, sends to anyone but the owner fail with `MessageRejected`, which the page reports. Don't add other recipients' identities to the IAM resource to work around it.
 
 - [ ] **Step 5: Plan, apply, check**
 

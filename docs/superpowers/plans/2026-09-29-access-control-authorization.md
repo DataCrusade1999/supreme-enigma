@@ -461,7 +461,7 @@ Safe before the web change merges: nothing reads the new env var yet, and shorte
 terraform apply -var-file=terraform.tfvars
 ```
 
-If `aws_cognito_user_in_group.owner` fails with `UserNotFoundException`, the admin API didn't accept the email alias. Replace `username = aws_cognito_user.owner.username` with `username = aws_cognito_user.owner.sub` and apply again.
+If `aws_cognito_user_in_group.owner` fails with `UserNotFoundException`, the admin API didn't accept the email alias. Read the stored username (a UUID) with `aws cognito-idp list-users --user-pool-id us-east-1_TagY3QxyT --filter 'email = "<alert_email>"' --query 'Users[0].Username' --output text --profile personal --region us-east-1`, set `username` to that literal with a comment saying the pool stores a UUID and the admin API didn't accept the email alias here, and apply again.
 
 - [ ] **Step 5: Check the result against the API**
 
@@ -2036,7 +2036,17 @@ export const config = {
 Run: `cd web && npx vitest run proxy.test.ts && npx tsc --noEmit`
 Expected: PASS, no type errors.
 
-If the two `x-middleware-*` assertions fail but the cookie assertion passes, print `Object.fromEntries(res.headers)` in the test to see how this Next version names the override headers, and assert on those names instead. The behaviour to pin is that the request's cookie header is overridden.
+If the two `x-middleware-*` assertions fail but the cookie assertion passes, `request.cookies.set()` didn't update the request's `cookie` header in this Next version. Build the header explicitly instead: in `proxy()`, replace `NextResponse.next({ request: { headers: request.headers } })` with
+
+```ts
+      ? (() => {
+          const headers = new Headers(request.headers);
+          headers.set("cookie", request.cookies.toString());
+          return NextResponse.next({ request: { headers } });
+        })()
+```
+
+and run the test again. If the header names still differ, print `Object.fromEntries(res.headers)` and assert on the names this Next version uses. The behaviour to pin is that the request's cookie header is overridden.
 
 - [ ] **Step 5: Commit**
 
@@ -2504,7 +2514,13 @@ npm run test:e2e
 
 Expected: the build succeeds and every spec passes, old and new.
 
-If the build or the first gated e2e request fails loading `@cedar-policy/cedar-wasm` inside the proxy (a module-not-found or `.wasm` lookup error in the server log), use the fallback: add `web/app/api/authz/evaluate/route.ts`, a `POST` handler that returns `404` unless `AUTHZ_MODE === "local"` and `VERCEL` is unset, and otherwise runs the Task 7 local evaluation on the JSON body `{ sub, groups, tool, action, context }` and returns `{ decision }`. Make `createLocalAuthorizer` `fetch` that route on `http://localhost:${process.env.PORT ?? 3100}` instead of importing the WASM module, and keep `local.test.ts` pointing at the in-process version by exporting it as `evaluateLocally`. Add `/api/authz` to nothing (it must stay ungated) and pin that with a test in `route-gate.test.ts`.
+If the build or the first gated e2e request fails loading `@cedar-policy/cedar-wasm` inside the proxy (a module-not-found or `.wasm` lookup error in the server log), use the fallback:
+
+1. Move the in-process evaluation out of `local.ts` into `web/lib/authz/evaluate-locally.ts`, exporting `evaluateLocally(poolId, request): Promise<Decision>`. It is the only module that imports `@cedar-policy/cedar-wasm/nodejs` and `./cedar-files` (which uses `node:fs`).
+2. Add `web/app/api/authz/evaluate/route.ts`, a `POST` handler that returns `404` unless `AUTHZ_MODE === "local"` and `VERCEL` is unset, and otherwise calls `evaluateLocally(process.env.COGNITO_USER_POOL_ID, body)` on the JSON body `{ session: { sub, groups }, tool, action, context }` and returns `{ decision }`.
+3. Make `createLocalAuthorizer` import neither Cedar nor `cedar-files`: it `fetch`es `http://localhost:${process.env.PORT ?? 3100}/api/authz/evaluate` and returns the `decision`.
+4. Point `local.test.ts` at `evaluateLocally`.
+5. `/api/authz` must stay ungated (the proxy would otherwise call itself): add `["/api/authz/evaluate", false]` to `isGatedPath`'s test table.
 
 - [ ] **Step 5: Commit**
 
