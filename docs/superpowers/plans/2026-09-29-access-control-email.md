@@ -535,7 +535,9 @@ git commit -m "feat(infra): receive access@ mail and let the site send from it (
 
 ### Task 3: Request SES production access (manual, the owner)
 
-- [ ] **Step 1: Submit the request**
+Step 1 was done on 2026-09-29 through the console form (Transactional, https://ashutosh-pandey.com, English), which has no use-case field. If AWS replies asking how the mail will be used, answer with the `--use-case-description` text below. The same day, #301 added a custom MAIL FROM (`mail.ashutosh-pandey.com`) and SPF records, so SES mail from the domain passes SPF, DKIM and DMARC. Skip to Step 2.
+
+- [x] **Step 1: Submit the request**
 
 ```bash
 aws sesv2 put-account-details --profile personal --region us-east-1 \
@@ -862,6 +864,7 @@ git commit -m "feat(access): email invitees when their access changes (#300)" -m
 - [ ] **Step 1: Docs**
 
 - `.claude/rules/infra.md`, new bullet: "**SES receiving is account-wide.** `email.tf` makes `site-inbound` the active receipt rule set in `us-east-1`; AWS allows one per region, so any other inbound mail setup in this account has to join this set. The apex MX record sends all mail for the domain to SES, and only `access@` has a rule. `mail_forwarder` (`lambda/src/mail_forwarder/`) deploys through `terraform apply` as a zip (`hashicorp/archive`, built into the gitignored `infra/main/.build/`), not through `deploy.yml`; a change there still makes `deploy.yml` rebuild the looper image, which is harmless. Stored messages expire from `inbound-mail/` after 30 days. When a forward doesn't arrive: an object under `inbound-mail/` with no Lambda log means the invoke permission; a `MessageRejected` log means an identity isn't verified."
+- `.claude/rules/infra.md`, second new bullet: "**The apex publishes `v=spf1 -all`** (`email.tf`, #301): nothing may send with the bare domain as its envelope sender. SES uses the custom MAIL FROM `mail.ashutosh-pandey.com`, whose own TXT record includes `amazonses.com`. A new mail service that sends as the domain (a newsletter's custom domain, a mailbox provider) has to be added to the apex SPF record first, or its mail fails SPF."
 - `ARCHITECTURE.md`: add to the cost/services section: "SES receiving for `access@` (S3 + a 128 MB Python Lambda) and SESv2 sending for access emails: about $0.10 per 1,000 messages each way."
 
 - [ ] **Step 2: CHANGELOG**
