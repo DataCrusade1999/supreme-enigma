@@ -50,6 +50,35 @@ describe("GET /api/auth/callback", () => {
     expect(res.cookies.get(OAUTH_COOKIE)!.value).toBe("");
   });
 
+  // Cognito's /passkeys/add returns ?result=… and neither echoes state nor sends a code.
+  it("sends a finished passkey setup to the hub", async () => {
+    const res = await callback({ result: "success" }, cookieFor("s1"));
+    expect(redirectedTo(res)).toBe("/tools?passkey=added");
+    expect(res.cookies.get(OAUTH_COOKIE)!.value).toBe("");
+    expect(exchangeCode).not.toHaveBeenCalled();
+    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+  });
+
+  it.each(["invalid_session", "<script>"])("reports any other passkey result (%j) as not added", async (result) => {
+    const res = await callback({ result }, cookieFor("s1"));
+    expect(redirectedTo(res)).toBe("/tools?passkey=failed");
+  });
+
+  it("ignores a passkey result this browser did not start", async () => {
+    const res = await callback({ result: "success" });
+    expect(redirectedTo(res)).toBe("/login?error=state");
+  });
+
+  it("ignores a passkey result whose state belongs to another sign-in", async () => {
+    const res = await callback({ result: "success", state: "other" }, cookieFor("s1"));
+    expect(redirectedTo(res)).toBe("/login?error=state");
+  });
+
+  it("accepts a passkey result that echoes the matching state", async () => {
+    const res = await callback({ result: "success", state: "s1" }, cookieFor("s1"));
+    expect(redirectedTo(res)).toBe("/tools?passkey=added");
+  });
+
   it("refuses a callback with no state cookie", async () => {
     const res = await callback({ code: "c", state: "s1" });
     expect(redirectedTo(res)).toBe("/login?error=state");

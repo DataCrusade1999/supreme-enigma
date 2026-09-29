@@ -5,7 +5,20 @@ import { TOOLS } from "../../lib/route-gate";
 // Outside the `(site)` route group like the tool pages themselves, so it gets
 // the root layout and no SiteHeader — the header's nav belongs to the public
 // portfolio, and this page is only ever seen from behind the gate.
-export default function ToolsPage() {
+// The outcome /api/auth/callback passes on after Cognito's passkey page.
+const PASSKEY_MESSAGES: Record<string, string> = {
+  added: "Passkey added. Use it the next time you sign in.",
+  failed: "The passkey was not added.",
+};
+
+export default async function ToolsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { passkey } = await searchParams;
+  const passkeyMessage = typeof passkey === "string" ? PASSKEY_MESSAGES[passkey] : undefined;
+
   return (
     <div className="flex min-h-screen flex-col font-ui">
       <header className="flex items-center justify-between border-b-2 border-rule-heavy px-5 py-5 sm:px-10">
@@ -32,6 +45,12 @@ export default function ToolsPage() {
           Everything the one shared password opens. You are through the gate for
           this session.
         </p>
+
+        {passkeyMessage ? (
+          <p role="status" className="mt-6 text-sm text-fg">
+            {passkeyMessage}
+          </p>
+        ) : null}
 
         <ul className="mt-10 flex flex-col">
           {TOOLS.map((tool) => (
@@ -70,6 +89,15 @@ export default function ToolsPage() {
         </ul>
 
         <p className="mt-9 text-[0.8125rem] text-muted">
+          {/* Through sign-in first: Cognito only adds a passkey for a user with
+           * a live managed-login session, which outlasts ours by far less. */}
+          <a href="/api/auth/login?next=%2Fapi%2Fauth%2Fpasskey" className="text-accent hover:text-fg">
+            Add a passkey
+          </a>{" "}
+          for this device.
+        </p>
+
+        <p className="mt-3 text-[0.8125rem] text-muted">
           Back to the{" "}
           <Link href="/" className="text-accent hover:text-fg">
             public site

@@ -21,6 +21,23 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const saved = readOAuthState(request.cookies.get(OAUTH_COOKIE)?.value, secret);
 
+  // /passkeys/add returns ?result=… with no code, so there is nothing to
+  // exchange: the owner is already signed in here. It did not echo state when
+  // we probed it, so the signed cookie that /api/auth/passkey set is what shows
+  // this browser started the setup; a state, if one comes back, must match it.
+  // Only the two outcomes are passed on, never Cognito's value itself.
+  const result = params.get("result");
+  if (result !== null && !params.has("code")) {
+    if (!saved || (params.has("state") && params.get("state") !== saved.state)) {
+      return toLogin(request, "state");
+    }
+    const response = NextResponse.redirect(
+      new URL(`/tools?passkey=${result === "success" ? "added" : "failed"}`, request.url),
+    );
+    response.cookies.set(OAUTH_COOKIE, "", { path: "/api/auth", maxAge: 0 });
+    return response;
+  }
+
   // The state check comes first: without it, anyone could send the owner's
   // browser a callback carrying the attacker's own code. A Cognito error on a
   // failed check only picks the message (a cancel after the cookie expired
