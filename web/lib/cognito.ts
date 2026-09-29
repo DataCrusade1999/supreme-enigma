@@ -31,8 +31,15 @@ export function pkcePair(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
-export function authorizeUrl(p: { redirectUri: string; state: string; challenge: string }): string {
-  const url = new URL(`${process.env.COGNITO_DOMAIN}/oauth2/authorize`);
+/** `path` is the managed-login page: sign-in by default, or /passkeys/add, which
+ * takes the same parameters. */
+export function authorizeUrl(p: {
+  redirectUri: string;
+  state: string;
+  challenge: string;
+  path?: "/oauth2/authorize" | "/passkeys/add";
+}): string {
+  const url = new URL(`${process.env.COGNITO_DOMAIN}${p.path ?? "/oauth2/authorize"}`);
   url.search = new URLSearchParams({
     response_type: "code",
     client_id: process.env.COGNITO_CLIENT_ID!,

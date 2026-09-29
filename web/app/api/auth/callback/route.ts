@@ -19,6 +19,19 @@ export async function GET(request: NextRequest) {
   }
 
   const params = request.nextUrl.searchParams;
+
+  // /passkeys/add returns ?result=… with no code and no state, so there is
+  // nothing to check or exchange: the owner is already signed in here. Only the
+  // two outcomes are passed on, never Cognito's value itself.
+  const result = params.get("result");
+  if (result !== null && !params.has("code")) {
+    const response = NextResponse.redirect(
+      new URL(`/tools?passkey=${result === "success" ? "added" : "failed"}`, request.url),
+    );
+    response.cookies.set(OAUTH_COOKIE, "", { path: "/api/auth", maxAge: 0 });
+    return response;
+  }
+
   const saved = readOAuthState(request.cookies.get(OAUTH_COOKIE)?.value, secret);
 
   // The state check comes first: without it, anyone could send the owner's
