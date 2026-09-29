@@ -222,11 +222,16 @@ resource "aws_cognito_managed_login_branding" "web" {
     }
   }
 
-  asset {
-    category   = "FAVICON_SVG"
-    color_mode = "DYNAMIC"
-    extension  = "SVG"
-    bytes      = filebase64("${path.module}/branding/favicon.svg")
+  # The page asks for the favicon of its own colour mode and ignores a DYNAMIC
+  # one, so the same file goes in once per mode.
+  dynamic "asset" {
+    for_each = toset(["DARK", "LIGHT"])
+    content {
+      category   = "FAVICON_SVG"
+      color_mode = asset.value
+      extension  = "SVG"
+      bytes      = filebase64("${path.module}/branding/favicon.svg")
+    }
   }
 }
 
