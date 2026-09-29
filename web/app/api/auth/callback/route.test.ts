@@ -60,8 +60,23 @@ describe("GET /api/auth/callback", () => {
   });
 
   it.each(["invalid_session", "<script>"])("reports any other passkey result (%j) as not added", async (result) => {
-    const res = await callback({ result });
+    const res = await callback({ result }, cookieFor("s1"));
     expect(redirectedTo(res)).toBe("/tools?passkey=failed");
+  });
+
+  it("ignores a passkey result this browser did not start", async () => {
+    const res = await callback({ result: "success" });
+    expect(redirectedTo(res)).toBe("/login?error=state");
+  });
+
+  it("ignores a passkey result whose state belongs to another sign-in", async () => {
+    const res = await callback({ result: "success", state: "other" }, cookieFor("s1"));
+    expect(redirectedTo(res)).toBe("/login?error=state");
+  });
+
+  it("accepts a passkey result that echoes the matching state", async () => {
+    const res = await callback({ result: "success", state: "s1" }, cookieFor("s1"));
+    expect(redirectedTo(res)).toBe("/tools?passkey=added");
   });
 
   it("refuses a callback with no state cookie", async () => {
