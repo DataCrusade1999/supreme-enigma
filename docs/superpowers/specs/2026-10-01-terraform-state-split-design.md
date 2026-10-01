@@ -206,6 +206,8 @@ Four stacks, a pure move, `No changes` everywhere. Terraform still runs only fro
 
 ### Phase 2 — Feature infra moves into the env stacks
 
+Designed in `2026-10-01-per-env-iam-design.md` (#333), which replaces the outline below: per-environment exec roles, and a production and a preview Vercel role.
+
 Goal: anything a feature typically needs (an IAM permission, a Vercel env var) is declared in the env stacks, so it can be applied to `dev` alone. `shared` keeps only what rarely changes: the OIDC providers, the IAM roles themselves, Cognito, ACM, SES and DNS, the Vercel project and its domains, firewall and bypass, ECR, SNS and the budget.
 
 Outline:

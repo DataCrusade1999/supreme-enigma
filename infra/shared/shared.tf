@@ -262,6 +262,28 @@ resource "aws_iam_role" "vercel" {
   })
 }
 
+# Preview deployments (dev and stage) assume this role; production assumes
+# aws_iam_role.vercel. Vercel's subject has no per-branch environment, so dev and
+# stage share it and each holds the other's grants — per-env IAM spec §6.
+resource "aws_iam_role" "vercel_preview" {
+  name = "${var.project_name}-vercel-preview"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Principal = { Federated = aws_iam_openid_connect_provider.vercel.arn }
+      Condition = {
+        StringEquals = {
+          "oidc.vercel.com/${local.vercel_team_slug}:aud" = "https://vercel.com/${local.vercel_team_slug}"
+          "oidc.vercel.com/${local.vercel_team_slug}:sub" = "owner:${local.vercel_team_slug}:project:${var.project_name}:environment:preview"
+        }
+      }
+    }]
+  })
+}
+
 # Carried over from the deleted vercel-sa user's inline policy — the migration moved the
 # identity, not the permissions. ResumeHeadObjectNotFound in particular is load-bearing;
 # its comment explains why. The s3:DeleteObject grant that came across with it is gone:
@@ -326,6 +348,45 @@ resource "aws_iam_role_policy" "vercel" {
       }
     ]
   })
+}
+
+# The resume lives in main's bucket and all three environments read and write it,
+# so these grants stay here rather than in the env stacks, on both Vercel roles.
+locals {
+  vercel_resume_statements = [
+    {
+      Sid      = "ResumeObjects"
+      Effect   = "Allow"
+      Action   = ["s3:PutObject", "s3:GetObject"]
+      Resource = ["${local.resume_bucket_arn}/resume/*"]
+    },
+    {
+      # HeadObject on a key that does not exist returns 403, not 404, unless the
+      # caller holds s3:ListBucket on the bucket — so without this the app's
+      # objectExists() rethrows on every absent key and the first extraction and
+      # the first publish both 500. Deliberately unconditioned: S3 evaluates this
+      # for its 404-vs-403 decision with no s3:prefix in context, so an
+      # s3:prefix-scoped grant does not restore the 404. Bucket ARN only, so this
+      # grants listing key names in main's bucket and nothing else — GetObject
+      # stays scoped to uploads/, outputs/ and resume/ above.
+      Sid      = "ResumeHeadObjectNotFound"
+      Effect   = "Allow"
+      Action   = ["s3:ListBucket"]
+      Resource = [local.resume_bucket_arn]
+    },
+  ]
+}
+
+resource "aws_iam_role_policy" "vercel_resume" {
+  name   = "${var.project_name}-vercel-resume"
+  role   = aws_iam_role.vercel.id
+  policy = jsonencode({ Version = "2012-10-17", Statement = local.vercel_resume_statements })
+}
+
+resource "aws_iam_role_policy" "vercel_preview_resume" {
+  name   = "${var.project_name}-vercel-preview-resume"
+  role   = aws_iam_role.vercel_preview.id
+  policy = jsonencode({ Version = "2012-10-17", Statement = local.vercel_resume_statements })
 }
 
 # --- Vercel project + the config/secrets that are identical across production and preview ---
@@ -492,8 +553,20 @@ resource "vercel_project_environment_variable" "aws_role_arn" {
   project_id = vercel_project.looper.id
   key        = "APP_AWS_ROLE_ARN"
   value      = aws_iam_role.vercel.arn
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
+}
+
+# depends_on: the production value must be narrowed off `preview` before this one
+# exists, or Vercel holds two preview values for the same key.
+resource "vercel_project_environment_variable" "aws_role_arn_preview" {
+  project_id = vercel_project.looper.id
+  key        = "APP_AWS_ROLE_ARN"
+  value      = aws_iam_role.vercel_preview.arn
+  target     = ["preview"]
+  sensitive  = false
+
+  depends_on = [vercel_project_environment_variable.aws_role_arn]
 }
 
 resource "vercel_project_environment_variable" "aws_region" {
