@@ -2,7 +2,7 @@
 
 ## When to use this
 
-Changing anything under `infra/main/`, verifying that real infrastructure
+Changing anything under `infra/shared/`, `infra/envs/` or `infra/modules/`, verifying that real infrastructure
 matches the config, or tearing the project down.
 
 Per-resource detail and the reasoning behind each quirk is in
@@ -11,27 +11,29 @@ Per-resource detail and the reasoning behind each quirk is in
 ## Prerequisites
 
 - Shared prerequisites in [README.md](README.md#shared-prerequisites).
-- `infra/main/terraform.tfvars`. It is gitignored and has **five required
-  variables with no defaults** — `vercel_api_token`, `app_password`,
-  `github_repo`, `alert_email`, `openrouter_api_key`. A fresh clone fails
-  with `No value for required variable` until all five are set. Copy
-  `terraform.tfvars.example` across.
-- Terraform never reads `AWS_PROFILE`: `providers.tf` uses
-  `profile = var.aws_profile` (default `personal`) and `backend.tf` hardcodes
-  `personal`. You do not need to export anything, and exporting something
-  else will not change what it does.
+- Four stacks, each with its own state and its own gitignored
+  `terraform.tfvars` (copy that directory's `terraform.tfvars.example`):
+  `infra/shared` (the one-of-each resources, applied from `main` only; seven
+  required variables) and `infra/envs/dev`, `infra/envs/stage`,
+  `infra/envs/main` (each environment's bucket, Lambda, alarm and two Vercel
+  env vars; only `vercel_api_token`). A fresh clone fails with
+  `No value for required variable` until they are set.
+- `export AWS_PROFILE=personal` first. No backend block names a profile and
+  `var.aws_profile` defaults to null, so Terraform uses whatever the
+  environment provides — the wrong profile points at the wrong account.
 
 ## Plan before every merge
 
 **CI validates nothing under `infra/`** — `deploy.yml` has no `validate`, no
 `fmt -check`, no `plan`. Green test jobs say nothing about whether a
-Terraform change applies. For any PR touching `infra/`, plan against real
-state before merging:
+Terraform change applies. For any PR touching `infra/`, plan all four stacks
+against real state before merging:
 
 ```bash
-cd infra/main
-terraform init
-terraform plan -var-file=terraform.tfvars
+export AWS_PROFILE=personal
+for d in infra/shared infra/envs/dev infra/envs/stage infra/envs/main; do
+  (cd $d && terraform init -input=false && terraform plan -var-file=terraform.tfvars)
+done
 ```
 
 Do this in a scratch worktree if you have uncommitted work elsewhere. Confirm
@@ -49,10 +51,15 @@ Two things `plan` will never tell you:
 
 ## Apply
 
+From the directory of the stack that changed:
+
 ```bash
-cd infra/main
+cd infra/envs/dev   # or infra/shared, infra/envs/stage, infra/envs/main
 terraform apply -var-file=terraform.tfvars
 ```
+
+When a change touches both, apply `infra/shared` first: the env stacks look
+up the exec role, ECR repo, SNS topic and Vercel project by name.
 
 Re-read the plan output in the confirmation prompt rather than typing `yes`
 from memory; the only destructive resources here are the S3 buckets and the
@@ -90,16 +97,19 @@ Healthy (checked 2026-09-15):
 
 If `confirmed` is `"0"`, click **Resubscribe** in the deactivated notification
 email — that revives the same subscription ARN and leaves Terraform state
-truthful. Only if that is impossible:
+truthful. Only if that is impossible, from `infra/shared`:
 `terraform apply -replace=aws_sns_topic_subscription.budget_alerts_email`.
 To prove delivery end to end rather than infer it, `aws sns publish` one
 message; it costs nothing.
 
 ## Kill switch: full teardown
 
+The env stacks first, then `shared`:
+
 ```bash
-cd infra/main
-terraform destroy -var-file=terraform.tfvars
+for d in infra/envs/dev infra/envs/stage infra/envs/main infra/shared; do
+  (cd $d && terraform destroy -var-file=terraform.tfvars)
+done
 ```
 
 Read all of this before running it.
@@ -147,17 +157,19 @@ aws s3 rm s3://portfolio-data-stage-223376380711 --recursive \
 ```
 
 *(The `BucketNotEmpty` failure is read from the absence of `force_destroy` in
-`infra/main/environments.tf` and S3's documented behaviour; the destroy has
+`infra/modules/environment/main.tf` and S3's documented behaviour; the destroy has
 not been run to confirm it. The empty-first commands are standard but
 likewise unexercised here.)*
 
 ### Recovery: applying from scratch afterwards
 
-A bare `terraform apply` will not work. The order is in
-`.claude/rules/infra.md`; the step that catches people is that
-`var.bootstrap_image_tag_main` / `_dev` / `_stage` in `variables.tf` still
-point at tags from 2026-08-06 that no longer exist, and because of
-`ignore_changes` they are only read at creation time. Update them to tags CI
+A bare `terraform apply` will not work. The order: `infra/shared` with
+`-target=aws_ecr_repository.looper`, the rest of `infra/shared`, push each
+branch so CI builds an image, then `infra/envs/dev`, `infra/envs/stage`,
+`infra/envs/main`. The step that catches people is that `bootstrap_image_tag`
+in each `infra/envs/<env>/main.tf` still points at a tag from 2026-08-06 that
+may no longer exist, and because of `ignore_changes` it is only read at
+creation time. Update them to tags CI
 has actually pushed before the final apply:
 
 ```bash

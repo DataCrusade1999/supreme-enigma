@@ -81,7 +81,10 @@ updates:
   - package-ecosystem: terraform
     directories:
       - /infra/bootstrap
-      - /infra/main
+      - /infra/shared
+      - /infra/envs/dev
+      - /infra/envs/stage
+      - /infra/envs/main
     schedule:
       interval: monthly
     commit-message:

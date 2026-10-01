@@ -1,7 +1,8 @@
 # Resources that exist once and are used by all three environments (main/dev/stage) —
 # the ECR repo, IAM (exec role + service-account users), the Vercel project itself, and
-# the app secrets/config that don't vary by branch. Per-branch resources (Lambda functions,
-# S3 buckets, and the env vars that point at them) live in environments.tf instead.
+# the app secrets/config that don't vary by branch. Applied from main only; per-environment
+# resources (Lambda functions, S3 buckets, and the env vars that point at them) live in
+# infra/modules/environment, called from infra/envs/<env>.
 
 locals {
   # GitHub issues an *immutable* subject for this repo — GET
@@ -24,21 +25,22 @@ locals {
   # explicit teamId it answers 403 for ashutosh-pandey.com.
   vercel_team_id = "team_bSWug4zpM7jfChbYKg7G4PMI"
 
-  lambda_function_name = "${var.project_name}-processor"
-  lambda_function_arn  = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.lambda_function_name}"
+  # Per-environment names, built from the same rule as infra/modules/environment so
+  # this stack never reads an env stack's state. The list orders match what the
+  # policies used before the split (lambdas main/dev/stage, buckets dev/main/stage).
+  env_suffix = { main = "", dev = "-dev", stage = "-stage" }
 
-  all_lambda_function_arns = concat(
-    [local.lambda_function_arn],
-    [for f in aws_lambda_function.looper_env : f.arn]
-  )
-  all_lambda_function_names = concat(
-    [local.lambda_function_name],
-    [for f in aws_lambda_function.looper_env : f.function_name]
-  )
-  all_data_bucket_arns = [for b in aws_s3_bucket.data : b.arn]
+  lambda_function_names = { for e, s in local.env_suffix : e => "${var.project_name}-processor${s}" }
+  data_bucket_names     = { for e, s in local.env_suffix : e => "portfolio-data${s}-${data.aws_caller_identity.current.account_id}" }
+
+  all_lambda_function_arns = [
+    for e in ["main", "dev", "stage"] :
+    "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.lambda_function_names[e]}"
+  ]
+  all_data_bucket_arns = [for e in ["dev", "main", "stage"] : "arn:aws:s3:::${local.data_bucket_names[e]}"]
 }
 
-# --- ECR (one repo, per-branch tag prefixes — see environments.tf's Lambda functions
+# --- ECR (one repo, per-branch tag prefixes — see infra/modules/environment's Lambda functions
 #     and .github/workflows/deploy.yml for how each branch tags/deploys its own image) ---
 
 resource "aws_ecr_repository" "looper" {
@@ -143,7 +145,7 @@ resource "aws_iam_role_policy" "lambda_s3" {
 locals {
   # Only main's bucket holds resume data — dev/stage read and write it too, via the
   # env-agnostic RESUME_BUCKET_NAME. See the design spec §4.1.
-  resume_bucket_arn = aws_s3_bucket.data["main"].arn
+  resume_bucket_arn = "arn:aws:s3:::${local.data_bucket_names["main"]}"
 }
 
 # --- GitHub Actions OIDC: how deploy.yml authenticates to AWS. It replaced an IAM user
@@ -264,7 +266,7 @@ resource "aws_iam_role" "vercel" {
 # identity, not the permissions. ResumeHeadObjectNotFound in particular is load-bearing;
 # its comment explains why. The s3:DeleteObject grant that came across with it is gone:
 # nothing under web/ issues a DeleteObjectCommand, and deleting drafts is the job of the
-# resume/drafts/ lifecycle rule in environments.tf, not the app's.
+# resume/drafts/ lifecycle rule in infra/modules/environment, not the app's.
 resource "aws_iam_role_policy" "vercel" {
   name = "${var.project_name}-vercel-policy"
   role = aws_iam_role.vercel.id
@@ -507,7 +509,7 @@ resource "vercel_project_environment_variable" "aws_region" {
 resource "vercel_project_environment_variable" "resume_bucket_name" {
   project_id = vercel_project.looper.id
   key        = "RESUME_BUCKET_NAME"
-  value      = aws_s3_bucket.data["main"].id
+  value      = local.data_bucket_names["main"]
   target     = local.env_targets
   sensitive  = false
 }
