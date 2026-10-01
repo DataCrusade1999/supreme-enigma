@@ -1,13 +1,5 @@
-output "data_bucket_name" {
-  value = aws_s3_bucket.data["main"].bucket
-}
-
 output "ecr_repository_url" {
   value = aws_ecr_repository.looper.repository_url
-}
-
-output "lambda_function_name" {
-  value = aws_lambda_function.looper.function_name
 }
 
 output "vercel_project_id" {
