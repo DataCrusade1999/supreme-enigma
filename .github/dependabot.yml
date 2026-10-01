@@ -5,15 +5,31 @@ version: 2
 # `commit-message.prefix` is not cosmetic: deploy.yml's release job derives
 # the version bump from Conventional Commit prefixes, so Dependabot's default
 # "Bump X from A to B" subject would not parse.
+#
+# Each ecosystem groups its minor and patch bumps into one PR. Separate PRs
+# conflict on the shared lock file, so merging one makes Dependabot rebase the
+# rest and every rebase is another CI run. Majors stay ungrouped so a breaking
+# one cannot hold up the batch. Terraform still opens one PR per directory:
+# groups do not span `directories` (`group-by: dependency-name` would, but
+# only as one PR per dependency).
+#
+# Monthly, not weekly: each grouped PR is a full CI run, and the Dependabot
+# job that opens them is billed against the same 2,000 Actions minutes.
+# A fixable HIGH/CRITICAL CVE does not wait for the month: Trivy in the
+# test job fails CI on it, and Dependabot alerts are on.
 updates:
   - package-ecosystem: npm
     directory: /web
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
     ignore:
       # typescript-eslint (via eslint-config-next) declares
       # `typescript: >=4.8.4 <6.1.0`; on TS 7 it throws at config-load time and
@@ -21,23 +37,37 @@ updates:
       # typescript-eslint ships TS 7 support (typescript-eslint#10940).
       - dependency-name: typescript
         versions: [">=6"]
+      # eslint-plugin-react (via eslint-config-next) calls
+      # context.getFilename(), which ESLint 10 removed; lint throws
+      # "contextOrFilename.getFilename is not a function" loading
+      # react/display-name. Unignore once eslint-plugin-react supports ESLint 10.
+      - dependency-name: eslint
+        versions: [">=10"]
 
   - package-ecosystem: pip
     directory: /lambda
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      pip:
+        patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
     ignore:
       # amazon-ecr-login v2.1.7 bundles @aws-sdk/core 3.977.8, and from 3.977.5
       # the JSON protocol hands the transport a Uint8Array subclass whose
@@ -51,9 +81,16 @@ updates:
   - package-ecosystem: terraform
     directories:
       - /infra/bootstrap
-      - /infra/main
+      - /infra/shared
+      - /infra/envs/dev
+      - /infra/envs/stage
+      - /infra/envs/main
     schedule:
-      interval: weekly
+      interval: monthly
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      terraform:
+        patterns: ["*"]
+        update-types: [minor, patch]

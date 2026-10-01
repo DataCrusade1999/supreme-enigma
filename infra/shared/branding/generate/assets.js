@@ -1,4 +1,4 @@
-// Writes the logo and background SVGs in infra/main/branding/ for Cognito's
+// Writes the logo and background SVGs in infra/shared/branding/ for Cognito's
 // managed login. Managed login has no font setting, so the site's type is
 // outlined to paths here. Colours are web/app/globals.css.
 const fs = require('fs');

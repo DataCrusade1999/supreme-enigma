@@ -3,8 +3,16 @@ name: CI/CD
 on:
   push:
     branches: [main, dev, stage]
+  # A PR that changes only docs gets no run at all: nothing in the test job
+  # reads these files, and in September 50 of the 180 commits on dev were
+  # docs-only. Not applied to `push`: a push to main has to reach `release`.
+  # `promotion-guard` lives in its own workflow so this filter cannot skip it.
   pull_request:
     branches: [dev, stage, main]
+    paths-ignore:
+      - "docs/**"
+      - ".claude/**"
+      - "**.md"
   workflow_dispatch: {}
 
 # A new push to a PR cancels the run it supersedes. Push runs are keyed on
@@ -28,11 +36,96 @@ env:
   ECR_REPOSITORY: bgm-looper-lambda
 
 jobs:
-  unit:
-    name: Lint + unit tests
+  # Everything that gates `deploy` and `release`, in one job. GitHub bills
+  # each job rounded up to a whole minute, and this used to be four jobs -
+  # lint + unit, Lambda, e2e, Trivy - where the Trivy job ran ~20s and still
+  # billed a minute, and two of them paid for their own `npm install`. Split,
+  # a run billed ~10 minutes for ~7 of work; together it is ~6. Slower on
+  # the wall clock, which is the trade.
+  #
+  # Every suite records its exit code instead of failing on the spot, so one
+  # red suite does not hide the others' results; the last step fails the job.
+  #
+  # Skipped on a push to dev unless the Lambda is about to deploy: the PR
+  # that produced the push already ran this on the same change, and dev's
+  # Vercel deploy does not wait for it. A push to dev that touches lambda/
+  # still runs it, because `deploy` needs it. stage and main always run it.
+  # `!cancelled()` because `changes` only runs on push, and a skipped `needs`
+  # would otherwise skip this job on every PR.
+  test:
+    name: Tests
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result != 'failure' && (
+        github.event_name != 'push' || github.ref_name != 'dev' ||
+        needs.changes.outputs.lambda == 'true'
+      )
     runs-on: ubuntu-24.04
+    # GitHub's default job timeout is 360 minutes; a hung Playwright server
+    # would spend that against the monthly quota.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Free on a private repo: one open-source action, no account, no licence.
+      # CodeQL, dependency-review and SARIF upload all need Advanced Security,
+      # which this plan does not have, so findings go to the job summary instead
+      # of the Security tab. Dependabot alerts (free, already on) cover the rest.
+      #
+      # `ignore-unfixed`: a CVE with no patched release cannot block an
+      # unrelated deploy; the only findings that fail the job are ones a
+      # dependency bump would clear. `.trivyignore` at the repo root is the
+      # escape hatch for accepted findings - one reason per entry.
+      #
+      # First, straight after checkout, so it scans the repo and nothing the
+      # install steps below put on disk.
+      - name: Trivy filesystem scan
+        id: trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          # JSON, not table: the first version counted findings by matching
+          # `^(?:Total|Failures): (\d+) \(` over Trivy's ASCII output, which
+          # is a presentation detail that differs per scanner type and is
+          # absent entirely for a clean target. The JSON also carries
+          # PrimaryURL and CauseMetadata.StartLine, which the table drops.
+          format: json
+          output: trivy-results.json
+          # Inert while this step runs before any install or build, since none
+          # of these directories exist yet. Kept in case it is ever moved.
+          skip-dirs: web/node_modules,web/.next,lambda/.venv
+        continue-on-error: true
+
+      - name: Security job summary
+        if: always()
+        # HEAD_SHA, not github.sha: on a pull_request event github.sha is the
+        # synthetic merge commit, and blob links built from it are not
+        # reachable from the PR.
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node .github/scripts/security-summary.mjs trivy-results.json "${{ steps.trivy.outcome }}"
+
+      # 30 days rather than the 7 used for test results: a scan result is what
+      # someone asks about weeks later ("when did this CVE first appear?"), and
+      # both files are kilobytes. trivy-summary.md is written by the step above
+      # from the same lines it appends to the job summary, so the artifact and
+      # the summary cannot disagree.
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-results
+          path: |
+            trivy-results.json
+            trivy-summary.md
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: warn
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -64,29 +157,21 @@ jobs:
 
       - name: Vitest job summary
         if: always()
-        # HEAD_SHA, not github.sha: on a pull_request event github.sha is the
-        # synthetic merge commit, and blob links built from it are not
-        # reachable from the PR.
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node .github/scripts/unit-summary.mjs web/vitest-results.json
 
-      # The summary scripts this workflow's other jobs depend on.
+      # The summary scripts this workflow depends on.
       - name: Run CI script tests (Node)
-        run: node --test ".github/scripts/*.test.mjs"
+        id: node_scripts
+        run: |
+          EXIT_CODE=0
+          node --test ".github/scripts/*.test.mjs" || EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-      - name: Fail the job if lint or the unit suite failed
-        if: steps.lint.outputs.exit_code != '0' || steps.vitest.outputs.exit_code != '0'
-        run: exit 1
-
-  # Linux only on purpose: the tests need apt ffmpeg and the Lambda ships as
-  # a Linux container, so another OS would test a platform it never runs on.
-  lambda:
-    name: Lambda tests
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
+      # Linux only on purpose: the tests need apt ffmpeg and the Lambda ships
+      # as a Linux container, so another OS would test a platform it never
+      # runs on.
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -100,32 +185,99 @@ jobs:
         run: pip install -r requirements.txt pytest moto
 
       - name: Run Lambda tests
+        id: pytest
         working-directory: lambda
-        run: pytest -v
+        run: |
+          EXIT_CODE=0
+          pytest -v || EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
       # The release job's changelog scripts. Cheap, and they are the only thing
       # standing between a bad merge base and issue #168 coming back.
       - name: Run CI script tests (Python)
-        run: pytest -q .github/scripts/test_changelog_sync.py
+        id: py_scripts
+        run: |
+          EXIT_CODE=0
+          pytest -q .github/scripts/test_changelog_sync.py || EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-  # Ubuntu on every run. Windows and macOS only where the free-plan minute
-  # budget allows: promotion PRs into stage/main and manual dispatch. macOS
-  # costs about 10x Linux minutes and Windows about 2x, so running them on
-  # every PR would exhaust the 2,000 monthly minutes within days and stall
-  # `release` with them. Spec §2-3.
-  e2e:
-    name: E2E (${{ matrix.os }})
+      - name: Install Playwright browsers
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e + a11y tests
+        id: playwright
+        working-directory: web
+        run: |
+          set -o pipefail
+          EXIT_CODE=0
+          npx playwright test || EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+      # The OS lives in a directory *inside* the zip, not only in the artifact
+      # name. `download-artifact` extracts a pattern download flat whenever it
+      # matches exactly one artifact (v5+), so the artifact name alone does
+      # not survive the round trip - an OS-named directory in the zip does,
+      # with `merge-multiple: true` on the other side. `[ -f ]` rather than a
+      # bare `cp` so a run that died before the reporter wrote anything leaves
+      # `staging` empty and produces no artifact, which is what
+      # `if-no-files-found: warn` below expects.
+      - name: Stage the Playwright report under its OS
+        if: always()
+        working-directory: web
+        run: |
+          mkdir -p "staging/playwright-results-${{ runner.os }}"
+          [ -f playwright-results.json ] && cp playwright-results.json "staging/playwright-results-${{ runner.os }}/" || true
+
+      # Read by the `summary` job when the cross-OS legs ran, so it can put all
+      # three OSes in one table. `overwrite: true` because uploaded artifacts
+      # are immutable and `gh run rerun --failed` - this repo's documented
+      # recovery path - would otherwise fail on the retry.
+      - name: Upload Playwright results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-results-${{ runner.os }}
+          path: web/staging
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: warn
+
+      - name: E2E job summary
+        if: always()
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node .github/scripts/e2e-summary.mjs web/staging
+
+      - name: Fail the job if any suite failed
+        if: >-
+          steps.trivy.outcome != 'success' ||
+          steps.lint.outputs.exit_code != '0' ||
+          steps.vitest.outputs.exit_code != '0' ||
+          steps.node_scripts.outputs.exit_code != '0' ||
+          steps.pytest.outputs.exit_code != '0' ||
+          steps.py_scripts.outputs.exit_code != '0' ||
+          steps.playwright.outputs.exit_code != '0'
+        run: exit 1
+
+  # Windows and macOS e2e, on PRs into main only - the last gate before
+  # production, once per release. macOS bills at 10x Linux minutes and
+  # Windows at 2x against the free plan's 2,000/month; running these on
+  # PRs into stage as well, where every push to dev re-triggers an open
+  # promotion PR, cost ~36 minutes a run. Not in `deploy`'s or `release`'s
+  # `needs:`: neither runs on a pull_request, so this gates the stage -> main
+  # merge as a check, not the release.
+  e2e-cross-os:
+    name: E2E
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ${{ matrix.os }}
-    # GitHub's default job timeout is 360 minutes, and macOS bills at ~10x
-    # Linux minutes against the 2,000-minute/month free-plan quota - one hung
-    # macOS leg could burn the entire month's quota in a single run. Measured
-    # on run 35361326872: Linux 1m47s, Windows 7m03s, macOS 1m15s, so 20 is
-    # deliberate headroom, not a tight fit.
+    # One hung macOS leg at 10x could burn the month's quota without this.
+    # Measured on run 35361326872: Windows 7m03s, macOS 1m15s.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && (github.base_ref == 'stage' || github.base_ref == 'main'))) && '["ubuntu-24.04", "windows-latest", "macos-latest"]' || '["ubuntu-24.04"]') }}
+        os: [windows-latest, macos-latest]
     # Every step below is bash; windows-latest would otherwise run them in
     # PowerShell, where `set -o pipefail` and `$GITHUB_OUTPUT` do not exist.
     defaults:
@@ -158,14 +310,7 @@ jobs:
           npx playwright test || EXIT_CODE=$?
           echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-      # The OS lives in a directory *inside* the zip, not only in the artifact
-      # name. `download-artifact` extracts a pattern download flat whenever it
-      # matches exactly one artifact (v5+), which is every PR into `dev`, so
-      # the artifact name alone does not survive the round trip - an OS-named
-      # directory in the zip does, with `merge-multiple: true` on the other
-      # side. `[ -f ]` rather than a bare `cp` so a leg that died before the
-      # reporter wrote anything leaves `staging` empty and produces no
-      # artifact, which is what `if-no-files-found: warn` below expects.
+      # Same layout as the test job's upload: see the comments there.
       - name: Stage the Playwright report under its OS
         if: always()
         working-directory: web
@@ -173,16 +318,6 @@ jobs:
           mkdir -p "staging/playwright-results-${{ runner.os }}"
           [ -f playwright-results.json ] && cp playwright-results.json "staging/playwright-results-${{ runner.os }}/" || true
 
-      # Uploaded rather than summarised here: $GITHUB_STEP_SUMMARY is per job
-      # and a matrix leg is a job, so three legs cannot write one table. The
-      # `summary` job downloads all of these and renders them together.
-      #
-      # `if: always()` because the leg that failed is the one worth reading.
-      # `overwrite: true` because uploaded artifacts are immutable and
-      # `gh run rerun --failed` - this repo's documented recovery path - would
-      # otherwise fail on the retry. `if-no-files-found: warn` so a leg that
-      # died before the reporter wrote anything shows up as a gap in the table
-      # instead of a second red step on top of the first.
       - name: Upload Playwright results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -209,9 +344,19 @@ jobs:
     # runs - CHROMATIC_PROJECT_TOKEN would be empty and the job would fail red
     # on every bump. A missing token is an error, not a "change", so
     # exitZeroOnChanges does not absorb it.
+    #
+    # On a push to dev it also waits for `changes` and runs only when web/ or
+    # deploy.yml changed: a docs- or lambda-only push cannot change a story,
+    # and the build would still bill a minute and spend snapshot budget.
+    # Chromatic finds the baseline for the next build by walking git history,
+    # so a skipped commit leaves no gap. PRs are not gated: `changes` does not
+    # run on them, and this job already finishes inside the one minute a gate
+    # job would bill. `!cancelled()` so the skipped `changes` on a PR does not
+    # skip this job too.
+    needs: changes
     if: >-
-      github.actor != 'dependabot[bot]' && (
-        (github.event_name == 'push' && github.ref_name == 'dev') ||
+      !cancelled() && github.actor != 'dependabot[bot]' && (
+        (github.event_name == 'push' && github.ref_name == 'dev' && needs.changes.outputs.web == 'true') ||
         (github.event_name == 'pull_request' && github.base_ref == 'dev')
       )
     steps:
@@ -231,7 +376,7 @@ jobs:
         run: npm install
 
       - name: Publish to Chromatic
-        uses: chromaui/action@6b3c2820222d23bad770d57a4ad5e2d1c91f92e9 # v18.9.5
+        uses: chromaui/action@db3ceb5efb0cd7447d63c2d8cce7da732ce89322 # v18.10.1
         with:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           workingDir: web
@@ -249,77 +394,15 @@ jobs:
           # so baselines do not carry over on their own.
           autoAcceptChanges: dev
 
-  # Free on a private repo: one open-source action, no account, no licence.
-  # CodeQL, dependency-review and SARIF upload all need Advanced Security,
-  # which this plan does not have, so findings go to the job summary instead
-  # of the Security tab. Dependabot alerts (free, already on) cover the rest.
-  security:
-    name: Security scan
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # `ignore-unfixed`: a CVE with no patched release cannot block an
-      # unrelated deploy; the only findings that fail the job are ones a
-      # dependency bump would clear. `.trivyignore` at the repo root is the
-      # escape hatch for accepted findings - one reason per entry.
-      - name: Trivy filesystem scan
-        id: trivy
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln,misconfig,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-          # JSON, not table: the first version counted findings by matching
-          # `^(?:Total|Failures): (\d+) \(` over Trivy's ASCII output, which
-          # is a presentation detail that differs per scanner type and is
-          # absent entirely for a clean target. The JSON also carries
-          # PrimaryURL and CauseMetadata.StartLine, which the table drops.
-          format: json
-          output: trivy-results.json
-          # Inert today: this job's only step before Trivy is a plain checkout,
-          # no install or build, so none of these directories exist yet. Kept
-          # for the day this job scans after an install step is added.
-          skip-dirs: web/node_modules,web/.next,lambda/.venv
-        continue-on-error: true
-
-      - name: Security job summary
-        if: always()
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: node .github/scripts/security-summary.mjs trivy-results.json "${{ steps.trivy.outcome }}"
-
-      # 30 days rather than the 7 used for test results: a scan result is what
-      # someone asks about weeks later ("when did this CVE first appear?"), and
-      # both files are kilobytes. trivy-summary.md is written by the step above
-      # from the same lines it appends to the job summary, so the artifact and
-      # the summary cannot disagree.
-      - name: Upload scan results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: trivy-results
-          path: |
-            trivy-results.json
-            trivy-summary.md
-          retention-days: 30
-          overwrite: true
-          if-no-files-found: warn
-
-      - name: Fail the job if the scan found anything
-        if: steps.trivy.outcome != 'success'
-        run: exit 1
-
-  # Reports, never gates: absent from every other job's `needs:`. Step
-  # summaries are per job, so the only place a one-glance table can come
-  # from is a job that depends on all the others.
+  # Reports, never gates: absent from every other job's `needs:`. Only runs
+  # when the cross-OS legs did, because that is the only time there is more
+  # than one job's results to put side by side - on every other run the test
+  # job's own summary already has them, and this job would bill a minute to
+  # repeat it.
   summary:
     name: Summary
-    needs: [unit, lambda, e2e, security, chromatic]
-    if: always()
+    needs: [test, e2e-cross-os, chromatic]
+    if: always() && needs.e2e-cross-os.result != 'skipped'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -331,21 +414,12 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: node .github/scripts/run-summary.mjs
 
-      # No `merge-multiple`: all three artifacts hold a file called
-      # playwright-results.json, so merging them into one directory would have
-      # the legs overwrite each other and report one OS three times. Left
-      # unset, each lands in its own playwright-results-<OS>/ directory, which
-      # is where the script reads the OS label from.
-      #
-      # `continue-on-error` because this job reports and gates nothing: if
-      # `e2e` was cancelled before any leg uploaded, the right outcome is a
-      # summary saying so, not a red job.
+      # `continue-on-error` because this job reports and gates nothing: if a
+      # leg was cancelled before it uploaded, the right outcome is a summary
+      # saying so, not a red job.
       # `merge-multiple: true` extracts every matched zip straight into
-      # `e2e-results`, so the layout is the same whether one leg ran or three:
-      # each zip carries its own `playwright-results-<OS>/` directory, and
-      # nothing collides. Without it the action nests per artifact name on a
-      # multi-artifact match but flattens a single-artifact one (v5+), which
-      # is two different layouts for `e2e-summary.mjs` to read.
+      # `e2e-results`; each zip carries its own `playwright-results-<OS>/`
+      # directory, so nothing collides.
       - name: Download Playwright results
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -359,62 +433,12 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node .github/scripts/e2e-summary.mjs e2e-results
 
-  # Refuses a promotion whose merge base predates the last release's changelog
-  # heading. Merging in that state corrupts CHANGELOG.md: git sees the release
-  # transform as one side's change and the branch's new entries as the other's,
-  # and splices them without a conflict - a duplicate heading when the branch
-  # carries a copy of the transform, entries filed under a version that did not
-  # ship them when it does not. It happens when
-  # the chore/changelog-sync-* PR has not been merged yet, or was merged with
-  # --squash, which copies the release commit instead of inheriting it.
-  #
-  # Checked here rather than in the release job on purpose: by the time
-  # `release` runs, the promotion that duplicated the heading has already
-  # happened, so detection there is after the damage. This refuses the merge
-  # that would cause it.
-  #
-  # The invariant is the previous release *tag* being an ancestor of the branch
-  # being promoted - not `main` being an ancestor of `dev`, which is false on
-  # every healthy run, because the merge commit a promotion creates lives only
-  # on the target branch.
-  #
-  # Branch protection is not enforced on this repo (private, no Pro), so this
-  # is a red X rather than a hard block. Do not merge past it.
-  promotion-guard:
-    runs-on: ubuntu-24.04
-    if: github.event_name == 'pull_request' && (github.base_ref == 'stage' || github.base_ref == 'main')
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Assert the last release is an ancestor of the branch being promoted
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          set -euo pipefail
-          git fetch --tags --quiet origin +refs/heads/main:refs/remotes/origin/main
-          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' origin/main 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            echo "No release tag reachable from main yet - nothing to check."
-            exit 0
-          fi
-          # Deliberately the PR head, not HEAD: on a pull_request event HEAD is
-          # the synthetic merge commit, whose base parent already contains the
-          # tag, so the check would pass for free and test nothing.
-          if git merge-base --is-ancestor "$LAST_TAG" "$HEAD_SHA"; then
-            echo "$LAST_TAG is an ancestor of $HEAD_REF - the merge base already carries its changelog heading."
-            exit 0
-          fi
-          echo "::error::$LAST_TAG is not an ancestor of $HEAD_REF, so merging this promotion would corrupt CHANGELOG.md - either a duplicate $LAST_TAG heading, or entries that did not ship in $LAST_TAG spliced in under it (issue #168). Merge the chore/changelog-sync-$LAST_TAG PR into dev first, with --merge and never --squash, then promote again."
-          exit 1
-
   changes:
     runs-on: ubuntu-24.04
     if: github.event_name == 'push'
     outputs:
       lambda: ${{ steps.check.outputs.lambda }}
+      web: ${{ steps.check.outputs.web }}
       releasable: ${{ steps.check.outputs.releasable }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -426,6 +450,7 @@ jobs:
         run: |
           if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
             echo "lambda=true" >> "$GITHUB_OUTPUT"
+            echo "web=true" >> "$GITHUB_OUTPUT"
             echo "releasable=true" >> "$GITHUB_OUTPUT"
             echo "No previous commit to diff against (new branch or rewritten history) — building to be safe."
             exit 0
@@ -435,6 +460,14 @@ jobs:
             echo "No changes under lambda/ or deploy.yml — skipping the Lambda image build."
           else
             echo "lambda=true" >> "$GITHUB_OUTPUT"
+          fi
+          # Read by `chromatic`: stories live under web/, and deploy.yml
+          # configures the job itself.
+          if git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- web/ .github/workflows/deploy.yml; then
+            echo "web=false" >> "$GITHUB_OUTPUT"
+            echo "No changes under web/ or deploy.yml — skipping Chromatic."
+          else
+            echo "web=true" >> "$GITHUB_OUTPUT"
           fi
           # A push that touches nothing but CHANGELOG.md must not cut a
           # version. Without this, main's changelog cannot be corrected by
@@ -449,7 +482,7 @@ jobs:
           fi
 
   deploy:
-    needs: [unit, lambda, e2e, security, changes]
+    needs: [test, changes]
     runs-on: ubuntu-24.04
     # Required for OIDC: id-token: write is what lets the job mint the token
     # aws-actions/configure-aws-credentials exchanges for the role. Declaring a
@@ -459,17 +492,16 @@ jobs:
       id-token: write
       contents: read
     # A custom `if:` replaces the default `if: success()` entirely, so
-    # each test job's success is checked explicitly here rather than assumed.
+    # the test job's success is checked explicitly here rather than assumed.
     # `changes` only runs (and is only needed) on push — on workflow_dispatch
     # it's skipped, and deploy proceeds anyway, ignoring its output.
-    # The branch clause exists for workflow_dispatch from a feature branch
-    # (the way the cross-OS e2e matrix is exercised before a promotion). The
+    # The branch clause exists for workflow_dispatch from a feature branch. The
     # bgm-looper-ci-deploy role's OIDC trust policy is StringEquals on the
     # three permanent branches' refs, so any other branch fails at
     # configure-aws-credentials, and the `case` below has no default arm, so
     # TAG_PREFIX would be empty even if it got that far. Skipping is the
     # honest result; a red deploy on a branch that can never deploy is noise.
-    if: always() && contains(fromJSON('["main", "dev", "stage"]'), github.ref_name) && needs.unit.result == 'success' && needs.lambda.result == 'success' && needs.e2e.result == 'success' && needs.security.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.lambda == 'true'))
+    if: always() && contains(fromJSON('["main", "dev", "stage"]'), github.ref_name) && needs.test.result == 'success' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.lambda == 'true'))
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -540,15 +572,15 @@ jobs:
           fi
 
   release:
-    needs: [unit, lambda, e2e, security, deploy, changes]
+    needs: [test, deploy, changes]
     runs-on: ubuntu-24.04
     # deploy is legitimately skipped (not failed) on a main push that touches
     # no lambda/ files — release must still run in that case, so this can't
     # rely on the default `if: success()` gating, which treats a skipped
-    # `needs` job the same as a failed one. the four test jobs' results are checked
+    # `needs` job the same as a failed one. The test job's result is checked
     # explicitly too: deploy.result == 'skipped' is ambiguous on its own
-    # between "no lambda changes" (fine, release should run) and "a test job
-    # failed so deploy's own condition never ran" (must not release).
+    # between "no lambda changes" (fine, release should run) and "the test
+    # job failed so deploy's own condition never ran" (must not release).
     #
     # The changes half is split by event_name the same way deploy's is, and
     # for the same reason: `changes` only runs on push, so on
@@ -558,7 +590,7 @@ jobs:
     # runner or checkout failure would cut a release. Testing
     # `== 'true'` alone would be fail-CLOSED but would also kill the
     # workflow_dispatch escape hatch. Branching on the event does both.
-    if: always() && github.ref == 'refs/heads/main' && needs.unit.result == 'success' && needs.lambda.result == 'success' && needs.e2e.result == 'success' && needs.security.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.releasable == 'true'))
+    if: always() && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.deploy.result != 'failure' && needs.deploy.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.changes.result == 'success' && needs.changes.outputs.releasable == 'true'))
     permissions:
       contents: write
       pull-requests: write
