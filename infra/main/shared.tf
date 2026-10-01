@@ -472,6 +472,23 @@ resource "vercel_firewall_config" "looper" {
       }
     }
   }
+
+  # Both were switched on in the dashboard on 2026-09-30 and adopted here (#306).
+  # ai_bots enforces /robots.txt's AI-crawler ban at the edge. bot_protection
+  # challenges non-browser clients (curl, uptime checks, unverified preview
+  # fetchers get a 429 with x-vercel-mitigated: challenge); Vercel-verified bots
+  # such as search crawlers pass. Declare both: an apply that writes
+  # managed_rulesets with only one of them could switch the other off.
+  managed_rulesets {
+    ai_bots {
+      action = "deny"
+      active = true
+    }
+    bot_protection {
+      action = "challenge"
+      active = true
+    }
+  }
 }
 
 locals {
