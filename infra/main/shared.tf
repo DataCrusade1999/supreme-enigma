@@ -432,53 +432,21 @@ locals {
 
 # --- Firewall ---
 
-# web/lib/rate-limit.ts caps /api/login at 5 attempts per 15 minutes, but its
-# counter is a Map in serverless instance memory — its own header comment notes
-# that an attacker spread across cold starts gets more than that in total. This
-# rule is the edge-side backstop for exactly that case: it lives on the Edge
-# Network, so it counts across instances.
-#
-# 10/600s is deliberately looser than the app-level limiter, not tighter. A
-# normal wrong-password run still trips the app's 429 first and gets its
-# Retry-After header; this only fires on volume the in-memory counter cannot
-# see. 600s is the maximum window the Hobby plan allows, and this consumes the
-# one free rate-limit rule (Hobby also caps total custom rules at 3).
+# No custom rules. The "Rate limit login" rule (#137) was removed in #306: it
+# matched /api/login, which #294 deleted when sign-in moved to Cognito, so it
+# never fired. Vercel's API also now refuses this provider's full-config PUT
+# whenever it contains a rate-limit rule ("Rate limiting is not available for
+# this plan" on Hobby), although the dashboard can still edit one. Adding a
+# rate-limit rule here would make every apply of this resource fail.
 resource "vercel_firewall_config" "looper" {
   project_id = vercel_project.looper.id
-
-  rules {
-    rule {
-      name        = "Rate limit login"
-      description = "Cap /api/login attempts per source across serverless instances"
-
-      condition_group = [{
-        conditions = [{
-          type  = "path"
-          op    = "pre"
-          value = "/api/login"
-        }]
-      }]
-
-      action = {
-        action = "rate_limit"
-        rate_limit = {
-          limit  = 10
-          window = 600
-          keys   = ["ip", "ja4"]
-          algo   = "fixed_window"
-          action = "deny"
-        }
-        action_duration = "10m"
-      }
-    }
-  }
 
   # Both were switched on in the dashboard on 2026-09-30 and adopted here (#306).
   # ai_bots enforces /robots.txt's AI-crawler ban at the edge. bot_protection
   # challenges non-browser clients (curl, uptime checks, unverified preview
   # fetchers get a 429 with x-vercel-mitigated: challenge); Vercel-verified bots
-  # such as search crawlers pass. Declare both: an apply that writes
-  # managed_rulesets with only one of them could switch the other off.
+  # such as search crawlers pass. Declare both: the provider PUTs the whole
+  # config, so a ruleset left out here is switched off by the next apply.
   managed_rulesets {
     ai_bots {
       action = "deny"

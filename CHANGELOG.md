@@ -11,6 +11,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 - Vercel's AI-bots (deny) and bot-protection (challenge) managed rulesets, switched on in the dashboard on 2026-09-30, are now declared in Terraform, so the next `terraform apply` no longer turns them off. Bot protection answers non-browser clients without Vercel bot verification (curl, uptime checks) with a 429 challenge (#306).
 
+### Removed
+
+- The Vercel firewall's `/api/login` rate-limit rule (#137). It stopped matching anything when #294 replaced that route with Cognito sign-in, and Vercel's API now refuses any Terraform update to the firewall that contains a rate-limit rule on the Hobby plan (#306).
+
 ## [1.6.0] - 2026-10-01
 
 ### Added
