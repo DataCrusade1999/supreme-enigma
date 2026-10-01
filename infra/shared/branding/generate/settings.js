@@ -1,4 +1,4 @@
-// Writes the site's values over infra/main/branding.json in place. That file
+// Writes the site's values over infra/shared/branding.json in place. That file
 // started as Cognito's full default settings (describe-managed-login-branding
 // with --return-merged-resources); set() throws on a key it doesn't already
 // have, so a typo can't add a setting Cognito would reject.

@@ -25,3 +25,26 @@ provider "registry.terraform.io/hashicorp/aws" {
     "zh:f93bc38dbc0ad53842303f30eec7a22c525c4d56209b54ec33a8d375cfc4e4fd",
   ]
 }
+
+provider "registry.terraform.io/vercel/vercel" {
+  version     = "5.18.0"
+  constraints = "~> 5.15"
+  hashes = [
+    "h1:2o8wk4MI0gLVopeoJYfFmLhFcf4X0HnWHuxEf51YGJ4=",
+    "h1:RzTt7EhF8DUQGy/Ugb4DSQmQCHYE+R/ZpWQxpWDXYcY=",
+    "zh:3999036361d02ea1ca1d13e87d814024f1bede2b6136bac1df0941fd756fd452",
+    "zh:65d66ae7595d6477c4a682a5ba94f1f07f8c39bd0d405d8b5cdcb9a0cf4d401b",
+    "zh:679f5ff2a04f7807fcaa8dced29a9a0aacb67f34adb83e0682a196108b9878bf",
+    "zh:6d7f8929075a16bb26169558a42f3d22ec9f81f5cd6f987b3bdfc303ba8e3db6",
+    "zh:6ed71e504eb7d237c537fac01e503b44b9f0bf6bae4f932a3b9e370b0206ac04",
+    "zh:928434ce5b47f59602db8409b210d360f317b30b824c2539cd1d92cd30f2bfc5",
+    "zh:a1e5bb6caddb8706d2a6f5495d3d27861eee09318e1a294e4c6b8a08f1b13022",
+    "zh:a80e5712e838109e8c6de8f8b90eb7798a5164293b9491ae2b603f0e1c686ed9",
+    "zh:b09854404a2a7d4c5c4f3312bc06d5518e3ed8dcef68218f63b1bef08519325f",
+    "zh:b564d4a3a5a466e8bd57757fe20a94f595ebffd196997a329079efa18ff56e7f",
+    "zh:c4687a9082edbcbb879bfd45b50e9f1699ec1dea4ec59ac0bb91d088e405183b",
+    "zh:e89aee5c69ecdab73139a9b627630250082b2db4c07acef1144fef873f063003",
+    "zh:f26e0763dbe6a6b2195c94b44696f2110f7f55433dc142839be16b9697fa5597",
+    "zh:fb8230cc3156c34b732a61acc32d566c6b54b9fe925a0df550c619d65acea1d2",
+  ]
+}

@@ -77,21 +77,28 @@ for what's protected.
 
 ## CI/CD
 
-`.github/workflows/deploy.yml`: `unit`, `lambda`, `e2e` and `security` jobs
-run in parallel on every push/PR → `changes` job (path-filters whether
-`lambda/` changed) → `deploy` job (build/push image, `update-function-code`)
+`.github/workflows/deploy.yml`: `changes` job on push (whether `lambda/`
+changed) → one `test` job (Trivy, lint, Vitest, pytest, Linux Playwright;
+skipped on a `dev` push that does not touch `lambda/`, and on docs-only PRs)
+→ `deploy` job (build/push image, `update-function-code`)
 → `release` job (main-only: auto-version from Conventional Commits, updates
-`CHANGELOG.md`, creates GitHub Release, opens changelog-sync PR to `dev`).
+`CHANGELOG.md`, creates GitHub Release, opens changelog-sync PR to `dev`). Windows and macOS
+Playwright run only on PRs into `main`; `promotion-guard.yml` checks every
+promotion PR. The layout is shaped by the free plan's 2,000 Actions
+minutes/month (#320).
 Vercel's own git integration deploys the app independently of GitHub
 Actions.
 
 ## Infra-as-code
 
-Two Terraform layers: `infra/bootstrap` (one-time, just the TF state S3
-bucket, never destroyed) and `infra/main` (everything else — S3, ECR,
-Lambda, IAM, Vercel project; `terraform destroy` here is the kill switch).
-Provider is pinned to the `personal` AWS CLI profile in `providers.tf`,
-not read from the shell.
+`infra/bootstrap` (one-time, just the TF state S3 bucket, never destroyed),
+then four stacks with one state each: `infra/shared` (ECR, IAM, the Vercel
+project and the other one-of-each resources, applied from `main` only) and
+`infra/envs/{dev,stage,main}` (each environment's bucket, Lambda, alarm and
+Vercel env vars, through `infra/modules/environment`). Destroying the env
+stacks and then `shared` is the kill switch. Credentials come from the
+environment (`AWS_PROFILE=personal` locally); no backend or provider block
+names a profile.
 
 ---
 

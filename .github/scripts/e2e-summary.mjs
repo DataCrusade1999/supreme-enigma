@@ -1,10 +1,10 @@
 // Renders one table for every OS the e2e matrix ran on.
 //
-// $GITHUB_STEP_SUMMARY is per job and a matrix leg *is* a job, so three legs
-// cannot write into one summary. Each leg uploads its Playwright JSON as
-// `playwright-results-<OS>` instead, and the `summary` job (which already
-// needs: e2e and runs if: always()) points this script at the download
-// directory.
+// $GITHUB_STEP_SUMMARY is per job, and the Linux run (in the `test` job) and
+// the Windows and macOS legs (`e2e-cross-os`) are separate jobs. Each uploads
+// its Playwright JSON as `playwright-results-<OS>`, and the `summary` job
+// points this script at the download directory when the cross-OS legs ran.
+// On every other run the `test` job points it at its own staging directory.
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fence, stripAnsi, blobLink, formatDuration, emit } from "./summary-lib.mjs";

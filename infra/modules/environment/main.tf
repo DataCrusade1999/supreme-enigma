@@ -1,14 +1,32 @@
-# Everything that exists once per branch: each environment's S3 bucket, Lambda function,
-# and the Vercel env vars that point the app at its own bucket/function. Resources shared
-# across all three branches (ECR, IAM, the Vercel project itself) live in shared.tf instead.
-#
-# main's Lambda function is the original resource, kept unrenamed to avoid a destructive
-# replacement — dev/stage are for_each twins (identical shape, different name/branch).
-# The three buckets are a single for_each keyed main/dev/stage.
+# Everything that exists once per branch: the branch's data bucket, Lambda function,
+# its invocation alarm, and the two Vercel env vars that point the app at them.
+# Shared resources (ECR, IAM, the Vercel project) live in infra/shared and are found
+# here by name, so this stack never reads shared's state.
 
-# --- S3 ---
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_role" "lambda_exec" {
+  name = "${var.project_name}-lambda-exec"
+}
+
+data "aws_ecr_repository" "looper" {
+  name = "${var.project_name}-lambda"
+}
+
+data "aws_sns_topic" "budget_alerts" {
+  name = "${var.project_name}-budget-alerts"
+}
+
+data "vercel_project" "looper" {
+  name = var.project_name
+}
 
 locals {
+  # Must stay in step with local.env_suffix in infra/shared/shared.tf, which builds
+  # the same names for the IAM policies and RESUME_BUCKET_NAME.
+  suffix               = var.env == "main" ? "" : "-${var.env}"
+  lambda_function_name = "${var.project_name}-processor${local.suffix}"
+
   # The three deployment origins that issue presigned-URL uploads. Wildcard origins were
   # not an authorization hole (the signature grants access, not CORS) but there is no
   # reason for any other site's JS to be able to read these responses.
@@ -30,20 +48,16 @@ locals {
   ]
 }
 
+# --- S3 ---
+
 # The buckets hold resume data and News Desk snapshots as well as audio, hence
 # "data". One for_each over all three branches; main has no suffix.
-locals {
-  data_bucket_suffix = { main = "", dev = "-dev", stage = "-stage" }
-}
-
 resource "aws_s3_bucket" "data" {
-  for_each = local.data_bucket_suffix
-  bucket   = "portfolio-data${each.value}-${data.aws_caller_identity.current.account_id}"
+  bucket = "portfolio-data${local.suffix}-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket_public_access_block" "data" {
-  for_each                = aws_s3_bucket.data
-  bucket                  = each.value.id
+  bucket                  = aws_s3_bucket.data.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -51,8 +65,7 @@ resource "aws_s3_bucket_public_access_block" "data" {
 }
 
 resource "aws_s3_bucket_cors_configuration" "data" {
-  for_each = aws_s3_bucket.data
-  bucket   = each.value.id
+  bucket = aws_s3_bucket.data.id
 
   cors_rule {
     allowed_methods = ["PUT", "GET"]
@@ -67,8 +80,7 @@ resource "aws_s3_bucket_cors_configuration" "data" {
 # and every audio object would linger as a noncurrent version. See the design spec §4.2.
 # Only main's bucket holds resume data, but all three get the same rules.
 resource "aws_s3_bucket_lifecycle_configuration" "data" {
-  for_each = aws_s3_bucket.data
-  bucket   = each.value.id
+  bucket = aws_s3_bucket.data.id
 
   rule {
     id     = "expire-audio-uploads"
@@ -108,7 +120,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
   # https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-conflicts.html
   #
   # Stray keys are prevented at the IAM layer instead: the Vercel user is scoped
-  # to these prefixes in shared.tf, so it cannot write elsewhere. Verified empty
+  # to these prefixes in infra/shared/shared.tf, so it cannot write elsewhere. Verified empty
   # on 2026-09-12 — zero objects outside these prefixes across all three buckets.
   # The remaining writer with bucket-wide access is the Lambda exec role; scoping
   # that too is the natural follow-up if a stray ever appears.
@@ -117,38 +129,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
 # --- Lambda ---
 # Each branch's CI run updates its own function's image code — see .github/workflows/deploy.yml.
 
-resource "aws_lambda_function" "looper" {
+resource "aws_lambda_function" "this" {
   function_name = local.lambda_function_name
-  role          = aws_iam_role.lambda_exec.arn
+  role          = data.aws_iam_role.lambda_exec.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.looper.repository_url}:${var.bootstrap_image_tag_main}"
+  image_uri     = "${data.aws_ecr_repository.looper.repository_url}:${var.bootstrap_image_tag}"
   timeout       = 60
   memory_size   = 1024
-
-  depends_on = [aws_iam_role_policy_attachment.lambda_basic, aws_iam_role_policy.lambda_s3]
-
-  lifecycle {
-    ignore_changes = [image_uri]
-  }
-}
-
-locals {
-  bootstrap_image_tag_env = {
-    dev   = var.bootstrap_image_tag_dev
-    stage = var.bootstrap_image_tag_stage
-  }
-}
-
-resource "aws_lambda_function" "looper_env" {
-  for_each      = toset(["dev", "stage"])
-  function_name = "${local.lambda_function_name}-${each.key}"
-  role          = aws_iam_role.lambda_exec.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.looper.repository_url}:${local.bootstrap_image_tag_env[each.key]}"
-  timeout       = 60
-  memory_size   = 1024
-
-  depends_on = [aws_iam_role_policy_attachment.lambda_basic, aws_iam_role_policy.lambda_s3]
 
   lifecycle {
     ignore_changes = [image_uri]
@@ -178,75 +165,39 @@ resource "aws_lambda_function" "looper_env" {
 #
 # Three alarms, inside CloudWatch's 10-alarm free tier — no cost.
 resource "aws_cloudwatch_metric_alarm" "lambda_invocation_rate" {
-  for_each = toset(local.all_lambda_function_names)
-
-  alarm_name          = "${each.key}-invocation-rate"
+  alarm_name          = "${local.lambda_function_name}-invocation-rate"
   namespace           = "AWS/Lambda"
   metric_name         = "Invocations"
-  dimensions          = { FunctionName = each.key }
+  dimensions          = { FunctionName = local.lambda_function_name }
   statistic           = "Sum"
   period              = 300
   evaluation_periods  = 1
   threshold           = 50
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [aws_sns_topic.budget_alerts.arn]
-  ok_actions          = [aws_sns_topic.budget_alerts.arn]
+  alarm_actions       = [data.aws_sns_topic.budget_alerts.arn]
+  ok_actions          = [data.aws_sns_topic.budget_alerts.arn]
 
-  alarm_description = "More than 50 invocations of ${each.key} in five minutes. Normal use is one invocation per track processed, so this means a runaway loop. See docs/runbooks/incident-tool-down.md#rollback."
+  alarm_description = "More than 50 invocations of ${local.lambda_function_name} in five minutes. Normal use is one invocation per track processed, so this means a runaway loop. See docs/runbooks/incident-tool-down.md#rollback."
 }
 
-# --- Vercel env vars: S3_BUCKET_NAME / LAMBDA_FUNCTION_NAME need a different value per
-#     environment, resolved via git_branch-scoped overrides: production target -> main's
-#     resources, bare preview target (the default for any branch) -> dev's resources,
-#     git_branch = "stage" override -> stage's resources. ---
+# --- Vercel env vars: production target -> main, bare preview -> dev,
+#     preview + git_branch "stage" -> stage. ---
 
-resource "vercel_project_environment_variable" "s3_bucket_production" {
-  project_id = vercel_project.looper.id
+resource "vercel_project_environment_variable" "s3_bucket" {
+  project_id = data.vercel_project.looper.id
   key        = "S3_BUCKET_NAME"
-  value      = aws_s3_bucket.data["main"].bucket
-  target     = ["production"]
+  value      = aws_s3_bucket.data.bucket
+  target     = var.vercel_target
+  git_branch = var.vercel_git_branch
   sensitive  = false
 }
 
-resource "vercel_project_environment_variable" "s3_bucket_preview" {
-  project_id = vercel_project.looper.id
-  key        = "S3_BUCKET_NAME"
-  value      = aws_s3_bucket.data["dev"].bucket
-  target     = ["preview"]
-  sensitive  = false
-}
-
-resource "vercel_project_environment_variable" "s3_bucket_stage" {
-  project_id = vercel_project.looper.id
-  key        = "S3_BUCKET_NAME"
-  value      = aws_s3_bucket.data["stage"].bucket
-  target     = ["preview"]
-  git_branch = "stage"
-  sensitive  = false
-}
-
-resource "vercel_project_environment_variable" "lambda_function_name_production" {
-  project_id = vercel_project.looper.id
+resource "vercel_project_environment_variable" "lambda_function_name" {
+  project_id = data.vercel_project.looper.id
   key        = "LAMBDA_FUNCTION_NAME"
-  value      = aws_lambda_function.looper.function_name
-  target     = ["production"]
-  sensitive  = false
-}
-
-resource "vercel_project_environment_variable" "lambda_function_name_preview" {
-  project_id = vercel_project.looper.id
-  key        = "LAMBDA_FUNCTION_NAME"
-  value      = aws_lambda_function.looper_env["dev"].function_name
-  target     = ["preview"]
-  sensitive  = false
-}
-
-resource "vercel_project_environment_variable" "lambda_function_name_stage" {
-  project_id = vercel_project.looper.id
-  key        = "LAMBDA_FUNCTION_NAME"
-  value      = aws_lambda_function.looper_env["stage"].function_name
-  target     = ["preview"]
-  git_branch = "stage"
+  value      = aws_lambda_function.this.function_name
+  target     = var.vercel_target
+  git_branch = var.vercel_git_branch
   sensitive  = false
 }

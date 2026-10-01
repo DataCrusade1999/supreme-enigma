@@ -15,7 +15,7 @@ locals {
 resource "aws_cognito_user_pool" "owner" {
   name           = "${var.project_name}-owner"
   user_pool_tier = "ESSENTIALS"
-  # No deletion_protection: infra/main must stay destroyable by the kill-switch
+  # No deletion_protection: infra/shared must stay destroyable by the kill-switch
   # `terraform destroy`, and a protected pool fails that destroy partway.
 
   username_attributes      = ["email"]

@@ -50,7 +50,7 @@ show a successful `/api/looper/upload-url` and nothing else.
   not match what was signed. `MAX_AUDIO_UPLOAD_BYTES` is 50 MB and is signed
   into the URL, so an oversized file is refused by S3 rather than by the app.
 - **CORS error in the browser console** — the bucket's CORS configuration.
-  It is Terraform-managed per bucket in `infra/main/environments.tf`; check a
+  It is Terraform-managed per bucket in `infra/modules/environment/main.tf`; check a
   recent apply did not drop it.
 
 ### `processing failed` (500 from `/api/looper/process`)
@@ -73,7 +73,7 @@ group that does not exist at all means the function has never been invoked;
 What to look for:
 
 - **`Task timed out after 60.00 seconds`** — the function's timeout. A long
-  or pathological input. Raising `timeout` in `environments.tf` is a
+  or pathological input. Raising `timeout` in `infra/modules/environment/main.tf` is a
   deliberate cost decision, not a quick fix.
 - **`Runtime exited: signal: killed` / OOM** — `memory_size` is 1024 MB.
   Same consideration.
@@ -172,7 +172,7 @@ put-function-concurrency 2  → InvalidParameterValueException: Specified
 
 So this is a throttle, not a cap: there is no intermediate setting to fall
 back to, which is also why `reserved_concurrent_executions` appears nowhere in
-`infra/main/*.tf`.
+`infra/`.
 
 It remains a stopgap rather than a setting. The attribute is unmanaged, so the
 provider's default of `-1` applies, and the next `terraform apply` plans

@@ -76,8 +76,8 @@ crossfade → ffmpeg transcode) runs as a containerized Python 3.12 Lambda,
 API routes only orchestrate. S3 objects expire after 1 day.
 
 **Infrastructure.** The whole stack (S3, ECR, Lambda, IAM, the Vercel
-project itself) is Terraform. `terraform destroy` in `infra/main/` is the
-kill switch: one command removes everything that can incur AWS cost.
+project itself) is Terraform. `terraform destroy` across `infra/envs/*` and then
+`infra/shared` is the kill switch: it removes everything that can incur AWS cost.
 
 Full rationale and trade-offs live in `docs/superpowers/specs/` — one design
 spec and implementation plan per phase of this project.
@@ -158,11 +158,14 @@ needs them.
 ## Infrastructure setup
 
 Requires Terraform ≥1.10, an AWS account, a Vercel account + API token, and
-a gitignored `infra/main/terraform.tfvars`. Copy
-`infra/main/terraform.tfvars.example` across and fill it in — all seven inputs
+a gitignored `terraform.tfvars` in each of `infra/shared` and
+`infra/envs/{dev,stage,main}`. Copy each directory's `terraform.tfvars.example`
+across and fill it in — `infra/shared` needs all seven inputs
 (`vercel_api_token`, `app_password`, `github_repo`, `alert_email`,
-`openrouter_api_key`, `google_client_id`, `google_client_secret`) are required, so `terraform plan` fails with `No value for
-required variable` until each is set. The Lambda container image is built and
+`openrouter_api_key`, `google_client_id`, `google_client_secret`), each env
+stack only `vercel_api_token`, and `terraform plan` fails with `No value for
+required variable` until each is set. Run `export AWS_PROFILE=personal` first;
+no backend block names a profile. The Lambda container image is built and
 pushed by GitHub Actions, never locally, so bootstrap order matters:
 
 1. **State bucket** (one-time, manual):
@@ -170,17 +173,18 @@ pushed by GitHub Actions, never locally, so bootstrap order matters:
    cd infra/bootstrap
    terraform init && terraform apply
    ```
-   The `state_bucket_name` output is hardcoded into `infra/main/backend.tf`.
+   The `state_bucket_name` output is hardcoded into every stack's `backend.tf`.
 
 2. **ECR repo only** — the Lambda resource can't be created before an image
    exists:
    ```bash
-   cd infra/main
+   cd infra/shared
    terraform init
    terraform apply -target=aws_ecr_repository.looper -var-file=terraform.tfvars
    ```
 
-3. **Lambda execution role + the two OIDC providers and their roles**:
+3. **The rest of `infra/shared`** — the Lambda execution role, the two OIDC
+   providers and their roles, and the Vercel project:
    ```bash
    terraform apply -var-file=terraform.tfvars
    ```
@@ -191,23 +195,26 @@ pushed by GitHub Actions, never locally, so bootstrap order matters:
 4. **Push to `main`/`dev`/`stage`** — CI tests, then builds and pushes each
    branch's Lambda image to ECR.
 
-5. **Apply the rest** — Lambda functions and the Vercel project, now that
-   the images exist:
+5. **Apply the environment stacks** — each env's Lambda function, bucket and
+   env vars, now that the images exist:
    ```bash
-   terraform apply -var-file=terraform.tfvars
+   for e in dev stage main; do
+     (cd ../envs/$e && terraform init && terraform apply -var-file=terraform.tfvars)
+   done
    ```
-   Vercel's git integration (created by this apply) deploys the app on every
+   Vercel's git integration (created in step 3) deploys the app on every
    push from then on, independently of GitHub Actions.
 
-Before a from-scratch recreate, update `bootstrap_image_tag_main`/`_dev`/
-`_stage` in `variables.tf` to tags CI has actually pushed — see the Gotchas
-section of `CLAUDE.md`.
+Before a from-scratch recreate, update `bootstrap_image_tag` in each
+`infra/envs/<env>/main.tf` to a tag that branch's CI has actually pushed — see
+`.claude/rules/infra.md`.
 
 ## Tearing everything down (kill switch)
 
 ```bash
-cd infra/main
-terraform destroy -var-file=terraform.tfvars
+for d in infra/envs/dev infra/envs/stage infra/envs/main infra/shared; do
+  (cd $d && terraform destroy -var-file=terraform.tfvars)
+done
 ```
 
 Removes the Vercel project, all three Lambdas, the ECR repo, the S3 audio

@@ -3,9 +3,8 @@ terraform {
 
   backend "s3" {
     bucket       = "bgm-looper-tf-state-223376380711"
-    key          = "main/terraform.tfstate"
+    key          = "envs/main/terraform.tfstate"
     region       = "us-east-1"
-    profile      = "personal"
     use_lockfile = true
   }
 
@@ -17,10 +16,6 @@ terraform {
     vercel = {
       source  = "vercel/vercel"
       version = "~> 5.15"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
     }
   }
 }
