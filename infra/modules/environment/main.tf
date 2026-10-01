@@ -123,11 +123,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
   # news-desk/*.json, which are the things this configuration exists to keep.
   # https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-conflicts.html
   #
-  # Stray keys are prevented at the IAM layer instead: the Vercel user is scoped
-  # to these prefixes in infra/shared/shared.tf, so it cannot write elsewhere. Verified empty
+  # Stray keys are prevented at the IAM layer instead: the app's Vercel role is
+  # scoped to these prefixes (aws_iam_role_policy.vercel below, and the resume
+  # policy in infra/shared/shared.tf), so it cannot write elsewhere. Verified empty
   # on 2026-09-12 — zero objects outside these prefixes across all three buckets.
-  # The remaining writer with bucket-wide access is the Lambda exec role; scoping
-  # that too is the natural follow-up if a stray ever appears.
+  # The remaining writer with bucket-wide access is this environment's Lambda exec
+  # role, limited to this bucket; scoping it to uploads/ and outputs/ is the
+  # natural follow-up if a stray ever appears.
 }
 
 # --- Lambda ---

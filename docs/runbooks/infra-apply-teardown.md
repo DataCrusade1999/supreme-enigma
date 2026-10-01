@@ -59,7 +59,7 @@ terraform apply -var-file=terraform.tfvars
 ```
 
 When a change touches both, apply `infra/shared` first: the env stacks look
-up the exec role, ECR repo, SNS topic and Vercel project by name.
+up the Vercel roles, ECR repo, SNS topic and Vercel project by name.
 
 Re-read the plan output in the confirmation prompt rather than typing `yes`
 from memory; the only destructive resources here are the S3 buckets and the
