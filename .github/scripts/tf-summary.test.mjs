@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { summarize, renderComment, stackName, MAX_COMMENT } from "./tf-summary.mjs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { summarize, renderComment, readStacks, MAX_COMMENT } from "./tf-summary.mjs";
 
 const rc = (address, actions) => ({ address, change: { actions } });
 const plan = (...changes) => ({ resource_changes: changes });
@@ -60,10 +63,31 @@ test("forget (a removed block) counts as a delete, so the guard and the ⚠ line
   assert.match(md, /⚠ destroys or replaces: `a\.f`/);
 });
 
-test("stackName undoes the workflow's / to - encoding for every segment", () => {
-  assert.equal(stackName("shared"), "shared");
-  assert.equal(stackName("envs-dev"), "envs/dev");
-  assert.equal(stackName("envs-dev-east"), "envs/dev/east");
+test("readStacks names each stack by its directory under plans/, hyphens and all", () => {
+  const dir = mkdtempSync(join(tmpdir(), "tf-summary-"));
+  for (const stack of ["shared", "envs/dev", "envs/dev-east"]) {
+    mkdirSync(join(dir, stack), { recursive: true });
+    writeFileSync(join(dir, stack, "plan.json"), JSON.stringify(plan(rc("a", ["update"]))));
+    writeFileSync(join(dir, stack, "plan.txt"), `text of ${stack}`);
+  }
+  const stacks = readStacks(dir);
+  assert.deepEqual(stacks.map((s) => s.name), ["envs/dev", "envs/dev-east", "shared"]);
+  assert.equal(stacks[1].text, "text of envs/dev-east");
+});
+
+test("comment: a long plan never pushes a later stack's heading or ⚠ line out", () => {
+  const md = renderComment(
+    [
+      { name: "envs/dev", plan: plan(rc("a", ["update"])), text: "z".repeat(200000) },
+      { name: "shared", plan: plan(rc("aws_iam_role.gone", ["delete"])), text: "gone" },
+    ],
+    "t",
+  );
+  assert.ok(md.length <= MAX_COMMENT, `length ${md.length}`);
+  assert.match(md, /### `shared` — 0 to add, 0 to change, 1 to destroy/);
+  assert.match(md, /⚠ destroys or replaces: `aws_iam_role\.gone`/);
+  assert.match(md, /truncated — the full plan is in the job summary/);
+  assert.equal((md.match(/<details>/g) ?? []).length, (md.match(/<\/details>/g) ?? []).length);
 });
 
 test("comment: truncation closes the open fence and </details>, and keeps the note outside them", () => {

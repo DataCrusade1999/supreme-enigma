@@ -4,7 +4,7 @@
 // since that JSON holds sensitive values in plain text) plus the redacted
 // `terraform show -no-color` text.
 import { readFileSync, readdirSync, appendFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { fence } from "./summary-lib.mjs";
 
@@ -42,29 +42,45 @@ function section({ name, plan, text }) {
   return lines.join("\n") + "\n";
 }
 
-// Truncates inside a stack's plan text, never across the markup, so the fence and
-// </details> that section() writes always close and the note renders as text.
+// Every stack's heading and ⚠ line are reserved first, so a long plan can only
+// shorten plan text, never push a later stack out. Text is cut inside a section,
+// so the fence and </details> that section() writes always close.
 export function renderComment(stacks, title) {
   const note = "\n_…truncated — the full plan is in the job summary._\n";
-  let md = `${MARKER}\n## ${title}\n\n`;
-  for (const [i, stack] of stacks.entries()) {
-    const sep = i ? "\n" : "";
-    const full = sep + section(stack);
-    if (md.length + full.length <= MAX_COMMENT) {
-      md += full;
-      continue;
+  const head = `${MARKER}\n## ${title}\n\n`;
+  const sep = (i) => (i ? "\n" : "");
+  const bare = (stack) => section({ ...stack, text: "" }).length;
+  // A cut text can need a longer fence than the empty one; 16 per stack covers that.
+  let room = MAX_COMMENT - head.length - note.length - stacks.reduce((n, s, i) => n + sep(i).length + bare(s) + 16, 0);
+  let truncated = false;
+  const parts = stacks.map((stack, i) => {
+    let text = stack.text;
+    if (text.length > room) {
+      text = text.slice(0, Math.max(room, 0));
+      truncated = true;
     }
-    // A shorter text can need a longer fence than the empty one; 16 covers that.
-    const room = MAX_COMMENT - md.length - (sep + section({ ...stack, text: "" })).length - note.length - 16;
-    if (room > 0) md += sep + section({ ...stack, text: stack.text.slice(0, room) });
-    return md + note;
-  }
-  return md;
+    const md = section({ ...stack, text });
+    room -= md.length - bare(stack);
+    return sep(i) + md;
+  });
+  return head + parts.join("") + (truncated ? note : "");
 }
 
-// The workflow names each stack's files with every `/` turned into `-`.
-export function stackName(base) {
-  return base.replaceAll("-", "/");
+// The workflow writes each stack's plan to <dir>/<stack>/plan.{json,txt}, so the
+// directory path is the stack name with no encoding to undo.
+export function readStacks(dir) {
+  return readdirSync(dir, { recursive: true })
+    .map((f) => f.split(sep).join("/"))
+    .filter((f) => f.endsWith("/plan.json"))
+    .map((f) => f.slice(0, -"/plan.json".length))
+    .sort()
+    .map((name) => {
+      return {
+        name,
+        plan: JSON.parse(readFileSync(join(dir, name, "plan.json"), "utf8")),
+        text: readFileSync(join(dir, name, "plan.txt"), "utf8"),
+      };
+    });
 }
 
 function main([cmd, ...args]) {
@@ -76,18 +92,7 @@ function main([cmd, ...args]) {
   }
   if (cmd === "comment") {
     const [dir, title] = args;
-    const stacks = readdirSync(dir)
-      .filter((f) => f.endsWith(".json"))
-      .sort()
-      .map((f) => {
-        const base = f.slice(0, -5);
-        return {
-          name: stackName(base),
-          plan: JSON.parse(readFileSync(join(dir, f), "utf8")),
-          text: readFileSync(join(dir, `${base}.txt`), "utf8"),
-        };
-      });
-    const md = renderComment(stacks, title);
+    const md = renderComment(readStacks(dir), title);
     process.stdout.write(md);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
     return;

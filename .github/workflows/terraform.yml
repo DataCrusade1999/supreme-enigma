@@ -85,15 +85,15 @@ jobs:
         run: |
           mkdir -p plans
           for stack in shared "envs/$BASE"; do
-            name=${stack//\//-}
+            mkdir -p "plans/$stack"
             echo "::group::$stack"
             terraform -chdir="infra/$stack" init -lockfile=readonly
             terraform -chdir="infra/$stack" validate
             # One retry: Vercel's framework-list endpoint times out now and then.
             terraform -chdir="infra/$stack" plan -lock=false -out=tfplan \
               || { sleep 15; terraform -chdir="infra/$stack" plan -lock=false -out=tfplan; }
-            terraform -chdir="infra/$stack" show -json tfplan > "plans/$name.json"
-            terraform -chdir="infra/$stack" show -no-color tfplan > "plans/$name.txt"
+            terraform -chdir="infra/$stack" show -json tfplan > "plans/$stack/plan.json"
+            terraform -chdir="infra/$stack" show -no-color tfplan > "plans/$stack/plan.txt"
             echo "::endgroup::"
           done
       # No Trivy step here: the `test` job in deploy.yml scans infra/*.tf on every PR.
@@ -240,7 +240,8 @@ jobs:
           mkdir -p "$TF_PLUGIN_CACHE_DIR" plans
           drift=0
           for pair in main:shared stage:envs/stage dev:envs/dev main:envs/main; do
-            branch=${pair%%:*}; stack=${pair#*:}; name=${stack//\//-}
+            branch=${pair%%:*}; stack=${pair#*:}
+            mkdir -p "plans/$stack"
             echo "::group::$stack ($branch)"
             terraform -chdir="$branch/infra/$stack" init -lockfile=readonly
             set +e
@@ -250,8 +251,8 @@ jobs:
             echo "::endgroup::"
             [ $rc -eq 1 ] && { echo "::error::plan failed for $stack"; exit 1; }
             [ $rc -eq 2 ] && drift=1
-            terraform -chdir="$branch/infra/$stack" show -json tfplan > "plans/$name.json"
-            terraform -chdir="$branch/infra/$stack" show -no-color tfplan > "plans/$name.txt"
+            terraform -chdir="$branch/infra/$stack" show -json tfplan > "plans/$stack/plan.json"
+            terraform -chdir="$branch/infra/$stack" show -no-color tfplan > "plans/$stack/plan.txt"
           done
           echo "drift=$drift" >> "$GITHUB_ENV"
       - name: File or close the drift issue
