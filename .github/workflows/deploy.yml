@@ -344,9 +344,19 @@ jobs:
     # runs - CHROMATIC_PROJECT_TOKEN would be empty and the job would fail red
     # on every bump. A missing token is an error, not a "change", so
     # exitZeroOnChanges does not absorb it.
+    #
+    # On a push to dev it also waits for `changes` and runs only when web/ or
+    # deploy.yml changed: a docs- or lambda-only push cannot change a story,
+    # and the build would still bill a minute and spend snapshot budget.
+    # Chromatic finds the baseline for the next build by walking git history,
+    # so a skipped commit leaves no gap. PRs are not gated: `changes` does not
+    # run on them, and this job already finishes inside the one minute a gate
+    # job would bill. `!cancelled()` so the skipped `changes` on a PR does not
+    # skip this job too.
+    needs: changes
     if: >-
-      github.actor != 'dependabot[bot]' && (
-        (github.event_name == 'push' && github.ref_name == 'dev') ||
+      !cancelled() && github.actor != 'dependabot[bot]' && (
+        (github.event_name == 'push' && github.ref_name == 'dev' && needs.changes.outputs.web == 'true') ||
         (github.event_name == 'pull_request' && github.base_ref == 'dev')
       )
     steps:
@@ -428,6 +438,7 @@ jobs:
     if: github.event_name == 'push'
     outputs:
       lambda: ${{ steps.check.outputs.lambda }}
+      web: ${{ steps.check.outputs.web }}
       releasable: ${{ steps.check.outputs.releasable }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -439,6 +450,7 @@ jobs:
         run: |
           if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
             echo "lambda=true" >> "$GITHUB_OUTPUT"
+            echo "web=true" >> "$GITHUB_OUTPUT"
             echo "releasable=true" >> "$GITHUB_OUTPUT"
             echo "No previous commit to diff against (new branch or rewritten history) — building to be safe."
             exit 0
@@ -448,6 +460,14 @@ jobs:
             echo "No changes under lambda/ or deploy.yml — skipping the Lambda image build."
           else
             echo "lambda=true" >> "$GITHUB_OUTPUT"
+          fi
+          # Read by `chromatic`: stories live under web/, and deploy.yml
+          # configures the job itself.
+          if git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- web/ .github/workflows/deploy.yml; then
+            echo "web=false" >> "$GITHUB_OUTPUT"
+            echo "No changes under web/ or deploy.yml — skipping Chromatic."
+          else
+            echo "web=true" >> "$GITHUB_OUTPUT"
           fi
           # A push that touches nothing but CHANGELOG.md must not cut a
           # version. Without this, main's changelog cannot be corrected by
