@@ -5,6 +5,13 @@ version: 2
 # `commit-message.prefix` is not cosmetic: deploy.yml's release job derives
 # the version bump from Conventional Commit prefixes, so Dependabot's default
 # "Bump X from A to B" subject would not parse.
+#
+# Each ecosystem groups its minor and patch bumps into one PR. Separate PRs
+# conflict on the shared lock file, so merging one makes Dependabot rebase the
+# rest and every rebase is another CI run. Majors stay ungrouped so a breaking
+# one cannot hold up the batch. Terraform still opens one PR per directory:
+# groups do not span `directories` (`group-by: dependency-name` would, but
+# only as one PR per dependency).
 updates:
   - package-ecosystem: npm
     directory: /web
@@ -14,6 +21,10 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
     ignore:
       # typescript-eslint (via eslint-config-next) declares
       # `typescript: >=4.8.4 <6.1.0`; on TS 7 it throws at config-load time and
@@ -30,6 +41,10 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      pip:
+        patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: github-actions
     directory: /
@@ -38,6 +53,10 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
     ignore:
       # amazon-ecr-login v2.1.7 bundles @aws-sdk/core 3.977.8, and from 3.977.5
       # the JSON protocol hands the transport a Uint8Array subclass whose
@@ -57,3 +76,7 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      terraform:
+        patterns: ["*"]
+        update-types: [minor, patch]
