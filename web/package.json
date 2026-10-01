@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-lambda": "^3.1096.0",
-    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/client-s3": "^3.1141.0",
     "@aws-sdk/s3-request-presigner": "^3.600.0",
     "@keystatic/core": "^0.6.4",
     "@keystatic/next": "^5.0.5",
