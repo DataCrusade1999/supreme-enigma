@@ -8,9 +8,18 @@ data "aws_caller_identity" "current" {}
 
 # The Vercel role this environment's deployments assume. Vercel's OIDC subject has
 # only production and preview, so dev and stage share the preview role — see the
-# per-env IAM spec §6.
+# per-env IAM spec §6. Keyed on var.env, which is validated, rather than on
+# vercel_target, so a mistyped target cannot attach this policy to the wrong role.
+locals {
+  vercel_role_name = {
+    main  = "${var.project_name}-vercel"
+    dev   = "${var.project_name}-vercel-preview"
+    stage = "${var.project_name}-vercel-preview"
+  }
+}
+
 data "aws_iam_role" "vercel" {
-  name = contains(var.vercel_target, "production") ? "${var.project_name}-vercel" : "${var.project_name}-vercel-preview"
+  name = local.vercel_role_name[var.env]
 }
 
 data "aws_ecr_repository" "looper" {
