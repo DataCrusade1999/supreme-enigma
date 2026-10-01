@@ -198,8 +198,7 @@ data "aws_iam_policy_document" "tf_apply_nonprod" {
   }
   statement {
     sid         = "Buckets"
-    actions     = ["s3:*"]
-    not_actions = null
+    actions   = ["s3:*"]
     resources = flatten([for e in local.nonprod_envs : [
       "arn:aws:s3:::${local.data_bucket_names[e]}",
       "arn:aws:s3:::${local.data_bucket_names[e]}/*",
@@ -311,7 +310,7 @@ resource "aws_iam_role_policy" "tf_apply_prod" {
   policy = data.aws_iam_policy_document.tf_apply_prod.json
 }
 ```
-Delete the `not_actions = null` line in the `Buckets` statement (it is a placeholder from the template and not valid with `actions`). The `NoStateBucketChanges` deny protects the state bucket, which `infra/bootstrap` owns, from the `s3:*` grant; the spec's §6.3 does not list it, and this plan adds it — record it as a ruling.
+The `NoStateBucketChanges` deny protects the state bucket, which `infra/bootstrap` owns, from the `s3:*` grant; the spec's §6.3 does not list it, and this plan adds it — record it as a ruling.
 
 - [ ] **Step 2: Validate and lint**
 
@@ -642,7 +641,9 @@ env:
 
 jobs:
   plan:
-    if: github.event_name == 'pull_request'
+    # Dependabot's runs get neither these secrets nor an OIDC token. Its Terraform
+    # bumps land through an owner-opened batch PR (merging-a-pr skill), which is planned.
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -770,9 +771,10 @@ jobs:
             echo "::group::$stack"
             terraform -chdir="infra/$stack" init -lockfile=readonly
             set +e
-            terraform -chdir="infra/$stack" plan -detailed-exitcode -out=tfplan \
-              || { rc=$?; [ $rc -eq 2 ] || { sleep 15; terraform -chdir="infra/$stack" plan -detailed-exitcode -out=tfplan; }; }
+            terraform -chdir="infra/$stack" plan -detailed-exitcode -out=tfplan
             rc=$?
+            # One retry: Vercel's framework-list endpoint times out now and then.
+            if [ $rc -eq 1 ]; then sleep 15; terraform -chdir="infra/$stack" plan -detailed-exitcode -out=tfplan; rc=$?; fi
             set -e
             echo "::endgroup::"
             if [ $rc -eq 0 ]; then echo "### \`$stack\` — No changes" >> "$GITHUB_STEP_SUMMARY"; continue; fi
@@ -912,6 +914,8 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 ### Task 7: PR, first CI run, rollout proofs
 
 **Files:** possibly any from Tasks 1-6 if a run fails.
+
+- [ ] **Step 0: Dependabot.** The `plan` job skips Dependabot's own PRs (no secrets, no OIDC token there); the batch PR the `merging-a-pr` skill prescribes is opened by the owner and gets planned. Task 6's `merging-a-pr` edit says so.
 
 - [ ] **Step 1: Open the PR** into `dev` with `Closes #339`. Its body lists Task 3's apply and simulator results.
 
