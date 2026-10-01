@@ -7,8 +7,8 @@ __pycache__/
 *.tfstate
 *.tfstate.*
 .terraform/
-.terraform.lock.hcl
 *.tfvars
+.claude/settings.local.json
 .claude/worktrees/
 .worktrees/
 
@@ -20,3 +20,9 @@ webhook-creds-*.csv
 
 # graphify knowledge-graph output — regenerated from the tree, not source
 graphify-out/
+
+# Trivy report + rendered summary, written to the repo root by the `security`
+# job and by security-summary.mjs. web/.gitignore already covers the Playwright
+# and Vitest reports the same way.
+trivy-results.json
+trivy-summary.md

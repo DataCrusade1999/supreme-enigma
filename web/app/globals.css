@@ -72,6 +72,12 @@ p {
   text-wrap: pretty;
 }
 
+/* Tailwind v4's preflight gives buttons the default arrow cursor. */
+button:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
 ::selection {
   background-color: var(--color-accent);
   color: var(--color-bg);

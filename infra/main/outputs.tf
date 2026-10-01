@@ -1,5 +1,5 @@
-output "audio_bucket_name" {
-  value = aws_s3_bucket.audio.bucket
+output "data_bucket_name" {
+  value = aws_s3_bucket.data["main"].bucket
 }
 
 output "ecr_repository_url" {

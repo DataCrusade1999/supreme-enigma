@@ -1,61 +1,54 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import LoginPage from "./page";
 
-const pushMock = vi.fn();
 let mockSearch = "";
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(mockSearch),
 }));
 
 describe("LoginPage", () => {
   beforeEach(() => {
-    pushMock.mockClear();
     mockSearch = "";
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
   });
 
-  async function submit() {
-    fireEvent.change(screen.getByPlaceholderText("Password"), {
-      target: { value: "test123" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
-  }
-
-  it("redirects to the next param on success when it's a relative path", async () => {
-    mockSearch = "next=%2Fkeystatic";
+  it("links to the sign-in route, carrying next", () => {
+    mockSearch = "next=%2Fkeystatic%3Fpath%3Dposts";
     render(<LoginPage />);
-    await submit();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/keystatic"));
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/api/auth/login?next=%2Fkeystatic%3Fpath%3Dposts",
+    );
   });
 
-  it("falls back to the tools hub when next is missing", async () => {
+  it("sends a visit with no next to the hub", () => {
     render(<LoginPage />);
-    await submit();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools"));
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/api/auth/login?next=%2Ftools",
+    );
   });
 
-  it("falls back to the tools hub when next is not a relative path (open-redirect guard)", async () => {
+  it("does not carry an off-site next into the link", () => {
     mockSearch = "next=https%3A%2F%2Fevil.example";
     render(<LoginPage />);
-    await submit();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools"));
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/api/auth/login?next=%2Ftools",
+    );
   });
 
-  it("falls back to the tools hub when next is a protocol-relative URL (open-redirect guard)", async () => {
-    mockSearch = "next=%2F%2Fevil.example";
+  it.each([
+    ["state", "That sign-in expired or came from another tab. Try again."],
+    ["denied", "Sign-in was cancelled."],
+    ["not-allowed", "That account can't open these tools."],
+    ["failed", "Sign-in failed. Try again."],
+  ])("explains error=%s", (code, message) => {
+    mockSearch = `error=${code}`;
     render(<LoginPage />);
-    await submit();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools"));
-  });
-
-  it("falls back to the tools hub when next hides a control character that would resolve off-origin (open-redirect guard)", async () => {
-    mockSearch = "next=%2F%09%2Fevil.example";
-    render(<LoginPage />);
-    await submit();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/tools"));
+    expect(screen.getByRole("alert")).toHaveTextContent(message);
   });
 
   it("opens the command bar on Ctrl+K", () => {
@@ -72,21 +65,20 @@ describe("LoginPage", () => {
     expect(screen.getByText("BGM Looper")).toBeInTheDocument();
   });
 
-  // The strip reads the pathname, the redirect keeps the whole thing — a
-  // query or hash after the prefix must not cost the visitor the strip.
+  // The strip reads the pathname, the link keeps the whole thing — a query or
+  // hash after the prefix must not cost the visitor the strip.
   it.each([
     ["a query", "next=%2Fkeystatic%3Fpath%3Dposts", "/keystatic?path=posts", "Content editor"],
     ["a hash", "next=%2Ftools%2Fbgm-looper%23top", "/tools/bgm-looper#top", "BGM Looper"],
-  ])(
-    "names the tool and keeps %s on the redirect",
-    async (_label, search, target, name) => {
-      mockSearch = search;
-      render(<LoginPage />);
-      expect(screen.getByText(name)).toBeInTheDocument();
-      await submit();
-      await waitFor(() => expect(pushMock).toHaveBeenCalledWith(target));
-    },
-  );
+  ])("names the tool and keeps %s in the sign-in link", (_label, search, target, name) => {
+    mockSearch = search;
+    render(<LoginPage />);
+    expect(screen.getByText(name)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      `/api/auth/login?next=${encodeURIComponent(target)}`,
+    );
+  });
 
   it.each([
     ["next is missing", ""],
@@ -96,19 +88,5 @@ describe("LoginPage", () => {
     mockSearch = search;
     render(<LoginPage />);
     expect(screen.queryByText("Continuing to")).not.toBeInTheDocument();
-  });
-
-  it("reports a rejected password on an alert and marks the field invalid", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
-    render(<LoginPage />);
-    await submit();
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("Invalid password"),
-    );
-    expect(screen.getByLabelText("Password")).toHaveAttribute(
-      "aria-invalid",
-      "true",
-    );
-    expect(pushMock).not.toHaveBeenCalled();
   });
 });

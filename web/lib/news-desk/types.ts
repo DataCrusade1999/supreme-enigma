@@ -1,0 +1,96 @@
+import { z } from "zod";
+import { STORED_TAGS } from "./tags";
+
+export * from "./tags";
+
+export const REGIONS = ["local", "international"] as const;
+export type Region = (typeof REGIONS)[number];
+
+export type SourceDef = {
+  name: string;
+  url: string;
+  // "google" items come through Google News: their title carries the publisher
+  // as a " - Publisher" suffix and their link is a news.google.com redirect.
+  kind: "direct" | "google";
+  // Only some feeds have a description worth showing. RBI's is an HTML table and
+  // SEBI's repeats the title. See the design spec §5.2.
+  summary: boolean;
+  // Which News Desk tab the feed's headlines go under: Indian outlets and
+  // government sources are local, foreign outlets international.
+  region: Region;
+};
+
+export const headlineSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  url: z.string(),
+  source: z.string(),
+  summary: z.string().optional(),
+  publishedAt: z.string(),
+  direct: z.boolean(),
+  // Defaulted rather than required so a Phase 1 snapshot, which has no tags,
+  // still reads; the next refresh tags its items.
+  tag: z.enum(STORED_TAGS).default("Untagged"),
+  // Optional so a snapshot saved before regions still reads; readers go through
+  // regionOf, and the next refresh fills it on any item a feed still carries.
+  region: z.enum(REGIONS).optional(),
+});
+export type Headline = z.infer<typeof headlineSchema>;
+
+// The international outlets as their items name them: the direct FT feed, and
+// Google News publishers, which come as "Reuters" or "reuters.com",
+// "Bloomberg" or "Bloomberg.com".
+const INTERNATIONAL_PUBLISHERS = new Set(["ft", "financial times", "reuters", "bloomberg", "the economist", "economist"]);
+
+/** A headline's region. One saved before regions has none, and most of a
+ * snapshot's items age out of the feeds before a refresh can fill it, so it is
+ * inferred from the publisher. */
+export function regionOf(h: Pick<Headline, "region" | "source">): Region {
+  if (h.region) return h.region;
+  const publisher = h.source.trim().toLowerCase().replace(/^www\./, "").replace(/\.com$/, "");
+  return INTERNATIONAL_PUBLISHERS.has(publisher) ? "international" : "local";
+}
+
+/** A headline as parsed from a feed, before it has an id or a tag. */
+export type RawHeadline = Omit<Headline, "id" | "tag">;
+
+export const sourceErrorSchema = z.object({ source: z.string(), message: z.string() });
+export type SourceError = z.infer<typeof sourceErrorSchema>;
+
+export const indicatorDefSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  dataset: z.string(),
+  filters: z.record(z.string(), z.string()),
+  valueField: z.string(),
+  unit: z.string(),
+  // Row fields that must equal these values. Needed when the filters cannot
+  // narrow MoSPI to one series: a base-2024 CPI division also returns every
+  // group and class beneath it. See spec §6.3.
+  match: z.record(z.string(), z.string()).optional(),
+});
+export type IndicatorDef = z.infer<typeof indicatorDefSchema>;
+
+export const indicatorValueSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  unit: z.string(),
+  period: z.string().nullable(),
+  latest: z.number().nullable(),
+  prevPeriod: z.string().nullable(),
+  prev: z.number().nullable(),
+  // Unchanged by a failed refresh, so the table can say how stale a row is.
+  lastGoodAt: z.string().nullable(),
+  error: z.string().optional(),
+});
+export type IndicatorValue = z.infer<typeof indicatorValueSchema>;
+
+export const snapshotSchema = z.object({
+  version: z.literal(1),
+  refreshedAt: z.string(),
+  headlines: z.array(headlineSchema),
+  // Defaulted so a Phase 2 snapshot still reads; the next refresh fills it.
+  indicators: z.array(indicatorValueSchema).default([]),
+  sourceErrors: z.array(sourceErrorSchema),
+});
+export type Snapshot = z.infer<typeof snapshotSchema>;

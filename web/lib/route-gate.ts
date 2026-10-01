@@ -33,6 +33,20 @@ export const TOOLS: Tool[] = [
       "Review an archived newsletter issue and send it to subscribers through Buttondown.",
   },
   {
+    href: "/tools/money-planner",
+    name: "Money Planner",
+    kind: "Money",
+    blurb:
+      "Work out the date a purchase becomes affordable, from a balance, a salary and expenses on their own cadences.",
+  },
+  {
+    href: "/tools/news-desk",
+    name: "News Desk",
+    kind: "News",
+    blurb:
+      "Headlines on the Indian economy, reforms and legislation from 13 free sources, refreshed when you ask.",
+  },
+  {
     href: "/keystatic",
     name: "Content editor",
     kind: "Site",
@@ -50,10 +64,11 @@ const GATED_PREFIXES = [
   "/api/looper",
   "/api/resume",
   "/api/newsletter",
+  "/api/news-desk",
   "/keystatic",
   "/api/keystatic",
 ];
-const ALWAYS_ALLOWED_PATHS = ["/login", "/api/login"];
+const ALWAYS_ALLOWED_PATHS = ["/login"];
 
 // Derived from TOOLS so the strip can never name a tool the hub doesn't list,
 // or go quiet on one it does. Key order follows TOOLS, which matters to the

@@ -16,7 +16,8 @@ describe("isGatedPath", () => {
     ["/tools/", true],
     ["/tools/something-new", true],
     ["/login", false],
-    ["/api/login", false],
+    ["/api/auth/login", false],
+    ["/api/auth/callback", false],
     // The old login path moved to /login and is no longer carved out, so it
     // now falls under the /tools/bgm-looper prefix like any other subpath.
     ["/tools/bgm-looper/login", true],
@@ -27,6 +28,8 @@ describe("isGatedPath", () => {
     ["/api/keystatic/github/oauth/callback", true],
     ["/api/newsletter", true],
     ["/api/newsletter/send", true],
+    ["/api/news-desk/refresh", true],
+    ["/tools/news-desk", true],
     // Gated by the /tools prefix rather than an entry of its own — this case
     // is here to pin that, so moving the admin out of /tools fails loudly.
     ["/tools/newsletter-admin", true],
@@ -58,6 +61,7 @@ describe("toolNameFor", () => {
     ["/tools/something-new", null],
     ["/api/looper/process", null],
     ["/tools/newsletter-admin", "Newsletter admin"],
+    ["/tools/news-desk", "News Desk"],
   ])("toolNameFor(%s) === %s", (pathname, expected) => {
     expect(toolNameFor(pathname)).toBe(expected);
   });
@@ -93,6 +97,8 @@ describe("TOOLS", () => {
       "/tools/bgm-looper",
       "/tools/resume-admin",
       "/tools/newsletter-admin",
+      "/tools/money-planner",
+      "/tools/news-desk",
       "/keystatic",
     ]);
   });

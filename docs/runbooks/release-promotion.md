@@ -19,9 +19,9 @@ Not for merging a feature branch into `dev` — that is the review sequence in
 
 | Branch | URL | Lambda | Bucket |
 |---|---|---|---|
-| `main` | https://bgm-looper.vercel.app | `bgm-looper-processor` | `bgm-looper-audio-223376380711` |
-| `stage` | https://bgm-looper-git-stage-ashutosh-pandeys-projects-77cb3a00.vercel.app | `bgm-looper-processor-stage` | `bgm-looper-audio-stage-223376380711` |
-| `dev` | https://bgm-looper-git-dev-ashutosh-pandeys-projects-77cb3a00.vercel.app | `bgm-looper-processor-dev` | `bgm-looper-audio-dev-223376380711` |
+| `main` | https://ashutosh-pandey.com | `bgm-looper-processor` | `portfolio-data-223376380711` |
+| `stage` | https://stage.ashutosh-pandey.com | `bgm-looper-processor-stage` | `portfolio-data-stage-223376380711` |
+| `dev` | https://dev.ashutosh-pandey.com | `bgm-looper-processor-dev` | `portfolio-data-dev-223376380711` |
 
 ## Procedure
 
@@ -114,8 +114,21 @@ job is the recovery path.
 `dev`'s history does not contain the release commit, and `promotion-guard`
 fails every PR into `stage` and `main` — correctly, because merging one would
 duplicate the version heading in `CHANGELOG.md` (#168). Squashing it breaks the
-same way, which is what happened to v1.5.1. It does get CI — review it like any
-other PR.
+same way, which is what happened to v1.5.1.
+
+It gets CI, but the run does not start on its own. Because the bot opens the
+PR, GitHub finishes the `pull_request` run as `completed/action_required`
+without running a job, so only Vercel reports and `gh pr checks` looks green
+while the test jobs and the readiness review are absent. Approve the run, then review
+it like any other PR:
+
+```bash
+RUN=$(gh run list --branch "chore/changelog-sync-vX.Y.Z" --limit 1 --json databaseId --jq '.[0].databaseId')
+gh api -X POST "repos/DataCrusade1999/supreme-enigma/actions/runs/$RUN/approve"
+```
+
+Absent test jobs here mean gated, not skipped. Never merge on a green Vercel
+check alone (#207).
 
 Entries that landed on `dev` after the promotion are handled by the sync step
 itself: they stay under `## [Unreleased]` and nothing needs moving by hand. If

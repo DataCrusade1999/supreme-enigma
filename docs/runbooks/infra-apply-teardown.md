@@ -24,7 +24,7 @@ Per-resource detail and the reasoning behind each quirk is in
 ## Plan before every merge
 
 **CI validates nothing under `infra/`** — `deploy.yml` has no `validate`, no
-`fmt -check`, no `plan`. A green `test` job says nothing about whether a
+`fmt -check`, no `plan`. Green test jobs say nothing about whether a
 Terraform change applies. For any PR touching `infra/`, plan against real
 state before merging:
 
@@ -135,14 +135,14 @@ it deletes the published resume PDF and its archive. Save what you want
 first:
 
 ```bash
-aws s3 cp s3://bgm-looper-audio-223376380711/resume/ ./resume-backup/ \
+aws s3 cp s3://portfolio-data-223376380711/resume/ ./resume-backup/ \
   --recursive --profile personal --region us-east-1
 
-aws s3 rm s3://bgm-looper-audio-223376380711 --recursive \
+aws s3 rm s3://portfolio-data-223376380711 --recursive \
   --profile personal --region us-east-1
-aws s3 rm s3://bgm-looper-audio-dev-223376380711 --recursive \
+aws s3 rm s3://portfolio-data-dev-223376380711 --recursive \
   --profile personal --region us-east-1
-aws s3 rm s3://bgm-looper-audio-stage-223376380711 --recursive \
+aws s3 rm s3://portfolio-data-stage-223376380711 --recursive \
   --profile personal --region us-east-1
 ```
 

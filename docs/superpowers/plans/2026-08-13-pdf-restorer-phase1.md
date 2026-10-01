@@ -4,22 +4,54 @@
 
 **Goal:** Build and test, entirely locally, a Python pipeline and CLI that turns a scanned/photographed-book PDF into a searchable, high-quality PDF — never modifying the original file.
 
-**Architecture:** A custom OpenCV preprocessing stage (background/perspective crop, deskew, best-effort dewarp, denoise) corrects each rasterized page image; corrected pages are reassembled losslessly into an intermediate PDF; `ocrmypdf` (wrapping Tesseract) adds the invisible OCR text layer and applies safe optimization. `pipeline.py` orchestrates these as pure local-file-path functions with zero AWS dependencies, so a future Lambda `handler.py` can wrap it without changes.
+**Architecture:** A custom OpenCV preprocessing stage (background/perspective crop, deskew, best-effort dewarp, denoise) corrects each rasterized page image; each corrected page is written to a temp PNG and the PNGs are embedded losslessly into an intermediate PDF; `ocrmypdf` (wrapping Tesseract and Ghostscript) adds the invisible OCR text layer and applies safe optimization. `pipeline.py` orchestrates these as pure local-file-path functions with zero AWS dependencies, so a future Lambda `handler.py` can wrap it without changes.
 
-**Tech Stack:** Python 3.12, PyMuPDF (`fitz`), OpenCV (`opencv-python-headless`), NumPy, `img2pdf`, `ocrmypdf` (Tesseract + qpdf), Pillow, pytest.
+**Tech Stack:** Python 3.12, PyMuPDF (`pymupdf`), OpenCV (`opencv-python-headless`), NumPy, `img2pdf`, `ocrmypdf` (Tesseract + Ghostscript), Pillow, pytest.
 
 **Spec:** `docs/superpowers/specs/2026-08-13-pdf-restorer-design.md`
 
 ## Global Constraints
 
-- Target Python 3.12 (matches `lambda/`'s runtime).
+- Target Python 3.12 (matches `lambda/`'s runtime). The pins below also install on the local 3.13.
 - Core processing modules (`rasterize.py`, `preprocess.py`, `assemble.py`, `ocr.py`, `pipeline.py`) must never import `boto3` or any AWS SDK — they operate only on local file paths / in-memory arrays (spec §3).
-- The input PDF is never opened for writing; `pipeline.restore_pdf` writes only to a temp path and moves it into place on success (spec §4.5).
-- `ocrmypdf.ocr()` must be called with `optimize=1`, never the lossier `optimize=3` (spec §4.4).
+- The input PDF is never opened for writing; `pipeline.restore_pdf` writes only to a temp path, moves it into place on success, and refuses an output path that resolves to the input (spec §4.5).
+- Only one page image is held in memory at a time: `rasterize_pdf` yields pages, and the pipeline writes each corrected page to a temp PNG before taking the next. A 400-page book at 300 dpi is ~10 GB as raw arrays.
+- `ocrmypdf.ocr()` is called with `optimize=1`, never the lossier `optimize=3`, and **without** `force_ocr` or `deskew` — both make ocrmypdf re-rasterize the page and replace the lossless image from `assemble.py` (spec §4.4).
 - Dewarping defaults to **off** everywhere (`dewarp_enabled=False` / `--dewarp` flag) — best-effort, opt-in only (spec §4.2).
 - `pytest.ini` sets `pythonpath = src`, matching `lambda/pytest.ini`'s convention.
 - Dependency versions pinned as ranges (`>=X,<Y`), matching `lambda/requirements.txt`'s style.
-- All new files live under a new top-level `pdf-restorer/` directory, sibling to `lambda/` and `app/`.
+- All new files live under a new top-level `pdf-restorer/` directory, sibling to `lambda/` and `web/`.
+- All commands below run from `pdf-restorer/` with its `.venv` activated.
+- CI does not run these tests: `deploy.yml`'s jobs cover `web/` and `lambda/` only. Trivy will still scan `pdf-restorer/requirements.txt`. Vercel's `ignore_command` skips deployments for commits touching only `pdf-restorer/`, which is correct.
+
+---
+
+### Task 0: Issue, branch, system dependencies
+
+- [ ] **Step 1: File the issue**
+
+Per `CLAUDE.md`, the issue comes before the work. Use the Feature template (`.github/ISSUE_TEMPLATE/feature_request.yml`), link the spec and this plan, and add it to the roadmap board. None of the existing `area:` labels covers this project; ask whether to create `area: pdf-restorer` rather than picking one that doesn't fit. Note the issue number `N` for Task 12.
+
+- [ ] **Step 2: Branch off `dev`**
+
+```bash
+git switch dev && git pull
+git switch -c feat/pdf-restorer-phase1
+```
+
+- [ ] **Step 3: Install Tesseract and Ghostscript**
+
+`ocrmypdf` hard-requires both on PATH: Tesseract, and Ghostscript ≥ 9.54 (binary `gswin64c` on Windows, `gs` elsewhere). It does not need a `qpdf` binary — `pikepdf` bundles the library.
+
+- Windows: `choco install tesseract ghostscript` (admin shell) or `scoop install tesseract ghostscript`
+- macOS: `brew install tesseract ghostscript`
+- Debian/Ubuntu: `sudo apt install tesseract-ocr ghostscript`
+
+```bash
+tesseract --version
+gswin64c --version   # `gs --version` on macOS/Linux
+```
+Expected: both print a version. Tests marked `ocr` are skipped when either is missing, so without this step Tasks 9–10 pass with no real coverage. Do not start Task 9 until both commands work.
 
 ---
 
@@ -32,7 +64,7 @@
 - Create: `pdf-restorer/src/pdfrestore/__init__.py`
 
 **Interfaces:**
-- Produces: an installable `pdfrestore` package skeleton and documented system dependencies. No functions yet.
+- Produces: an installable `pdfrestore` package skeleton, the `ocr` pytest marker, and documented system dependencies. No functions yet.
 
 - [ ] **Step 1: Create the directory structure and scaffold files**
 
@@ -42,7 +74,7 @@ mkdir -p pdf-restorer/src/pdfrestore pdf-restorer/tests
 
 `pdf-restorer/requirements.txt`:
 ```
-PyMuPDF>=1.24,<2.0
+PyMuPDF>=1.25,<2.0
 opencv-python-headless>=4.9,<5.0
 numpy>=1.26,<2.0
 img2pdf>=0.5,<0.6
@@ -54,6 +86,8 @@ Pillow>=10.1,<11.0
 ```ini
 [pytest]
 pythonpath = src
+markers =
+    ocr: needs Tesseract and Ghostscript on PATH; skipped when either is missing
 ```
 
 `pdf-restorer/src/pdfrestore/__init__.py`:
@@ -62,7 +96,7 @@ pythonpath = src
 (empty file — marks `pdfrestore` as a package)
 
 `pdf-restorer/README.md`:
-```markdown
+````markdown
 # PDF Restorer
 
 Turn a scanned or photographed-book PDF into a clean, searchable PDF —
@@ -71,13 +105,16 @@ no paid services or external APIs. The original PDF is never modified.
 
 ## System dependencies
 
-This tool shells out to Tesseract OCR and qpdf (via `ocrmypdf`). Install
-these before running it:
+`ocrmypdf` shells out to Tesseract OCR and Ghostscript (9.54 or newer).
+Install both before running this tool:
 
-- **Windows**: `choco install tesseract qpdf` (or the UB Mannheim Tesseract
-  installer, plus `qpdf` from https://github.com/qpdf/qpdf/releases)
-- **macOS**: `brew install tesseract qpdf`
-- **Linux (Debian/Ubuntu)**: `sudo apt install tesseract-ocr qpdf`
+- **Windows**: `choco install tesseract ghostscript` (admin shell) or
+  `scoop install tesseract ghostscript`
+- **macOS**: `brew install tesseract ghostscript`
+- **Linux (Debian/Ubuntu)**: `sudo apt install tesseract-ocr ghostscript`
+
+For languages other than English, install the matching Tesseract language
+pack and pass `--lang`.
 
 ## Setup
 
@@ -102,7 +139,9 @@ python -m pdfrestore --batch ./scans -o ./restored
 ```
 
 If `-o` is omitted for a single file, output defaults to
-`<input-name>.ocr.pdf` next to the input file.
+`<input-name>.ocr.pdf` next to the input file. Batch mode skips files that
+already end in `.ocr.pdf`, so re-running it on the same directory does not
+process its own output.
 
 `--dewarp` enables best-effort correction for page curvature in
 photographed book pages (e.g. near the spine). It's a heuristic, not a
@@ -114,18 +153,20 @@ guarantee — leave it off for flatbed scans, where it isn't needed.
 pytest -v
 ```
 
-Tests that exercise real OCR are skipped automatically if Tesseract isn't
-found on your PATH.
-```
+Tests marked `ocr` run real OCR and are skipped if Tesseract or
+Ghostscript isn't on your PATH.
+````
 
-- [ ] **Step 2: Install dependencies and verify the package imports**
+- [ ] **Step 2: Create the venv, install dependencies, verify the package imports**
 
 ```bash
 cd pdf-restorer
+python -m venv .venv
+.venv/Scripts/activate  # or `source .venv/bin/activate` on macOS/Linux
 pip install -r requirements.txt pytest
 python -c "import sys; sys.path.insert(0, 'src'); import pdfrestore; print('ok')"
 ```
-Expected: prints `ok` with no errors.
+Expected: prints `ok` with no errors. The root `.gitignore` already ignores `.venv/`.
 
 - [ ] **Step 3: Commit**
 
@@ -149,8 +190,8 @@ EOF
 - Create: `pdf-restorer/tests/test_rasterize.py`
 
 **Interfaces:**
-- Produces: `rasterize.rasterize_pdf(pdf_path: str, dpi: int = 300) -> list[np.ndarray]` — one HxWx3 uint8 RGB array per page, in page order.
-- Produces (test fixtures, reused by every later test file): `make_pdf_from_image(image: PIL.Image.Image, dpi: int = 300, name: str = "input.pdf") -> pathlib.Path` and `make_text_page_image(text: str, size: tuple[int, int] = (900, 1200), angle: float = 0.0) -> PIL.Image.Image`.
+- Produces: `rasterize.rasterize_pdf(pdf_path: str, dpi: int = 300) -> Iterator[np.ndarray]` — yields one HxWx3 uint8 RGB array per page, in page order.
+- Produces (test fixtures, reused by every later test file): `make_pdf_from_image(image: PIL.Image.Image, dpi: int = 300, name: str = "input.pdf") -> pathlib.Path` and `make_text_page_image(text: str, size: tuple[int, int] = (900, 1200), angle: float = 0.0) -> PIL.Image.Image`. `text` may contain `\n` for multiple lines.
 
 - [ ] **Step 1: Write conftest.py fixtures and the failing test**
 
@@ -201,7 +242,7 @@ def test_rasterize_pdf_returns_one_image_per_page(make_pdf_from_image, make_text
     image = make_text_page_image("Rasterize check", size=(900, 1200))
     pdf_path = make_pdf_from_image(image, dpi=300, name="single_page.pdf")
 
-    pages = rasterize.rasterize_pdf(str(pdf_path), dpi=300)
+    pages = list(rasterize.rasterize_pdf(str(pdf_path), dpi=300))
 
     assert len(pages) == 1
     page = pages[0]
@@ -216,7 +257,7 @@ def test_rasterize_pdf_respects_dpi_scaling(make_pdf_from_image, make_text_page_
     image = make_text_page_image("DPI scaling check", size=(600, 800))
     pdf_path = make_pdf_from_image(image, dpi=300, name="dpi_check.pdf")
 
-    pages_at_150 = rasterize.rasterize_pdf(str(pdf_path), dpi=150)
+    pages_at_150 = list(rasterize.rasterize_pdf(str(pdf_path), dpi=150))
 
     assert abs(pages_at_150[0].shape[1] - 300) <= 4
     assert abs(pages_at_150[0].shape[0] - 400) <= 4
@@ -225,34 +266,31 @@ def test_rasterize_pdf_respects_dpi_scaling(make_pdf_from_image, make_text_page_
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd pdf-restorer
 pytest tests/test_rasterize.py -v
 ```
-Expected: FAIL / ERROR — `ModuleNotFoundError: No module named 'pdfrestore.rasterize'`.
+Expected: FAIL / ERROR — `ImportError: cannot import name 'rasterize' from 'pdfrestore'`.
 
 - [ ] **Step 3: Implement rasterize.py**
 
 `pdf-restorer/src/pdfrestore/rasterize.py`:
 ```python
-import fitz
+from collections.abc import Iterator
+
 import numpy as np
+import pymupdf
 
 
-def rasterize_pdf(pdf_path: str, dpi: int = 300) -> list[np.ndarray]:
-    images = []
-    doc = fitz.open(pdf_path)
-    try:
-        zoom = dpi / 72.0
-        matrix = fitz.Matrix(zoom, zoom)
+def rasterize_pdf(pdf_path: str, dpi: int = 300) -> Iterator[np.ndarray]:
+    # Yields one page at a time so a long book is never held in memory whole.
+    zoom = dpi / 72.0
+    matrix = pymupdf.Matrix(zoom, zoom)
+    with pymupdf.open(pdf_path) as doc:
         for page in doc:
-            pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csRGB)
+            pix = page.get_pixmap(matrix=matrix, colorspace=pymupdf.csRGB)
             image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
                 pix.height, pix.width, pix.n
             )
-            images.append(image.copy())
-    finally:
-        doc.close()
-    return images
+            yield image.copy()
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -284,44 +322,53 @@ EOF
 
 **Interfaces:**
 - Consumes: `make_text_page_image` fixture from Task 2's `conftest.py`.
-- Produces: `preprocess.deskew(image: np.ndarray) -> np.ndarray`.
+- Produces: `preprocess.deskew(image: np.ndarray) -> np.ndarray` and `preprocess.MAX_SKEW_DEGREES`.
 
-- [ ] **Step 1: Write the failing test**
+The test measures straightness with a method independent of the implementation: the variance of the per-row ink count, which peaks when text lines are horizontal. Do not measure it with `minAreaRect` — a test that repeats the implementation's formula passes whether the formula is right or wrong.
+
+- [ ] **Step 1: Write the failing tests**
 
 `pdf-restorer/tests/test_preprocess.py`:
 ```python
 import cv2
 import numpy as np
+import pytest
 
 from pdfrestore import preprocess
 
-
-def _measure_skew_angle(image: np.ndarray) -> float:
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
-    coords = np.column_stack(np.where(thresh > 0))
-    angle = cv2.minAreaRect(coords)[-1]
-    if angle < -45:
-        angle = -(90 + angle)
-    else:
-        angle = -angle
-    return angle
+PARAGRAPH = "\n".join(["The quick brown fox jumps over"] * 10)
 
 
-def test_deskew_corrects_rotated_page(make_text_page_image):
-    image = np.array(make_text_page_image("The quick brown fox jumps", angle=-7))
+def _row_profile_sharpness(image: np.ndarray) -> float:
+    ink = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) < 128
+    return float(ink.sum(axis=1).var())
 
-    corrected = preprocess.deskew(image)
 
-    assert abs(_measure_skew_angle(corrected)) < 2.0
+@pytest.mark.parametrize("angle", [-7, 4])
+def test_deskew_corrects_rotated_page(make_text_page_image, angle):
+    straight = np.array(make_text_page_image(PARAGRAPH))
+    rotated = np.array(make_text_page_image(PARAGRAPH, angle=angle))
+
+    corrected = preprocess.deskew(rotated)
+
+    # Rotation drops sharpness to ~40% of the straight page; the fix restores
+    # ~88% (not 100%: the canvas grew when the page was rotated).
+    assert _row_profile_sharpness(rotated) < 0.6 * _row_profile_sharpness(straight)
+    assert _row_profile_sharpness(corrected) > 0.8 * _row_profile_sharpness(straight)
+
+
+def test_deskew_leaves_straight_page_unchanged(make_text_page_image):
+    straight = np.array(make_text_page_image(PARAGRAPH))
+
+    assert np.array_equal(preprocess.deskew(straight), straight)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
 pytest tests/test_preprocess.py -v
 ```
-Expected: FAIL — `AttributeError: module 'pdfrestore.preprocess' has no attribute 'deskew'` (or `ModuleNotFoundError` since the module doesn't exist yet).
+Expected: FAIL / ERROR — `ImportError: cannot import name 'preprocess' from 'pdfrestore'`.
 
 - [ ] **Step 3: Implement deskew**
 
@@ -334,19 +381,22 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Beyond this, the angle more likely comes from an illustration or a stray
+# border than from skewed text; perspective crop handles large rotations.
+MAX_SKEW_DEGREES = 15.0
+
 
 def deskew(image: np.ndarray) -> np.ndarray:
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
-    coords = np.column_stack(np.where(thresh > 0))
-    if coords.size == 0:
+    coords = cv2.findNonZero(thresh)
+    if coords is None:
         return image
+    # OpenCV >= 4.5.1 reports the angle in [0, 90); fold it into [-45, 45).
     angle = cv2.minAreaRect(coords)[-1]
-    if angle < -45:
-        angle = -(90 + angle)
-    else:
-        angle = -angle
-    if abs(angle) < 0.1:
+    if angle >= 45:
+        angle -= 90
+    if abs(angle) < 0.1 or abs(angle) > MAX_SKEW_DEGREES:
         return image
     (h, w) = image.shape[:2]
     center = (w // 2, h // 2)
@@ -356,12 +406,12 @@ def deskew(image: np.ndarray) -> np.ndarray:
     )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
 pytest tests/test_preprocess.py -v
 ```
-Expected: 1 passed.
+Expected: 3 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -390,20 +440,16 @@ EOF
 
 Append to `pdf-restorer/tests/test_preprocess.py`:
 ```python
-from PIL import Image
-
-
 def test_crop_to_page_removes_background(make_text_page_image):
-    page = make_text_page_image("Chapter One", size=(700, 900))
-    canvas = Image.new("RGB", (1200, 1500), (90, 90, 90))
-    canvas.paste(page, (250, 300))
-    arr = np.array(canvas)
+    page = np.array(make_text_page_image("Chapter One", size=(700, 900)))
+    canvas = np.full((1500, 1200, 3), 90, dtype=np.uint8)
+    canvas[300:1200, 250:950] = page
 
-    cropped = preprocess.crop_to_page(arr)
+    cropped = preprocess.crop_to_page(canvas)
 
-    assert cropped.shape[0] < arr.shape[0]
-    assert cropped.shape[1] < arr.shape[1]
-    assert cropped.mean() > arr.mean()
+    assert cropped.shape[0] < canvas.shape[0]
+    assert cropped.shape[1] < canvas.shape[1]
+    assert cropped.mean() > canvas.mean()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -749,7 +795,7 @@ def preprocess_page(image: np.ndarray, dewarp_enabled: bool = False) -> np.ndarr
 ```bash
 pytest tests/test_preprocess.py -v
 ```
-Expected: all `test_preprocess.py` tests pass (8 total across Tasks 3–7).
+Expected: 9 passed (Task 3: 3, Task 4: 1, Task 5: 1, Task 6: 2, Task 7: 2).
 
 - [ ] **Step 5: Commit**
 
@@ -772,31 +818,40 @@ EOF
 - Create: `pdf-restorer/tests/test_assemble.py`
 
 **Interfaces:**
-- Produces: `assemble.assemble_pdf(images: list[np.ndarray], output_path: str) -> None` (raises `ValueError` on an empty list).
+- Produces: `assemble.save_page(image: np.ndarray, path: str, dpi: int) -> None` — writes one page as a PNG tagged with `dpi`.
+- Produces: `assemble.assemble_pdf(page_paths: list[str], output_path: str) -> None` — embeds the PNGs, in order, one per PDF page (raises `ValueError` on an empty list).
+
+The PNG's dpi tag sets the PDF page size. Without it img2pdf assumes 96 dpi, and a 300 dpi A4 scan comes out as a 26 × 37 inch page.
 
 - [ ] **Step 1: Write the failing tests**
 
 `pdf-restorer/tests/test_assemble.py`:
 ```python
 import numpy as np
+import pymupdf
 import pytest
-import fitz
 
 from pdfrestore import assemble
 
 
-def test_assemble_pdf_preserves_page_count_and_order(tmp_path, make_text_page_image):
-    page1 = np.array(make_text_page_image("Page one", size=(400, 300)))
-    page2 = np.array(make_text_page_image("Page two", size=(500, 350)))
+def test_assemble_pdf_keeps_page_order_and_physical_size(tmp_path):
+    # 400 px and 500 px wide at 300 dpi are 96 pt and 120 pt.
+    pages = [np.full((300, 400, 3), 255, np.uint8), np.full((350, 500, 3), 255, np.uint8)]
+    page_paths = []
+    for index, page in enumerate(pages):
+        path = tmp_path / f"page-{index}.png"
+        assemble.save_page(page, str(path), dpi=300)
+        page_paths.append(str(path))
     output_path = tmp_path / "assembled.pdf"
 
-    assemble.assemble_pdf([page1, page2], str(output_path))
+    assemble.assemble_pdf(page_paths, str(output_path))
 
-    doc = fitz.open(str(output_path))
-    try:
+    with pymupdf.open(str(output_path)) as doc:
         assert doc.page_count == 2
-    finally:
-        doc.close()
+        assert abs(doc[0].rect.width - 96) < 1
+        assert abs(doc[0].rect.height - 72) < 1
+        assert abs(doc[1].rect.width - 120) < 1
+        assert abs(doc[1].rect.height - 84) < 1
 
 
 def test_assemble_pdf_rejects_empty_list(tmp_path):
@@ -809,31 +864,27 @@ def test_assemble_pdf_rejects_empty_list(tmp_path):
 ```bash
 pytest tests/test_assemble.py -v
 ```
-Expected: FAIL — `ModuleNotFoundError: No module named 'pdfrestore.assemble'`.
+Expected: FAIL — `ImportError: cannot import name 'assemble' from 'pdfrestore'`.
 
 - [ ] **Step 3: Implement assemble.py**
 
 `pdf-restorer/src/pdfrestore/assemble.py`:
 ```python
-import io
-
 import img2pdf
 import numpy as np
 from PIL import Image
 
 
-def assemble_pdf(images: list[np.ndarray], output_path: str) -> None:
-    if not images:
+def save_page(image: np.ndarray, path: str, dpi: int) -> None:
+    # img2pdf sizes the PDF page from this tag; without it, it assumes 96 dpi.
+    Image.fromarray(image).save(path, format="PNG", dpi=(dpi, dpi))
+
+
+def assemble_pdf(page_paths: list[str], output_path: str) -> None:
+    if not page_paths:
         raise ValueError("assemble_pdf requires at least one page image")
-    encoded_pages = []
-    for image in images:
-        pil_image = Image.fromarray(image)
-        buffer = io.BytesIO()
-        pil_image.save(buffer, format="PNG")
-        encoded_pages.append(buffer.getvalue())
-    pdf_bytes = img2pdf.convert(encoded_pages)
     with open(output_path, "wb") as fh:
-        fh.write(pdf_bytes)
+        img2pdf.convert(page_paths, outputstream=fh)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -862,27 +913,31 @@ EOF
 **Files:**
 - Create: `pdf-restorer/src/pdfrestore/ocr.py`
 - Create: `pdf-restorer/tests/test_ocr.py`
+- Modify: `pdf-restorer/tests/conftest.py`
 
 **Interfaces:**
-- Produces: `ocr.ocr_and_optimize(input_pdf_path: str, output_pdf_path: str, language: str = "eng") -> None`.
+- Produces: `ocr.REQUIRED_BINARIES: list[str]`, `ocr.missing_binaries() -> list[str]`, `ocr.ocr_and_optimize(input_pdf_path: str, output_pdf_path: str, language: str = "eng") -> None`.
+- Produces: a `conftest.py` hook that skips `@pytest.mark.ocr` tests when `ocr.missing_binaries()` is non-empty. Tasks 10 and 11 reuse both.
 
-- [ ] **Step 1: Write the failing test**
+Task 0 Step 3 must be done before this task.
+
+- [ ] **Step 1: Write the failing tests and the skip hook**
 
 `pdf-restorer/tests/test_ocr.py`:
 ```python
-import shutil
-
-import fitz
+import pymupdf
 import pytest
 
 from pdfrestore import ocr
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("tesseract") is None,
-    reason="Tesseract OCR engine not installed; skipping OCR integration test",
-)
+
+def test_missing_binaries_lists_every_absent_binary(monkeypatch):
+    monkeypatch.setattr(ocr.shutil, "which", lambda name: None)
+
+    assert ocr.missing_binaries() == ocr.REQUIRED_BINARIES
 
 
+@pytest.mark.ocr
 def test_ocr_and_optimize_adds_extractable_text(tmp_path, make_pdf_from_image, make_text_page_image):
     image = make_text_page_image("Searchable restoration test")
     input_pdf = make_pdf_from_image(image, name="scanned.pdf")
@@ -890,52 +945,111 @@ def test_ocr_and_optimize_adds_extractable_text(tmp_path, make_pdf_from_image, m
 
     ocr.ocr_and_optimize(str(input_pdf), str(output_pdf), language="eng")
 
-    doc = fitz.open(str(output_pdf))
-    try:
+    with pymupdf.open(str(output_pdf)) as doc:
         text = doc[0].get_text()
-    finally:
-        doc.close()
     assert "restoration" in text.lower()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+Replace `pdf-restorer/tests/conftest.py` with the full file below (Task 2's fixtures plus the hook).
+
+`pdf-restorer/tests/conftest.py`:
+```python
+import io
+
+import img2pdf
+import pytest
+from PIL import Image, ImageDraw, ImageFont
+
+from pdfrestore import ocr
+
+
+def pytest_collection_modifyitems(config, items):
+    missing = ocr.missing_binaries()
+    if not missing:
+        return
+    skip = pytest.mark.skip(reason=f"not on PATH: {', '.join(missing)}")
+    for item in items:
+        if item.get_closest_marker("ocr"):
+            item.add_marker(skip)
+
+
+@pytest.fixture
+def make_pdf_from_image(tmp_path):
+    def _make(image: Image.Image, dpi: int = 300, name: str = "input.pdf"):
+        pdf_path = tmp_path / name
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG", dpi=(dpi, dpi))
+        pdf_bytes = img2pdf.convert(buffer.getvalue())
+        pdf_path.write_bytes(pdf_bytes)
+        return pdf_path
+
+    return _make
+
+
+@pytest.fixture
+def make_text_page_image():
+    def _make(text: str, size: tuple[int, int] = (900, 1200), angle: float = 0.0) -> Image.Image:
+        image = Image.new("RGB", size, "white")
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default(size=48)
+        draw.text((60, 60), text, fill="black", font=font)
+        if angle:
+            image = image.rotate(angle, expand=True, fillcolor="white")
+        return image
+
+    return _make
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-pytest tests/test_ocr.py -v
+pytest -v
 ```
-Expected: FAIL — `ModuleNotFoundError: No module named 'pdfrestore.ocr'` (or SKIPPED if Tesseract isn't installed on this machine — if skipped, verify the failure by temporarily renaming the module and confirming the test would fail once dependencies are present; otherwise proceed once Tesseract is installed per README).
+Expected: collection ERROR — `ImportError: cannot import name 'ocr' from 'pdfrestore'` (raised from `conftest.py`, so every test file errors until `ocr.py` exists).
 
 - [ ] **Step 3: Implement ocr.py**
 
 `pdf-restorer/src/pdfrestore/ocr.py`:
 ```python
+import os
+import shutil
+
 import ocrmypdf
+
+# ocrmypdf refuses to run without these. It reaches qpdf through pikepdf,
+# which bundles it, so no qpdf binary is needed.
+REQUIRED_BINARIES = ["tesseract", "gswin64c" if os.name == "nt" else "gs"]
+
+
+def missing_binaries() -> list[str]:
+    return [name for name in REQUIRED_BINARIES if shutil.which(name) is None]
 
 
 def ocr_and_optimize(input_pdf_path: str, output_pdf_path: str, language: str = "eng") -> None:
+    # No force_ocr or deskew: both make ocrmypdf re-rasterize the page and
+    # replace the lossless image from assemble.py. The input has no text
+    # layer, so the default mode OCRs every page anyway.
     ocrmypdf.ocr(
         input_pdf_path,
         output_pdf_path,
         language=language,
-        force_ocr=True,
         optimize=1,
-        deskew=True,
         output_type="pdf",
         progress_bar=False,
     )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
 pytest tests/test_ocr.py -v
 ```
-Expected: 1 passed (or 1 skipped if Tesseract is unavailable in this environment — install it per `README.md` and re-run to confirm a real pass before moving on).
+Expected: 2 passed. A `SKIPPED (not on PATH: ...)` means Task 0 Step 3 is not done — install the binaries and re-run; do not move on with a skip.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add pdf-restorer/src/pdfrestore/ocr.py pdf-restorer/tests/test_ocr.py
+git add pdf-restorer/src/pdfrestore/ocr.py pdf-restorer/tests/test_ocr.py pdf-restorer/tests/conftest.py
 git commit -m "$(cat <<'EOF'
 feat(pdf-restorer): add OCR text layer + safe optimization via ocrmypdf
 
@@ -953,8 +1067,8 @@ EOF
 - Create: `pdf-restorer/tests/test_pipeline.py`
 
 **Interfaces:**
-- Consumes: `rasterize.rasterize_pdf` (Task 2), `preprocess.preprocess_page` (Task 7), `assemble.assemble_pdf` (Task 8), `ocr.ocr_and_optimize` (Task 9).
-- Produces: `pipeline.RestoreResult` dataclass (`output_path: str`, `page_count: int`, `warnings: list[str]`) and `pipeline.restore_pdf(input_path: str, output_path: str | None = None, dpi: int = 300, dewarp: bool = False, language: str = "eng") -> RestoreResult` (raises `FileNotFoundError` if `input_path` doesn't exist, `ValueError` if the PDF has no pages).
+- Consumes: `rasterize.rasterize_pdf` (Task 2), `preprocess.preprocess_page` (Task 7), `assemble.save_page` / `assemble.assemble_pdf` (Task 8), `ocr.ocr_and_optimize` (Task 9).
+- Produces: `pipeline.RestoreResult` dataclass (`output_path: str`, `page_count: int`, `warnings: list[str]`) and `pipeline.restore_pdf(input_path: str, output_path: str | None = None, dpi: int = 300, dewarp: bool = False, language: str = "eng") -> RestoreResult`. Raises `FileNotFoundError` if `input_path` doesn't exist, and `ValueError` if the output path resolves to the input or the PDF has no pages.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -964,20 +1078,48 @@ import hashlib
 import shutil
 from pathlib import Path
 
-import fitz
+import pymupdf
 import pytest
 
-from pdfrestore import pipeline
+from pdfrestore import ocr, pipeline
 
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-@pytest.mark.skipif(
-    shutil.which("tesseract") is None,
-    reason="Tesseract OCR engine not installed; skipping pipeline integration test",
-)
+def test_restore_pdf_missing_input_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        pipeline.restore_pdf(str(tmp_path / "missing.pdf"))
+
+
+def test_restore_pdf_refuses_to_overwrite_input(make_pdf_from_image, make_text_page_image):
+    input_pdf = make_pdf_from_image(make_text_page_image("Keep me"), name="keep.pdf")
+    original_hash = _sha256(input_pdf)
+
+    with pytest.raises(ValueError):
+        pipeline.restore_pdf(str(input_pdf), str(input_pdf))
+
+    assert _sha256(input_pdf) == original_hash
+
+
+def test_restore_pdf_keeps_page_size_without_real_ocr(
+    monkeypatch, tmp_path, make_pdf_from_image, make_text_page_image
+):
+    # Stands in for ocrmypdf so the orchestration is covered on any machine.
+    monkeypatch.setattr(ocr, "ocr_and_optimize", lambda src, dst, language: shutil.copy(src, dst))
+    input_pdf = make_pdf_from_image(make_text_page_image("Size check"), name="size.pdf")
+
+    result = pipeline.restore_pdf(str(input_pdf), str(tmp_path / "size.out.pdf"), dpi=300)
+
+    assert result.page_count == 1
+    with pymupdf.open(result.output_path) as doc:
+        # 900 x 1200 px at 300 dpi is 216 x 288 pt.
+        assert abs(doc[0].rect.width - 216) < 1
+        assert abs(doc[0].rect.height - 288) < 1
+
+
+@pytest.mark.ocr
 def test_restore_pdf_preserves_input_and_adds_searchable_text(
     tmp_path, make_pdf_from_image, make_text_page_image
 ):
@@ -992,19 +1134,15 @@ def test_restore_pdf_preserves_input_and_adds_searchable_text(
     assert Path(result.output_path) == output_path
     assert result.page_count == 1
 
-    doc = fitz.open(str(output_path))
-    try:
+    with pymupdf.open(str(output_path)) as doc:
         text = doc[0].get_text().lower()
-    finally:
-        doc.close()
     assert "verification" in text
 
 
-@pytest.mark.skipif(
-    shutil.which("tesseract") is None,
-    reason="Tesseract OCR engine not installed; skipping pipeline integration test",
-)
-def test_restore_pdf_default_output_path(tmp_path, make_pdf_from_image, make_text_page_image):
+def test_restore_pdf_default_output_path(
+    monkeypatch, tmp_path, make_pdf_from_image, make_text_page_image
+):
+    monkeypatch.setattr(ocr, "ocr_and_optimize", lambda src, dst, language: shutil.copy(src, dst))
     image = make_text_page_image("Default path test")
     input_pdf = make_pdf_from_image(image, name="mybook.pdf")
 
@@ -1012,11 +1150,6 @@ def test_restore_pdf_default_output_path(tmp_path, make_pdf_from_image, make_tex
 
     assert result.output_path == str(tmp_path / "mybook.ocr.pdf")
     assert Path(result.output_path).exists()
-
-
-def test_restore_pdf_missing_input_raises(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        pipeline.restore_pdf(str(tmp_path / "missing.pdf"))
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1024,7 +1157,7 @@ def test_restore_pdf_missing_input_raises(tmp_path):
 ```bash
 pytest tests/test_pipeline.py -v
 ```
-Expected: FAIL — `ModuleNotFoundError: No module named 'pdfrestore.pipeline'`.
+Expected: FAIL — `ImportError: cannot import name 'pipeline' from 'pdfrestore'`.
 
 - [ ] **Step 3: Implement pipeline.py**
 
@@ -1059,24 +1192,27 @@ def restore_pdf(
     if not input_file.is_file():
         raise FileNotFoundError(f"Input PDF not found: {input_path}")
     resolved_output = Path(output_path) if output_path else input_file.with_suffix(".ocr.pdf")
-
-    pages = rasterize.rasterize_pdf(str(input_file), dpi=dpi)
-    if not pages:
-        raise ValueError(f"No pages found in {input_path}")
+    if resolved_output.resolve() == input_file.resolve():
+        raise ValueError(f"Output path must differ from the input: {input_path}")
 
     warnings: list[str] = []
-    processed_pages = []
-    for index, page in enumerate(pages):
-        try:
-            processed_pages.append(preprocess.preprocess_page(page, dewarp_enabled=dewarp))
-        except Exception:
-            logger.warning("Preprocessing failed for page %d, using raw scan", index, exc_info=True)
-            warnings.append(f"page {index}: preprocessing failed, used raw scan")
-            processed_pages.append(page)
-
     with tempfile.TemporaryDirectory() as tmp_dir:
+        page_paths = []
+        for index, page in enumerate(rasterize.rasterize_pdf(str(input_file), dpi=dpi)):
+            try:
+                processed = preprocess.preprocess_page(page, dewarp_enabled=dewarp)
+            except Exception:
+                logger.warning("Preprocessing failed for page %d, using raw scan", index, exc_info=True)
+                warnings.append(f"page {index}: preprocessing failed, used raw scan")
+                processed = page
+            page_path = Path(tmp_dir) / f"page-{index:05d}.png"
+            assemble.save_page(processed, str(page_path), dpi=dpi)
+            page_paths.append(str(page_path))
+        if not page_paths:
+            raise ValueError(f"No pages found in {input_path}")
+
         intermediate_path = Path(tmp_dir) / "assembled.pdf"
-        assemble.assemble_pdf(processed_pages, str(intermediate_path))
+        assemble.assemble_pdf(page_paths, str(intermediate_path))
 
         final_tmp_path = Path(tmp_dir) / "final.pdf"
         ocr.ocr_and_optimize(str(intermediate_path), str(final_tmp_path), language=language)
@@ -1086,7 +1222,7 @@ def restore_pdf(
 
     return RestoreResult(
         output_path=str(resolved_output),
-        page_count=len(processed_pages),
+        page_count=len(page_paths),
         warnings=warnings,
     )
 ```
@@ -1096,7 +1232,7 @@ def restore_pdf(
 ```bash
 pytest tests/test_pipeline.py -v
 ```
-Expected: 3 passed (or 2 skipped + 1 passed if Tesseract is unavailable — install it per `README.md` and re-run to confirm real passes before moving on).
+Expected: 5 passed. Any `SKIPPED` means the binaries from Task 0 Step 3 are missing — fix that before moving on.
 
 - [ ] **Step 5: Commit**
 
@@ -1120,8 +1256,8 @@ EOF
 - Create: `pdf-restorer/tests/test_cli.py`
 
 **Interfaces:**
-- Consumes: `pipeline.restore_pdf`, `pipeline.RestoreResult` (Task 10).
-- Produces: `cli.main(argv: list[str] | None = None) -> int`, `cli._check_dependencies() -> list[str]`, `cli.REQUIRED_BINARIES: list[str]`.
+- Consumes: `pipeline.restore_pdf`, `pipeline.RestoreResult` (Task 10), `ocr.missing_binaries` (Task 9).
+- Produces: `cli.main(argv: list[str] | None = None) -> int`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1131,14 +1267,8 @@ from pdfrestore import cli
 from pdfrestore.pipeline import RestoreResult
 
 
-def test_check_dependencies_reports_missing_binaries(monkeypatch):
-    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
-
-    assert cli._check_dependencies() == cli.REQUIRED_BINARIES
-
-
 def test_main_missing_dependencies_exits_2(monkeypatch, capsys, tmp_path):
-    monkeypatch.setattr(cli, "_check_dependencies", lambda: ["tesseract"])
+    monkeypatch.setattr(cli, "missing_binaries", lambda: ["tesseract"])
 
     exit_code = cli.main([str(tmp_path / "in.pdf")])
 
@@ -1149,7 +1279,7 @@ def test_main_missing_dependencies_exits_2(monkeypatch, capsys, tmp_path):
 def test_main_single_file_success(monkeypatch, tmp_path, capsys):
     input_pdf = tmp_path / "book.pdf"
     input_pdf.write_bytes(b"%PDF-1.4 fake")
-    monkeypatch.setattr(cli, "_check_dependencies", lambda: [])
+    monkeypatch.setattr(cli, "missing_binaries", lambda: [])
     monkeypatch.setattr(
         cli,
         "restore_pdf",
@@ -1167,10 +1297,12 @@ def test_main_single_file_success(monkeypatch, tmp_path, capsys):
 def test_main_batch_mode_reports_summary_and_nonzero_on_failure(monkeypatch, tmp_path, capsys):
     (tmp_path / "a.pdf").write_bytes(b"%PDF-1.4 fake")
     (tmp_path / "b.pdf").write_bytes(b"%PDF-1.4 fake")
-    monkeypatch.setattr(cli, "_check_dependencies", lambda: [])
+    # Output from an earlier run in the same directory; batch mode must skip it.
+    (tmp_path / "a.ocr.pdf").write_bytes(b"%PDF-1.4 fake")
+    monkeypatch.setattr(cli, "missing_binaries", lambda: [])
 
     def fake_restore(input_path, output_path=None, **kwargs):
-        if "a.pdf" in input_path:
+        if input_path.endswith("a.pdf"):
             return RestoreResult(output_path=output_path, page_count=1, warnings=[])
         raise RuntimeError("boom")
 
@@ -1190,24 +1322,18 @@ def test_main_batch_mode_reports_summary_and_nonzero_on_failure(monkeypatch, tmp
 ```bash
 pytest tests/test_cli.py -v
 ```
-Expected: FAIL — `ModuleNotFoundError: No module named 'pdfrestore.cli'`.
+Expected: FAIL — `ImportError: cannot import name 'cli' from 'pdfrestore'`.
 
 - [ ] **Step 3: Implement cli.py and __main__.py**
 
 `pdf-restorer/src/pdfrestore/cli.py`:
 ```python
 import argparse
-import shutil
 import sys
 from pathlib import Path
 
+from pdfrestore.ocr import missing_binaries
 from pdfrestore.pipeline import restore_pdf
-
-REQUIRED_BINARIES = ["tesseract", "qpdf"]
-
-
-def _check_dependencies() -> list[str]:
-    return [name for name in REQUIRED_BINARIES if shutil.which(name) is None]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1244,12 +1370,12 @@ def _run_single(input_path: Path, output_path: Path | None, args: argparse.Names
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
-    missing = _check_dependencies()
+    missing = missing_binaries()
     if missing:
         joined = ", ".join(missing)
         print(
             f"Missing required system dependencies: {joined}. "
-            "Install Tesseract OCR and qpdf, then try again (see README.md).",
+            "Install Tesseract OCR and Ghostscript, then try again (see README.md).",
             file=sys.stderr,
         )
         return 2
@@ -1262,7 +1388,11 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         output_dir = Path(args.output) if args.output else input_path
         output_dir.mkdir(parents=True, exist_ok=True)
-        pdf_files = sorted(input_path.glob("*.pdf"))
+        # Skip earlier output so re-running on the same directory doesn't
+        # produce book.ocr.ocr.pdf.
+        pdf_files = sorted(
+            p for p in input_path.glob("*.pdf") if not p.name.endswith(".ocr.pdf")
+        )
         if not pdf_files:
             print(f"No PDF files found in {input_path}", file=sys.stderr)
             return 1
@@ -1280,10 +1410,6 @@ def main(argv: list[str] | None = None) -> int:
     ok, message = _run_single(input_path, output_path, args)
     print(message)
     return 0 if ok else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
 ```
 
 `pdf-restorer/src/pdfrestore/__main__.py`:
@@ -1301,14 +1427,20 @@ if __name__ == "__main__":
 ```bash
 pytest tests/test_cli.py -v
 ```
-Expected: 4 passed.
+Expected: 3 passed.
 
-- [ ] **Step 5: Run the full test suite and commit**
+- [ ] **Step 5: Run the full suite and a real file, then commit**
 
 ```bash
 pytest -v
 ```
-Expected: all tests across `test_rasterize.py`, `test_preprocess.py`, `test_assemble.py`, `test_ocr.py`, `test_pipeline.py`, `test_cli.py` pass (OCR/pipeline tests pass for real if Tesseract + qpdf are installed, otherwise report as skipped).
+Expected: 23 passed, 0 skipped.
+
+Then run the CLI once on a real scanned PDF and open the output: text should be selectable, pages the same physical size as the input, and the input's hash unchanged.
+
+```bash
+python -m pdfrestore path/to/scan.pdf -o path/to/scan.ocr.pdf
+```
 
 ```bash
 git add pdf-restorer/src/pdfrestore/cli.py pdf-restorer/src/pdfrestore/__main__.py pdf-restorer/tests/test_cli.py
@@ -1319,3 +1451,41 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>
 EOF
 )"
 ```
+
+---
+
+### Task 12: Changelog, CLAUDE.md, PR
+
+**Files:**
+- Modify: `CHANGELOG.md`
+- Modify: `CLAUDE.md`
+
+- [ ] **Step 1: Add the changelog entry**
+
+Under `## [Unreleased]` → `### Added` in `CHANGELOG.md`:
+```markdown
+- PDF Restorer (`pdf-restorer/`): a local CLI that turns a scanned or photographed-book PDF into a searchable PDF. It crops, deskews, denoises and optionally dewarps each page, then adds an OCR text layer with ocrmypdf. The input file is never modified. Needs Tesseract and Ghostscript installed (#N).
+```
+
+- [ ] **Step 2: Add the project to CLAUDE.md's Structure list**
+
+Change "Three independent sibling projects" to "Four", and add one bullet after the `lambda/` bullet:
+```markdown
+- `pdf-restorer/` — Python CLI that restores and OCRs scanned-book PDFs, local only for now. Needs Tesseract and Ghostscript on PATH; its tests are not in CI. Spec: `docs/superpowers/specs/2026-08-13-pdf-restorer-design.md`.
+```
+
+- [ ] **Step 3: Commit, push, open the PR into `dev`**
+
+```bash
+git add CHANGELOG.md CLAUDE.md
+git commit -m "$(cat <<'EOF'
+docs(pdf-restorer): add changelog entry and CLAUDE.md pointer
+
+Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>
+EOF
+)"
+git push -u origin feat/pdf-restorer-phase1
+gh pr create --base dev --title "feat: PDF Restorer phase 1 (core pipeline + CLI)" --body "Closes #N"
+```
+
+Merge through the `merging-a-pr` skill. The PR's CI runs no `pdf-restorer` tests, so paste the Task 11 Step 5 `pytest -v` output into the PR description as the test evidence.
