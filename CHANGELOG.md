@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-01
+
 ### Changed
 
 - Vercel's AI-bots (deny) and bot-protection (challenge) managed rulesets, switched on in the dashboard on 2026-09-30, are now declared in Terraform, so the next `terraform apply` no longer turns them off. Bot protection answers non-browser clients without Vercel bot verification (curl, uptime checks) with a 429 challenge (#306).
