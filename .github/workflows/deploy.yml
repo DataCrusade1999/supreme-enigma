@@ -268,7 +268,7 @@ jobs:
   # `needs:`: neither runs on a pull_request, so this gates the stage -> main
   # merge as a check, not the release.
   e2e-cross-os:
-    name: E2E (${{ matrix.os }})
+    name: E2E
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ${{ matrix.os }}
     # One hung macOS leg at 10x could burn the month's quota without this.

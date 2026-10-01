@@ -13,6 +13,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - Dependabot groups each ecosystem's minor and patch bumps into one PR (Terraform: one per directory), and the `merging-a-pr` skill says to land any remaining Dependabot PRs as one batch PR, so the run on `dev` and the rebase runs are paid once (#312).
 - CI bills fewer Actions minutes: about 7 per PR run instead of 10, 2 per `dev` push instead of 12, and about 44 per PR into `stage` down to 7. Lint, unit, Lambda, Trivy and Linux e2e run as one `test` job instead of four parallel ones; `test` is skipped on a push to `dev` that does not touch `lambda/`; docs-only PRs get no CI run; Windows and macOS e2e run only on PRs into `main`; `promotion-guard` moved to its own workflow; Dependabot runs monthly (#320).
 - `chromatic` is skipped on a push to `dev` that does not touch `web/` or `deploy.yml` (#322).
+- The skipped cross-OS e2e job is listed as `E2E` instead of the literal `E2E (${{ matrix.os }})`. On PRs into `main` its legs are still named `E2E (windows-latest)` and `E2E (macos-latest)`.
 
 ### Removed
 
