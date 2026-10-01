@@ -16,7 +16,7 @@
     "@aws-sdk/client-s3": "^3.600.0",
     "@aws-sdk/s3-request-presigner": "^3.600.0",
     "@keystatic/core": "^0.6.4",
-    "@keystatic/next": "^5.0.4",
+    "@keystatic/next": "^5.0.5",
     "@markdoc/markdoc": "^0.5.9",
     "@vercel/analytics": "^2.0.1",
     "@vercel/oidc-aws-credentials-provider": "^3.3.8",
