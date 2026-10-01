@@ -7,6 +7,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- Each environment's Lambda has its own IAM role, limited to its own bucket, and preview deployments (dev and stage) use their own Vercel role instead of production's. The grants for each environment are in its own Terraform stack, so a new permission can be applied to dev alone (#333).
+
 ## [1.6.1] - 2026-10-01
 
 ### Changed
