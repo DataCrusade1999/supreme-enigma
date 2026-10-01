@@ -59,7 +59,7 @@ terraform apply -var-file=terraform.tfvars
 ```
 
 When a change touches both, apply `infra/shared` first: the env stacks look
-up the exec role, ECR repo, SNS topic and Vercel project by name.
+up the Vercel roles, ECR repo, SNS topic and Vercel project by name.
 
 Re-read the plan output in the confirmation prompt rather than typing `yes`
 from memory; the only destructive resources here are the S3 buckets and the
@@ -118,8 +118,9 @@ Read all of this before running it.
 
 The Vercel project, all three Lambdas, the ECR repo (`force_delete = true`,
 so images go with it), all three S3 audio buckets, and the IAM resources —
-including both OIDC providers and the `bgm-looper-ci-deploy` and
-`bgm-looper-vercel` roles. Re-applying recreates them under the same names, so
+including both OIDC providers, the `bgm-looper-ci-deploy` role, the
+`bgm-looper-vercel` and `bgm-looper-vercel-preview` roles, and each
+environment's `bgm-looper-lambda-exec-<env>` role. Re-applying recreates them under the same names, so
 their ARNs are unchanged and neither CI nor the app needs anything copied by
 hand. `deploy.yml` hardcodes the CI role ARN, and that ARN survives a recreate.
 

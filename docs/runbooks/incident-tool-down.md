@@ -78,13 +78,19 @@ What to look for:
 - **`Runtime exited: signal: killed` / OOM** — `memory_size` is 1024 MB.
   Same consideration.
 - **`AccessDenied` on S3** — note which side threw it, because the two
-  principals are scoped differently in `shared.tf`. The **Lambda exec role**
-  has bucket-wide `GetObject`/`PutObject` on all three buckets, so a
-  prefix is never its problem — an `AccessDenied` here means the role, the
-  policy attachment, or the bucket itself is wrong. The **Vercel user** is the
-  prefix-scoped one (`uploads/*`, `outputs/*` on every bucket, plus
-  `resume/*` on main's), so an `AccessDenied` from the app side on a key
-  outside those prefixes is the expected shape.
+  principals are scoped differently, both in `infra/modules/environment/main.tf`.
+  Each environment's **Lambda exec role** (`bgm-looper-lambda-exec-<env>`) has
+  bucket-wide `GetObject`/`PutObject` on **its own bucket only**, so a prefix
+  is never its problem, but a payload naming another environment's bucket is:
+  check that the deployment's `S3_BUCKET_NAME` matches the function it
+  invoked. Otherwise the role, the policy attachment, or the bucket itself is
+  wrong. The **Vercel roles** are the prefix-scoped ones: `uploads/*`,
+  `outputs/*` and `news-desk/*` on the environment's own bucket (policy
+  `bgm-looper-vercel-<env>`), plus `resume/*` on main's bucket from
+  `infra/shared`. Production assumes `bgm-looper-vercel`, dev and stage
+  `bgm-looper-vercel-preview`, so a preview deployment pointed at production's
+  role ARN fails too. An `AccessDenied` from the app side on a key outside
+  those prefixes is the expected shape.
 - **A Python traceback from the DSP code** — a real pipeline bug. Reproduce
   locally against the same input (`cd lambda && .venv/Scripts/python -m pytest -q`,
   then a targeted test) and fix it through the normal PR flow.

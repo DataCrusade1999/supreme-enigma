@@ -49,8 +49,8 @@ access blocked, CORS (PUT/GET, `*` origin), 1-day object lifecycle.
   (`main-<sha>`, `dev-<sha>`, `stage-<sha>`), tag mutability `IMMUTABLE`
   (no `:latest`, dropped 2026-08-06), lifecycle **keep-1 per prefix**
   (tightened 2026-08-05, was keep-5)
-- One `lambda_exec` IAM role, scoped to all 3 buckets, shared by all 3
-  functions
+- One exec role per function (`bgm-looper-lambda-exec-<env>`), each scoped
+  to its own bucket
 - Two OIDC identity providers (`token.actions.githubusercontent.com` and
   `oidc.vercel.com/<team slug>`) and one federated role each. **No IAM users
   and no long-lived access keys anywhere** — both replaced permanent key
