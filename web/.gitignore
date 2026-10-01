@@ -11,3 +11,6 @@ vitest-results.json
 
 # TypeScript incremental build output
 *.tsbuildinfo
+
+# Storybook static build
+storybook-static/

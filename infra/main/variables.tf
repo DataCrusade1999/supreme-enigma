@@ -46,6 +46,12 @@ variable "openrouter_model" {
   default     = "anthropic/claude-haiku-4.5"
 }
 
+variable "news_desk_model" {
+  description = "Model slug for the News Desk's headline tagging and chat. Separate from openrouter_model so changing the resume extraction model does not change this tool."
+  type        = string
+  default     = "anthropic/claude-haiku-4.5"
+}
+
 # Used only for each Lambda function's initial `image_uri` at creation time — every
 # aws_lambda_function.looper/looper_env has `lifecycle.ignore_changes = [image_uri]`,
 # so CI's `update-function-code` is what actually keeps the deployed image current, and
@@ -66,4 +72,15 @@ variable "bootstrap_image_tag_dev" {
 variable "bootstrap_image_tag_stage" {
   type    = string
   default = "stage-0139b7ba435c89c79dc8c88bf6feb79f628753bb"
+}
+
+# Google OAuth client for Cognito's Google sign-in, created by hand in Google Cloud
+# Console (spec 2026-09-28-cognito-login-design.md §5).
+variable "google_client_id" {
+  type = string
+}
+
+variable "google_client_secret" {
+  type      = string
+  sensitive = true
 }

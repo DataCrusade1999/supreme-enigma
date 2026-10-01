@@ -18,10 +18,10 @@ permissions:
 
 jobs:
   ui-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Trigger release testing
-        uses: aws-actions/devops-agent-qa@v1
+        uses: aws-actions/devops-agent-qa@3e6e4ff02bf14e05936b19c7369e299a6eb5c0f8 # v1
         with:
           webhook-url: ${{ secrets.DEVOPS_AGENT_WEBHOOK_URL }}
           webhook-secret: ${{ secrets.DEVOPS_AGENT_WEBHOOK_SECRET }}

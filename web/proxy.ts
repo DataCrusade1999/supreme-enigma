@@ -15,7 +15,11 @@ export function proxy(request: NextRequest) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", request.nextUrl.pathname);
+    // Built by hand, not searchParams.set(): URLSearchParams escapes "/" too,
+    // which RFC 3986 allows unescaped in a query, and ?next=%2Ftools%2F... is
+    // unreadable in the address bar. Everything else stays escaped.
+    loginUrl.search =
+      "?next=" + encodeURIComponent(request.nextUrl.pathname).replaceAll("%2F", "/");
     return NextResponse.redirect(loginUrl);
   }
 

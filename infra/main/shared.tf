@@ -19,6 +19,11 @@ locals {
   # personal scope, but OIDC still keys on the slug.
   vercel_team_slug = "ashutosh-pandeys-projects-77cb3a00"
 
+  # The same scope's ID. The provider sets no team, and project calls resolve
+  # through the token's default team, but the domains API does not: without an
+  # explicit teamId it answers 403 for ashutosh-pandey.com.
+  vercel_team_id = "team_bSWug4zpM7jfChbYKg7G4PMI"
+
   lambda_function_name = "${var.project_name}-processor"
   lambda_function_arn  = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.lambda_function_name}"
 
@@ -30,10 +35,7 @@ locals {
     [local.lambda_function_name],
     [for f in aws_lambda_function.looper_env : f.function_name]
   )
-  all_audio_bucket_arns = concat(
-    [aws_s3_bucket.audio.arn],
-    [for b in aws_s3_bucket.audio_env : b.arn]
-  )
+  all_data_bucket_arns = [for b in aws_s3_bucket.data : b.arn]
 }
 
 # --- ECR (one repo, per-branch tag prefixes — see environments.tf's Lambda functions
@@ -131,12 +133,9 @@ resource "aws_iam_role_policy" "lambda_s3" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
-      Action = ["s3:GetObject", "s3:PutObject"]
-      Resource = concat(
-        ["${aws_s3_bucket.audio.arn}/*"],
-        [for b in aws_s3_bucket.audio_env : "${b.arn}/*"]
-      )
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject"]
+      Resource = [for arn in local.all_data_bucket_arns : "${arn}/*"]
     }]
   })
 }
@@ -144,7 +143,7 @@ resource "aws_iam_role_policy" "lambda_s3" {
 locals {
   # Only main's bucket holds resume data — dev/stage read and write it too, via the
   # env-agnostic RESUME_BUCKET_NAME. See the design spec §4.1.
-  resume_bucket_arn = aws_s3_bucket.audio.arn
+  resume_bucket_arn = aws_s3_bucket.data["main"].arn
 }
 
 # --- GitHub Actions OIDC: how deploy.yml authenticates to AWS. It replaced an IAM user
@@ -261,11 +260,11 @@ resource "aws_iam_role" "vercel" {
   })
 }
 
-# Carried over verbatim from the deleted vercel-sa user's inline policy — the migration
-# moved the identity, not the permissions. ResumeHeadObjectNotFound in particular is
-# load-bearing; its comment explains why. ResumeDraftCleanup, by contrast, has no caller:
-# nothing under web/ issues a DeleteObjectCommand. Left in place rather than dropped as a
-# drive-by, since removing it is its own change.
+# Carried over from the deleted vercel-sa user's inline policy — the migration moved the
+# identity, not the permissions. ResumeHeadObjectNotFound in particular is load-bearing;
+# its comment explains why. The s3:DeleteObject grant that came across with it is gone:
+# nothing under web/ issues a DeleteObjectCommand, and deleting drafts is the job of the
+# resume/drafts/ lifecycle rule in environments.tf, not the app's.
 resource "aws_iam_role_policy" "vercel" {
   name = "${var.project_name}-vercel-policy"
   role = aws_iam_role.vercel.id
@@ -278,7 +277,7 @@ resource "aws_iam_role_policy" "vercel" {
         Effect = "Allow"
         Action = ["s3:PutObject", "s3:GetObject"]
         Resource = flatten([
-          for arn in local.all_audio_bucket_arns : ["${arn}/uploads/*", "${arn}/outputs/*"]
+          for arn in local.all_data_bucket_arns : ["${arn}/uploads/*", "${arn}/outputs/*"]
         ])
       },
       {
@@ -286,12 +285,6 @@ resource "aws_iam_role_policy" "vercel" {
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject"]
         Resource = ["${local.resume_bucket_arn}/resume/*"]
-      },
-      {
-        Sid      = "ResumeDraftCleanup"
-        Effect   = "Allow"
-        Action   = ["s3:DeleteObject"]
-        Resource = ["${local.resume_bucket_arn}/resume/drafts/*"]
       },
       {
         # HeadObject on a key that does not exist returns 403, not 404, unless the
@@ -306,6 +299,22 @@ resource "aws_iam_role_policy" "vercel" {
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]
         Resource = [local.resume_bucket_arn]
+      },
+      {
+        Sid      = "NewsDeskObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = [for arn in local.all_data_bucket_arns : "${arn}/news-desk/*"]
+      },
+      {
+        # Same reason as ResumeHeadObjectNotFound above: without ListBucket, S3 answers
+        # a GetObject for a missing key with 403, not 404. The News Desk's first page
+        # load reads a snapshot that does not exist yet, and would report that as a
+        # permissions failure. Grants listing key names in the three data buckets.
+        Sid      = "NewsDeskMissingSnapshotIs404"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = local.all_data_bucket_arns
       },
       {
         Sid      = "InvokeProcessor"
@@ -341,12 +350,18 @@ resource "vercel_project" "looper" {
   # is that a *new* top-level directory that becomes build-relevant would
   # silently stop deploying until it is added here.
   #
+  # Vercel runs this with the working directory set to root_directory, and git
+  # pathspecs resolve relative to the cwd — so a bare `web content` would look
+  # for web/web and web/content, never match, always exit 0 and skip every
+  # build (#229). The `:(top)` magic prefix anchors each pathspec to the repo
+  # root, which holds whatever root_directory is set to.
+  #
   # This also makes Instant Rollback usable. On Hobby it only reaches the
   # immediately previous production deployment, and the release job pushes a
   # CHANGELOG-only commit to main right after each promotion merge — without
   # this, that commit is its own deployment and the single rollback step
   # reverts a markdown heading instead of the release.
-  ignore_command = "git diff --quiet HEAD^ HEAD -- web content"
+  ignore_command = "git diff --quiet HEAD^ HEAD -- ':(top)web' ':(top)content'"
 
   # The resume publish route refuses to run unless VERCEL_ENV is "production"
   # (spec §7.3), and VERCEL_ENV is a Vercel system variable. The provider
@@ -377,6 +392,42 @@ resource "vercel_project" "looper" {
   # so this exposes only the public portfolio pages, which are already public on
   # production.
   vercel_authentication = { deployment_type = "none" }
+}
+
+# Bought through Vercel on 2026-09-28, so it lives in the same team and Vercel
+# runs its DNS. No git_branch, so it serves production (main).
+# bgm-looper.vercel.app keeps working alongside it.
+resource "vercel_project_domain" "custom" {
+  project_id = vercel_project.looper.id
+  domain     = "ashutosh-pandey.com"
+}
+
+resource "vercel_project_domain" "custom_www" {
+  project_id           = vercel_project.looper.id
+  domain               = "www.ashutosh-pandey.com"
+  redirect             = vercel_project_domain.custom.domain
+  redirect_status_code = 308
+}
+
+# Branch domains: each serves the latest deployment of its branch, so they pick
+# up the same git_branch-scoped env vars (bucket, Lambda) as the vercel.app
+# branch URLs. Previews have no Vercel Authentication (see above), so these
+# are public; the tools stay behind APP_PASSWORD.
+resource "vercel_project_domain" "custom_branch" {
+  for_each   = toset(["dev", "stage"])
+  project_id = vercel_project.looper.id
+  domain     = "${each.key}.${vercel_project_domain.custom.domain}"
+  git_branch = each.key
+}
+
+# The host each branch is served at: Cognito's callback URLs and, later, the
+# digest's API destinations.
+locals {
+  site_hosts = {
+    main  = vercel_project_domain.custom.domain
+    dev   = "dev.${vercel_project_domain.custom.domain}"
+    stage = "stage.${vercel_project_domain.custom.domain}"
+  }
 }
 
 # --- Firewall ---
@@ -471,7 +522,7 @@ resource "vercel_project_environment_variable" "aws_region" {
 resource "vercel_project_environment_variable" "resume_bucket_name" {
   project_id = vercel_project.looper.id
   key        = "RESUME_BUCKET_NAME"
-  value      = aws_s3_bucket.audio.id
+  value      = aws_s3_bucket.data["main"].id
   target     = local.env_targets
   sensitive  = false
 }
@@ -498,6 +549,14 @@ resource "vercel_project_environment_variable" "openrouter_base_url" {
   project_id = vercel_project.looper.id
   key        = "OPENROUTER_BASE_URL"
   value      = "https://openrouter.ai/api/v1"
+  target     = local.env_targets
+  sensitive  = false
+}
+
+resource "vercel_project_environment_variable" "news_desk_model" {
+  project_id = vercel_project.looper.id
+  key        = "NEWS_DESK_MODEL"
+  value      = var.news_desk_model
   target     = local.env_targets
   sensitive  = false
 }

@@ -1,6 +1,6 @@
 """Tests for changelog-sync.py and changelog-release.py.
 
-Run in CI by deploy.yml's `test` job. The scripts are invoked as subprocesses
+Run in CI by deploy.yml's `unit` job. The scripts are invoked as subprocesses
 rather than imported: their hyphenated filenames are not importable, and the
 exit codes are part of what deploy.yml relies on.
 """
@@ -92,6 +92,23 @@ def test_reflowed_entry_counts_as_shipped(tmp_path):
     assert "kept=0" in proc.stdout
     assert out.read_text(encoding="utf-8") == released(
         "### Added\n\n- one entry that was rewrapped on dev\n"
+    )
+
+
+def test_same_text_under_a_different_heading_is_not_shipped(tmp_path):
+    """An entry recategorized on dev is matched per subsection, not globally.
+    Keying on text alone let main's `### Added` copy shadow dev's identical
+    `### Fixed` one, emptying [Unreleased] with kept=0. It now stays, and
+    main_only goes non-zero so the sync PR title tells a human to look."""
+    text = "- the same sentence filed under two different headings\n"
+    proc, out = sync(
+        tmp_path, released(f"### Added\n\n{text}"), dev(f"### Fixed\n\n{text}")
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "kept=1" in proc.stdout
+    assert "main_only=1" in proc.stdout
+    assert f"## [Unreleased]\n\n### Fixed\n\n{text}\n## [1.1.0]" in out.read_text(
+        encoding="utf-8"
     )
 
 

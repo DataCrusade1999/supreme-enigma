@@ -11,7 +11,7 @@ what's coming is written down somewhere.
 
 ## Phase 2: Next.js tool page
 
-A new gated tool page at `app/app/tools/pdf-restorer/`, following the
+A new gated tool page at `web/app/tools/pdf-restorer/`, following the
 same shape as `bgm-looper` and `bgm-extractor`:
 
 - Browser uploads the PDF directly to S3 via a presigned URL
@@ -42,7 +42,7 @@ same shape as `bgm-looper` and `bgm-extractor`:
   from S3 to a temp path, call `restore_pdf()` unchanged, upload the
   result back to S3. No changes to any Phase 1 module expected.
 - Dockerfile installs the system dependencies Phase 1's `README.md`
-  documents for local dev — Tesseract OCR + qpdf — the container-image
+  documents for local dev — Tesseract OCR + Ghostscript — the container-image
   equivalent of `looper/Dockerfile`'s `ffmpeg` install step.
 - Terraform, following this repo's shared-vs-per-branch split
   (`shared.tf` / `environments.tf`):

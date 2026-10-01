@@ -57,7 +57,7 @@ describe("resume keys", () => {
   });
 
   it("reads the bucket from RESUME_BUCKET_NAME, not S3_BUCKET_NAME", () => {
-    // S3_BUCKET_NAME is the per-branch AUDIO bucket. Resume data lives in
+    // S3_BUCKET_NAME is the per-branch bucket. Resume data lives in
     // main's bucket on every branch — see the design spec §4.1.
     process.env.RESUME_BUCKET_NAME = "resume-bucket";
     process.env.S3_BUCKET_NAME = "audio-bucket";

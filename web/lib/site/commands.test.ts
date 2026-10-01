@@ -7,7 +7,7 @@ describe("COMMANDS", () => {
     localStorage.clear();
   });
 
-  it("has one command per nav destination, every tool, and both theme choices", () => {
+  it("has one command per nav destination, every tool, and a theme toggle", () => {
     expect(COMMANDS.map((command) => command.id)).toEqual([
       "cd-home",
       "cd-about",
@@ -20,9 +20,21 @@ describe("COMMANDS", () => {
       "open-bgm-looper",
       "open-resume-admin",
       "open-newsletter-admin",
+      "open-money-planner",
+      "open-news-desk",
       "open-content-editor",
-      "theme-dark",
-      "theme-light",
+      "theme",
+    ]);
+  });
+
+  it("pins six commands for the empty command bar", () => {
+    expect(COMMANDS.filter((command) => command.pinned).map((command) => command.id)).toEqual([
+      "cd-projects",
+      "cd-resume",
+      "cd-blog",
+      "cd-contact",
+      "cd-tools",
+      "theme",
     ]);
   });
 
@@ -40,6 +52,8 @@ describe("COMMANDS", () => {
     ["open-bgm-looper", "/tools/bgm-looper"],
     ["open-resume-admin", "/tools/resume-admin"],
     ["open-newsletter-admin", "/tools/newsletter-admin"],
+    ["open-money-planner", "/tools/money-planner"],
+    ["open-news-desk", "/tools/news-desk"],
     ["open-content-editor", "/keystatic"],
   ])("%s pushes %s", (id, href) => {
     const push = vi.fn();
@@ -47,20 +61,16 @@ describe("COMMANDS", () => {
     expect(push).toHaveBeenCalledWith(href);
   });
 
-  it("theme-dark sets the dark class and persists the choice", () => {
-    const push = vi.fn();
-    const themeDark = COMMANDS.find((command) => command.id === "theme-dark");
-    themeDark?.run({ push });
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
-    expect(localStorage.getItem("theme")).toBe("dark");
-  });
-
-  it("theme-light removes the dark class and persists the choice", () => {
+  it("theme switches dark to light and persists the choice", () => {
     document.documentElement.classList.add("dark");
-    const push = vi.fn();
-    const themeLight = COMMANDS.find((command) => command.id === "theme-light");
-    themeLight?.run({ push });
+    COMMANDS.find((command) => command.id === "theme")?.run({ push: vi.fn() });
     expect(document.documentElement.classList.contains("dark")).toBe(false);
     expect(localStorage.getItem("theme")).toBe("light");
+  });
+
+  it("theme switches light to dark and persists the choice", () => {
+    COMMANDS.find((command) => command.id === "theme")?.run({ push: vi.fn() });
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(localStorage.getItem("theme")).toBe("dark");
   });
 });

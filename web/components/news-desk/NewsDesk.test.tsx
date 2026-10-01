@@ -1,0 +1,258 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { NewsDesk } from "./NewsDesk";
+import type { Snapshot } from "../../lib/news-desk/types";
+
+const NOW = "2026-09-25T12:00:00.000Z";
+
+const SNAPSHOT: Snapshot = {
+  version: 1,
+  refreshedAt: "2026-09-25T10:00:00.000Z",
+  headlines: [
+    {
+      id: "a",
+      title: "Moody's raises India FY27 GDP forecast to 7%",
+      url: "https://news.google.com/rss/articles/a",
+      source: "Reuters",
+      publishedAt: "2026-09-25T09:00:00.000Z",
+      direct: false,
+      tag: "Economy",
+      region: "local",
+    },
+    {
+      id: "b",
+      title: "Cabinet to decide on new BIT template",
+      url: "https://www.livemint.com/economy/bit",
+      source: "Mint",
+      summary: "New template aims to ease dispute settlement.",
+      publishedAt: "2026-09-25T08:00:00.000Z",
+      direct: true,
+      tag: "Legislation",
+      region: "local",
+    },
+    {
+      id: "c",
+      title: "Athletes congratulated by minister",
+      url: "https://news.google.com/rss/articles/c",
+      source: "PIB",
+      publishedAt: "2026-09-25T07:00:00.000Z",
+      direct: false,
+      tag: "Drop",
+      region: "local",
+    },
+    {
+      id: "d",
+      title: "RBI releases auction results",
+      url: "https://www.rbi.org.in/d",
+      source: "RBI",
+      publishedAt: "2026-09-25T06:00:00.000Z",
+      direct: true,
+      tag: "Untagged",
+      region: "local",
+    },
+  ],
+  indicators: [
+    {
+      id: "cpi-headline",
+      label: "Retail inflation",
+      unit: "%",
+      period: "Aug 2026",
+      latest: 4.82,
+      prevPeriod: "Jul 2026",
+      prev: 4.45,
+      lastGoodAt: "2026-09-25T10:00:00.000Z",
+    },
+  ],
+  sourceErrors: [{ source: "SEBI", message: "timed out" }],
+};
+
+describe("NewsDesk", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("lists headlines newest first, linking out in a new tab", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    const links = screen.getAllByRole("link");
+    expect(links.map((l) => l.textContent)).toEqual([
+      "Moody's raises India FY27 GDP forecast to 7%",
+      "Cabinet to decide on new BIT template",
+      "RBI releases auction results",
+    ]);
+    expect(links[1]).toHaveAttribute("href", "https://www.livemint.com/economy/bit");
+    expect(links[1]).toHaveAttribute("target", "_blank");
+    expect(links[1]).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByText("New template aims to ease dispute settlement.")).toBeInTheDocument();
+    expect(screen.getByText("Reuters · 3h ago")).toBeInTheDocument();
+  });
+
+  it("says when it last refreshed and which sources failed", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    expect(screen.getByText(/Refreshed 2h ago/)).toBeInTheDocument();
+    expect(screen.getByText("1 source failed")).toBeInTheDocument();
+    expect(screen.getByText("SEBI: timed out")).toBeInTheDocument();
+  });
+
+  it("shows an empty state before the first refresh", () => {
+    render(<NewsDesk initial={null} problem={null} nowIso={NOW} />);
+    expect(screen.getByText("Nothing saved yet. Press Refresh to fetch headlines.")).toBeInTheDocument();
+  });
+
+  it("shows the server's problem instead of a list", () => {
+    render(<NewsDesk initial={null} problem="Could not read the saved headlines." nowIso={NOW} />);
+    expect(screen.getByText("Could not read the saved headlines.")).toBeInTheDocument();
+  });
+
+  it("replaces the list with the refreshed snapshot, disabling the button meanwhile", async () => {
+    let resolve!: (r: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((r) => (resolve = r))));
+    render(<NewsDesk initial={null} problem={null} nowIso={NOW} />);
+
+    const button = screen.getByRole("button", { name: "Refresh" });
+    fireEvent.click(button);
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    expect(fetch).toHaveBeenCalledWith("/api/news-desk/refresh", { method: "POST" });
+
+    resolve(new Response(JSON.stringify(SNAPSHOT), { status: 200 }));
+    await waitFor(() => expect(screen.getAllByRole("link")).toHaveLength(3));
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
+  });
+
+  it("keeps the current list and says why when a refresh fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "storage not configured" }), { status: 503 })),
+    );
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("Refresh failed: storage not configured"),
+    );
+    expect(screen.getAllByRole("link")).toHaveLength(3);
+  });
+
+  it("shows topic tabs with counts, never counting dropped items", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    expect(within(screen.getByRole("group", { name: "Topics" })).getAllByRole("button").map((t) => t.textContent)).toEqual([
+      "All 3",
+      "Economy 1",
+      "Reforms 0",
+      "Legislation 1",
+      "Hidden 1",
+    ]);
+    expect(screen.getByRole("button", { name: "All 3" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Athletes congratulated by minister")).not.toBeInTheDocument();
+  });
+
+  it("filters by tab, and shows untagged items only under All", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "Legislation 1" }));
+    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
+      "Cabinet to decide on new BIT template",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Reforms 0" }));
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    expect(screen.getByText("No headlines tagged Reforms.")).toBeInTheDocument();
+  });
+
+  it("labels each headline with its topic", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    const items = within(screen.getByRole("list", { name: "Headlines" })).getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent(/^Economy/);
+    expect(items[1]).toHaveTextContent(/^Legislation/);
+    expect(items[2]).not.toHaveTextContent(/Untagged/);
+  });
+
+  it("lists the headlines tagged off-topic under Hidden", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "Hidden 1" }));
+    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
+      "Athletes congratulated by minister",
+    ]);
+  });
+
+  it("says so when nothing is hidden", () => {
+    const none = { ...SNAPSHOT, headlines: SNAPSHOT.headlines.filter((h) => h.tag !== "Drop") };
+    render(<NewsDesk initial={none} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "Hidden 0" }));
+    expect(screen.getByText("No hidden headlines.")).toBeInTheDocument();
+  });
+
+  it("says everything is hidden when no headline is on topic", () => {
+    const allDropped = { ...SNAPSHOT, headlines: SNAPSHOT.headlines.filter((h) => h.tag === "Drop") };
+    render(<NewsDesk initial={allDropped} problem={null} nowIso={NOW} />);
+    expect(screen.getByText("Every saved headline is hidden.")).toBeInTheDocument();
+  });
+
+  it("shows the indicator table beside the headlines", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    expect(within(screen.getByRole("table", { name: "Official indicators" })).getByText("4.82%")).toBeInTheDocument();
+  });
+
+  it("updates the indicators when a refresh returns new ones", async () => {
+    const next = {
+      ...SNAPSHOT,
+      indicators: [{ ...SNAPSHOT.indicators[0], period: "Sep 2026", latest: 5.1, prevPeriod: "Aug 2026", prev: 4.82 }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(next), { status: 200 })));
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(screen.getByText("5.1%")).toBeInTheDocument());
+  });
+
+  it("shows the empty indicator table before the first refresh", () => {
+    render(<NewsDesk initial={null} problem={null} nowIso={NOW} />);
+    expect(screen.getByText("Indicators load on the next Refresh.")).toBeInTheDocument();
+  });
+
+  it("removes a pinned row after the server confirms", async () => {
+    const pin = { ...SNAPSHOT.indicators[0], id: "pin-abc", label: "IIP manufacturing" };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<NewsDesk initial={{ ...SNAPSHOT, indicators: [...SNAPSHOT.indicators, pin] }} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove IIP manufacturing" }));
+    await waitFor(() => expect(screen.queryByText("IIP manufacturing")).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith("/api/news-desk/indicators/pin-abc", { method: "DELETE" });
+  });
+
+  it("offers the chat panel", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    expect(screen.getByRole("button", { name: "Ask MoSPI" })).toBeInTheDocument();
+  });
+  it("splits headlines into Local and International tabs, counting topics within each", () => {
+    const withRegions: Snapshot = {
+      ...SNAPSHOT,
+      headlines: SNAPSHOT.headlines.map((h) => (h.id === "a" ? { ...h, region: "international" } : { ...h, region: "local" })),
+    };
+    render(<NewsDesk initial={withRegions} problem={null} nowIso={NOW} />);
+    expect(within(screen.getByRole("group", { name: "Regions" })).getAllByRole("button").map((t) => t.textContent)).toEqual([
+      "Local 2",
+      "International 1",
+    ]);
+    expect(screen.getByRole("button", { name: "Local 2" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Moody's raises India FY27 GDP forecast to 7%")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Legislation 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "International 1" }));
+    // Switching region goes back to All.
+    expect(screen.getByRole("button", { name: "All 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
+      "Moody's raises India FY27 GDP forecast to 7%",
+    ]);
+  });
+
+  it("files a headline saved before regions by its publisher", () => {
+    const noRegions: Snapshot = { ...SNAPSHOT, headlines: SNAPSHOT.headlines.map((h) => ({ ...h, region: undefined })) };
+    render(<NewsDesk initial={noRegions} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "International 1" }));
+    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
+      "Moody's raises India FY27 GDP forecast to 7%",
+    ]);
+  });
+
+  it("says so when a region has no headlines", () => {
+    render(<NewsDesk initial={SNAPSHOT} problem={null} nowIso={NOW} />);
+    fireEvent.click(screen.getByRole("button", { name: "International 0" }));
+    expect(screen.getByText("No international headlines saved.")).toBeInTheDocument();
+  });
+});

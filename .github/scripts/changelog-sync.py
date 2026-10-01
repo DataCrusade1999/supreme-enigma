@@ -77,9 +77,18 @@ def parse(body, label):
     return groups
 
 
-def key(entry):
-    """Match entries across branches ignoring how they happen to be wrapped."""
-    return re.sub(r"\s+", " ", " ".join(entry)).strip()
+def norm(lines):
+    return re.sub(r"\s+", " ", " ".join(lines)).strip()
+
+
+def key(head, entry):
+    """Match entries across branches ignoring how they happen to be wrapped.
+
+    Keyed on the enclosing `###` heading as well as the text: identical wording
+    under two different headings is a recategorization, not a shipped entry, and
+    must not de-duplicate away.
+    """
+    return (norm([head]) if head is not None else None, norm(entry))
 
 
 def render(groups):
@@ -116,12 +125,12 @@ def main() -> int:
         section_body(dev_lines, rf"^{re.escape(UNRELEASED)}$", "dev"), "dev"
     )
 
-    shipped = {key(e) for _, entries in released for e in entries}
-    on_dev = {key(e) for _, entries in dev_unreleased for e in entries}
+    shipped = {key(head, e) for head, entries in released for e in entries}
+    on_dev = {key(head, e) for head, entries in dev_unreleased for e in entries}
     remainder = [
         (head, kept)
         for head, entries in dev_unreleased
-        if (kept := [e for e in entries if key(e) not in shipped])
+        if (kept := [e for e in entries if key(head, e) not in shipped])
     ]
 
     body = render(remainder)

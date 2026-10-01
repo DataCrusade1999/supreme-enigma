@@ -167,15 +167,14 @@ Gotchas:
   the check attaches to a `dev` commit. Promote through `dev → stage → main` as
   usual and this resolves itself.
 - **The agent performs real writes** (POST/PUT/DELETE) while exploring. Against
-  stage that means real uploads to `bgm-looper-audio-stage-*` and real
+  stage that means real uploads to `portfolio-data-stage-*` and real
   `bgm-looper-processor-stage` invocations. Objects expire after 1 day, so the
   cost is bounded but not zero.
 - **`/tools/bgm-looper` is not reachable by the agent.** The Vercel bypass gets
   it past Vercel Authentication, but `web/lib/route-gate.ts` gates the tool,
-  `/api/looper`, and `/keystatic` behind `APP_PASSWORD` independently. Scope
-  `test_requirement` to the public portfolio pages, or accept putting the app
-  password into the requirement string — where it would land in Actions logs
-  and the Agent Space journal.
+  `/api/looper`, and `/keystatic` behind the Cognito sign-in independently. Scope
+  `test_requirement` to the public portfolio pages; the agent cannot complete a
+  Google, email-code or passkey sign-in.
 - The profileless path (`target-url` + `agent-type: ui` inputs, no profile) is
   in the action's `action.yml` but undocumented by AWS — treat it as a fallback.
 

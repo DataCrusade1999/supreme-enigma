@@ -12,7 +12,10 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
     env: {
-      APP_PASSWORD: "test123",
+      COGNITO_DOMAIN: "https://login.invalid",
+      COGNITO_CLIENT_ID: "e2e",
+      COGNITO_USER_POOL_ID: "us-east-1_e2e",
+      OWNER_EMAIL: "owner@example.com",
       COOKIE_SECRET: "devsecret",
       // `next build` hard-fails without all three of these while collecting
       // page data for /api/keystatic/[...params] — dummy values are enough,

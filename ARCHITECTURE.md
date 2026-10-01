@@ -17,7 +17,7 @@ The IAM policies were already extended to make room for it.
 
 ```
 Browser
-  │ (shared password → signed HttpOnly cookie)
+  │ (Cognito owner sign-in → signed HttpOnly cookie)
   ▼
 Vercel (Next.js 15 + React 19, root_directory="web")
   │  proxy.ts gates /tools/bgm-looper, /api/looper/*, /keystatic, /api/keystatic/*
@@ -37,8 +37,8 @@ AWS (personal account 223376380711, us-east-1, Terraform-managed)
 | Resource | main | dev | stage |
 |---|---|---|---|
 | Lambda function | `bgm-looper-processor` | `-dev` | `-stage` |
-| S3 bucket | `bgm-looper-audio-<acct>` | `-dev-<acct>` | `-stage-<acct>` |
-| Vercel deploy | `bgm-looper.vercel.app` | `-git-dev-...` | `-git-stage-...` |
+| S3 bucket | `portfolio-data-<acct>` | `-dev-<acct>` | `-stage-<acct>` |
+| Vercel deploy | `ashutosh-pandey.com` | `dev.ashutosh-pandey.com` | `stage.ashutosh-pandey.com` |
 
 Each Lambda: container image (`librosa`, `numpy`, `soundfile`,
 `pyloudnorm`, static `ffmpeg`), 1024MB, 60s timeout. Each S3 bucket: public
@@ -68,18 +68,19 @@ access blocked, CORS (PUT/GET, `*` origin), 1-day object lifecycle.
 
 ## Auth
 
-Single shared password (Vercel env var), constant-time compare in
-`/api/login`, HttpOnly signed cookie (`COOKIE_SECRET`, payload is just the
-literal string `"authenticated"`) — no accounts, no per-user state.
+Owner-only sign-in through Cognito managed login (`/api/auth/login` →
+Cognito at `auth.ashutosh-pandey.com` → `/api/auth/callback`, authorization
+code with PKCE), then an HttpOnly cookie HMAC-signed with `COOKIE_SECRET`
+whose payload is its issue time.
 `web/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth
 for what's protected.
 
 ## CI/CD
 
-`.github/workflows/deploy.yml`: `test` job (Lambda pytest + app vitest) on
-every push/PR → `changes` job (path-filters whether `lambda/` changed) →
-`deploy` job (build/push image, `update-function-code`) → `release` job
-(main-only: auto-version from Conventional Commits, updates
+`.github/workflows/deploy.yml`: `unit`, `lambda`, `e2e` and `security` jobs
+run in parallel on every push/PR → `changes` job (path-filters whether
+`lambda/` changed) → `deploy` job (build/push image, `update-function-code`)
+→ `release` job (main-only: auto-version from Conventional Commits, updates
 `CHANGELOG.md`, creates GitHub Release, opens changelog-sync PR to `dev`).
 Vercel's own git integration deploys the app independently of GitHub
 Actions.

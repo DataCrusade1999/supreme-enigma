@@ -30,9 +30,11 @@ export function CommandBar() {
   const overlayMouseDownOnSelfRef = useRef(false);
   const router = useRouter();
 
-  const filtered = COMMANDS.filter((command) =>
-    command.label.toLowerCase().includes(query.toLowerCase()),
-  );
+  // An empty query shows only the pinned commands; typing searches them all.
+  const filtered = query
+    ? COMMANDS.filter((command) => command.label.toLowerCase().includes(query.toLowerCase()))
+    : COMMANDS.filter((command) => command.pinned);
+  const hiddenCount = query ? 0 : COMMANDS.length - filtered.length;
 
   useEffect(() => {
     isOpenRef.current = isOpen;
@@ -232,14 +234,19 @@ export function CommandBar() {
                     index === selectedIndex ? "text-[var(--color-terminal-accent)]" : ""
                   }`}
                 >
-                  <span>{command.label}</span>
-                  <span className="text-[0.75rem] text-[var(--color-terminal-fg)]/50">
+                  <span className="shrink-0 whitespace-nowrap">{command.label}</span>
+                  <span className="min-w-0 truncate text-[0.75rem] text-[var(--color-terminal-fg)]/50">
                     {command.hint}
                   </span>
                 </button>
               </li>
             ))}
           </ul>
+          {hiddenCount > 0 && (
+            <p className="mt-3 border-t border-[var(--color-terminal-fg)]/10 px-1 pt-2 text-[0.75rem] text-[var(--color-terminal-fg)]/50">
+              {hiddenCount} more — type to search
+            </p>
+          )}
         </TerminalWindow>
       </div>
     </div>

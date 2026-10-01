@@ -7,6 +7,182 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- "Add a passkey" link on the `/tools` hub. It signs you in, opens Cognito's passkey setup, and returns to the hub saying whether the passkey was added. Cognito never offers passkey setup to the owner account, which an admin created (#297).
+- Favicon: the home page's loop ring reduced to 10 bars on a dark tile, with the twelve o'clock bar in red. It is served as `/icon.svg`, plus a 180×180 PNG apple-touch icon for Safari and iOS, which ignore SVG favicons (#281).
+- The site is served at https://ashutosh-pandey.com, with `www.` redirecting to it, and the `dev` and `stage` branches at https://dev.ashutosh-pandey.com and https://stage.ashutosh-pandey.com. The `vercel.app` URLs still work (#275).
+- Every environment except production sends `X-Robots-Tag: noindex`, so search engines do not list the `dev` and `stage` copies of the site (#275).
+- News Desk Local and International tabs: headlines are split by where their feed is based (FT, Reuters, Bloomberg and The Economist are international; the rest are local), with the topic tabs counting within the selected region. Headlines saved before this change count as local until a Refresh sees them in a feed again.
+- News Desk tool at `/tools/news-desk`: headlines on the Indian economy, reforms and legislation from 13 free RSS sources (FT, RBI, SEBI, Mint, Business Standard directly; Reuters, Bloomberg, The Economist, PRS and PIB through Google News), refreshed only when you press Refresh. Items older than 14 days are dropped and duplicates across sources are merged.
+- News Desk topic tags: each Refresh tags new headlines as Economy, Reforms or Legislation with Claude Haiku 4.5 through OpenRouter, and moves off-topic ones to a Hidden tab. The page has a tab per topic with counts. A first refresh of 886 headlines measured ₹7; later refreshes should cost about ₹0.008 per new headline, extrapolated from that run (#253).
+- News Desk indicators: a table of official MoSPI figures beside the headlines (retail inflation, food and beverages inflation, IIP growth, real GDP growth and urban unemployment), with the latest and previous values. Refresh updates them along with the headlines; a figure that fails to refresh keeps its last value and is marked stale (#253).
+- News Desk chat: an Ask MoSPI panel answers questions about Indian official statistics from MoSPI's data, showing each step as it works and drawing a chart when the answer is a time series. A chart can be pinned into the indicator table, and pinned rows can be removed. Each question costs about ₹7, measured at ₹4.6–10.7 across three questions. A pinned row keeps the time window its question asked about and does not advance yet (#270).
+- `/robots.txt`: disallows AI training and AI-scraping crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot and others) from the whole site, and keeps every crawler out of `/tools`, `/api/`, `/keystatic` and `/login`. Search engines can still index the public pages. It is advisory — crawlers that ignore robots.txt are not stopped.
+- Money Planner tool at `/tools/money-planner`: from a balance, a monthly salary and itemized expenses on their own cadences, the date a purchase becomes affordable without leaving the next pay cycle short.
+- Storybook for `web/components/`, and Chromatic visual regression on pull
+  requests into `dev`. Every story is snapshotted in both light and dark.
+  Storybook is installed locally but never run by `npm test` or
+  `npm run lint` — all build cost is on CI.
+- `deploy.yml` runs Playwright on Windows and macOS as well as Linux, on
+  promotion PRs into `stage`/`main` and on `workflow_dispatch` only. The repo
+  is private on GitHub Free (2,000 minutes/month) and macOS runners cost about
+  10x Linux against that quota, so cross-OS on every PR would stall CI, and
+  `release` with it, within days.
+- A `security` job runs Trivy over the tree (npm lockfile vulnerabilities,
+  Dockerfile and Terraform misconfiguration, secrets) at HIGH/CRITICAL with
+  `ignore-unfixed`, and fails the run on findings. Results go to the job
+  summary: SARIF upload, CodeQL and dependency review all need Advanced
+  Security, which is paid on private repos. `.trivyignore` holds accepted
+  findings with a reason each.
+- A `summary` job writes one status table for the whole run.
+- The `summary` job's table also reports the `chromatic` job (landed in
+  #215), as a reported row only — it gates nothing.
+- Playwright results and Trivy scan results are uploaded as artifacts
+  (`playwright-results-<OS>` for 7 days, `trivy-results` — the JSON plus the
+  rendered markdown — for 30). Nothing was downloadable from a run before
+  this.
+
+### Changed
+
+- Mail sent through SES from `ashutosh-pandey.com` (Cognito sign-in codes, and later access emails) uses `mail.ashutosh-pandey.com` as its envelope sender, so SPF passes for the domain as well as DKIM. The bare domain publishes `v=spf1 -all`, since nothing sends with it as the envelope sender (#300).
+- The Cognito sign-in page at `auth.ashutosh-pandey.com` uses the site's dark theme: its colours, square corners, the wordmark, the column rules and the loop ring, with the form on the left as on `/login`. The settings and images are in Terraform (`infra/main/branding.json`, `infra/main/branding/`), so a recreate restores them. Managed login has no font setting, so only the logos and background use the site's typefaces (#296).
+- Signing in to the tools uses Cognito (Google, an email code or a passkey) at `auth.ashutosh-pandey.com`, and only the site owner's account is accepted. The shared password, its login endpoint and its rate limiter are removed (#290).
+- The login redirect reads `/login?next=/tools/news-desk` instead of `/login?next=%2Ftools%2Fnews-desk` (#277).
+- The S3 buckets are now `portfolio-data-<account>` (plus `-dev-` and `-stage-`), replacing `bgm-looper-audio-*`. They hold the resume and News Desk data as well as audio. S3 cannot rename a bucket, so the resume and News Desk data were copied into new buckets and the old ones deleted (#273).
+- Buttons and the News Desk "sources failed" toggle show a pointer cursor across the site. News Desk links no longer change colour on hover, Refresh sits above the headline column, and the indicator table is centred in the window from the first paint and stays there while the headlines scroll.
+- The ⌘K command bar opens with six pinned commands (`cd projects`, `cd resume`, `cd blog`, `cd contact`, `cd tools`, `theme`) and a count of the rest; typing still searches every command. `theme dark` and `theme light` are now one `theme` toggle.
+- CI no longer emits Node 20 deprecation warnings or Ubuntu migration notices.
+  `actions/upload-artifact` moves v4 to v7 and `actions/download-artifact` v4
+  to v8 (both now run natively on Node 24 instead of being forced onto it),
+  and every `runs-on` pins `ubuntu-24.04` instead of `ubuntu-latest`. The pin
+  is behaviour-neutral today but has to be bumped by hand once Ubuntu 26.04
+  is wanted. The Playwright report now travels inside its artifact under a
+  `playwright-results-<OS>/` directory and the `summary` job downloads with
+  `merge-multiple: true`, because download-artifact v5+ extracts a
+  single-artifact pattern match flat and the cross-OS table would otherwise
+  have rendered "no results found" on every run with one e2e leg.
+
+### Fixed
+
+- Command bar rows stay on one line. A long hint used to squeeze the command
+  label until it wrapped (`open news-desk`); the label no longer shrinks and
+  the hint truncates instead.
+- The Money Planner e2e test "remembers a plan across a reload" waits for the
+  login redirect before navigating to the planner. It used to navigate before
+  the session cookie was set and intermittently landed on the sign-in page.
+  Closes #247.
+- Money Planner says a budget that breaks even does exactly that, instead of
+  "you are ₹0 short each month". A monthly average that rounds to ₹0 counts
+  as breaking even, so it no longer reads as "₹0 short" or "₹0 spare" either.
+- Money Planner's "How this adds up" breakdown is a real table: Date, Item,
+  Amount and Balance columns under a header, right-aligned tabular figures,
+  and each date shown once for the events that share it. It scrolls inside
+  the panel with the header pinned, and fits a phone-width screen without
+  widening the page.
+- Money Planner's number fields (balance, salary, pay day, price, expense
+  amount) start blank with a greyed hint instead of a prefilled `0` or `1`,
+  so what is typed is the whole value rather than landing after the default.
+  A plan saved by an earlier version with nothing typed into it loads as the
+  blank form. Blank fields now survive a reload as blank instead of `null`.
+- `promotion-guard` and the release version bump resolve the last release
+  with `git describe --match 'v[0-9]*'` rather than `'v*'`, so a stray
+  non-release tag (`vtest`, `vnext`) reachable from `main` can no longer be
+  returned as the last tag — which would have made the guard assert against
+  the wrong tag and the bump compute its range from the wrong point.
+
+- `changelog-sync.py` keys entries on their enclosing `###` heading as well
+  as their text. Keying on text alone meant an entry recategorized on `dev`
+  after a promotion matched the copy that shipped under a different heading
+  on `main` and was dropped from `[Unreleased]` entirely. It now survives,
+  and `main_only` goes non-zero so the sync PR title flags it for review.
+
+- Vercel builds again on a `web/`-touching commit. The `ignore_command` on
+  `vercel_project.looper` runs with the working directory set to
+  `root_directory` (`web`), so its bare `web content` pathspecs resolved to
+  `web/web` and `web/content`, never matched, and exited 0 — which Vercel
+  reads as "skip". Every deployment on all three branches was silently
+  canceled from the `app/` → `web/` rename onwards. The pathspecs now carry
+  the `:(top)` prefix, anchoring them to the repo root.
+- `trivy-results.json` and `trivy-summary.md` are gitignored. The `security`
+  job writes both to the repo root, so running the scan locally left two
+  untracked files — one a 240 KB SBOM — in `git status`, where a `git add -A`
+  would sweep them into the tree.
+- The Trivy summary reports what was scanned, not only what was found. A clean
+  run used to render three lines beside a 240 KB report; it now carries a
+  Coverage table (target, type, `366 packages` / `28 checks`, per-target
+  finding count) and a `Trivy <version> · N targets · commit <sha>` footer. The
+  table renders under the finding tables too, and a report with no targets at
+  all now says so — "no findings" does not distinguish a scan that passed from
+  one that covered nothing.
+- Two summaries appended to the same job's step summary are separated by a
+  blank line. The `summary` job writes both the run table and the e2e table,
+  and the second one's heading used to land directly under the first's closing
+  paragraph.
+
+### Changed
+
+- The three `e2e` matrix legs no longer write a summary each. They upload
+  their reports and the `summary` job renders one spec × OS table, with a
+  per-OS duration row — the first time CI has reported a duration anywhere,
+  despite the minute budget being what shaped the matrix.
+- Playwright results are read from `tests[].status` rather than
+  `tests[].results[]`, so a retried test counts once instead of as both a
+  pass and a failure, and a flake is labelled as one.
+- The Trivy job emits JSON instead of an ASCII table, and the summary renders
+  findings as three tables (vulnerabilities, misconfiguration, secrets) with
+  advisory links and file/line links at the commit under test. Counting
+  findings no longer means matching `Total:`/`Failures:` lines out of Trivy's
+  own formatting. Secret findings report file and line only; Trivy's `Match`
+  field is never printed.
+- Summaries report counts as tables, list the five slowest tests, group
+  failures by file, link to source, and strip the ANSI escapes Playwright
+  puts in its error messages.
+- `.github/scripts/test-summary.mjs` is now `unit-summary.mjs` (Vitest only)
+  alongside a new `e2e-summary.mjs`, with the shared helpers in
+  `summary-lib.mjs`.
+- Spec paths in the e2e table are derived from each leg's own
+  `config.rootDir` rather than assuming `playwright.config.ts`'s directory.
+  Playwright sets `rootDir` to the project's `testDir`, so the assumed prefix
+  produced `web/a11y.spec.ts` for a file at `web/e2e/a11y.spec.ts` and every
+  link 404'd.
+
+- The single `test` job is now `unit`, `lambda`, `e2e` and `security`, run in
+  parallel; `deploy` and `release` gate on all four. Unit tests stay
+  Linux-only: Vitest runs under jsdom over pure logic and the Lambda ships as
+  a Linux container, so other OS legs would spend minutes for no signal.
+- Superseded PR runs are cancelled by a `concurrency` group; push runs never
+  are, so a cancellation cannot land mid-`deploy` or mid-`release`.
+- `e2e` carries `timeout-minutes: 20`, so a hung browser on a matrix leg
+  cannot burn the 6-hour default against the free-plan quota.
+- `deploy` now also requires `github.ref_name` to be `main`, `dev` or
+  `stage`. The `bgm-looper-ci-deploy` role's OIDC trust policy is
+  `StringEquals` on exactly those three refs, so a `workflow_dispatch` from a
+  feature branch previously ended in a red `deploy` that meant nothing. This
+  was a latent gap, not one the job split introduced.
+- `test-summary.mjs` takes `--label`, and the two new summary scripts are
+  covered by `node --test ".github/scripts/*.test.mjs"` in the `unit` job.
+
+### Fixed
+
+- `CLAUDE.md` and the release-promotion runbook said the changelog-sync PR
+  "does get CI — review it like any other", and told the reader to wait for
+  those checks. The checks do run, but not unaided: because `github-actions[bot]`
+  opens the PR, GitHub finishes the `pull_request` run as `action_required`
+  without executing a job, so the test jobs and the readiness review are absent while
+  Vercel still reports green. Waiting never completes, and absent checks read as
+  "bot PRs don't get CI here" — the belief that wording existed to correct. Both
+  documents now say the run is gated, give the approve command, and state that
+  absent test jobs on a sync PR mean gated rather than skipped. #144, cited as
+  proof the checks arrive unaided, carries the same manual-approval signature as
+  #206. Closes #207.
+
+### Security
+
+- Every route sends `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and a `Permissions-Policy` that turns off camera, microphone and geolocation. Other sites can no longer frame `/login` or `/keystatic`. The CSP sets no `script-src`, which would need per-request nonces, and no `form-action`, because the newsletter form posts to Buttondown (#283).
+- Every GitHub Action in `.github/workflows/` is pinned to a full commit SHA, with the version in a trailing comment. A repointed tag can no longer change what runs in `deploy`, which assumes the AWS deploy role. Dependabot bumps the SHA and the comment together (#283).
+- `next` 16.3.4 → 16.3.8 for GHSA-vcvr-r3jv-pc5j (critical), and `brace-expansion` 2.1.4 → 2.1.7 for CVE-2026-102276 and CVE-2026-102278 (#304).
+
 ## [1.5.2] - 2026-09-17
 
 ### Fixed

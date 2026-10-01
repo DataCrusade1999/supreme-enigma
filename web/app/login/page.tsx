@@ -1,13 +1,13 @@
 "use client";
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { CommandBar } from "../../components/site/CommandBar";
 import { GridBackdrop } from "../../components/site/GridBackdrop";
 import { LoopRing } from "../../components/site/LoopRing";
 import { toolNameFor } from "../../lib/route-gate";
 
-// The hub, not a tool: a password-first visit hasn't said where it's going, and
+// The hub, not a tool: a sign-in with no destination hasn't said where it's going, and
 // the copy below promises every tool opens — landing on one of them picks for
 // the visitor. A visit that *did* say (a `next`) still goes straight through.
 const FALLBACK = "/tools";
@@ -37,29 +37,19 @@ function parseNext(
   }
 }
 
-function LoginForm() {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-  const searchParams = useSearchParams();
+const ERRORS: Record<string, string> = {
+  state: "That sign-in expired or came from another tab. Try again.",
+  denied: "Sign-in was cancelled.",
+  "not-allowed": "That account can't open these tools.",
+  failed: "Sign-in failed. Try again.",
+};
 
+function LoginForm() {
+  const searchParams = useSearchParams();
   const next = parseNext(searchParams.get("next"));
   const destination = next ? toolNameFor(next.pathname) : null;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    const res = await fetch("/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    if (!res.ok) {
-      setError("Invalid password");
-      return;
-    }
-    router.push(next?.full ?? FALLBACK);
-  }
+  const error = ERRORS[searchParams.get("error") ?? ""] ?? null;
+  const href = `/api/auth/login?next=${encodeURIComponent(next?.full ?? FALLBACK)}`;
 
   return (
     <>
@@ -91,44 +81,21 @@ function LoginForm() {
 
       <p className="mt-[18px] max-w-[46ch] text-base leading-relaxed text-muted">
         {destination
-          ? "One shared password covers every tool here — no account, no sign-up. Enter it once and you're through for the session."
-          : "These tools live behind one shared password — no account, no sign-up. Enter it once and every tool on this site opens for the session."}
+          ? "These tools are for the site's owner. Sign in with Google, an email code or a passkey to continue."
+          : "These tools are for the site's owner. Sign in with Google, an email code or a passkey, and every tool on this site opens for the session."}
       </p>
 
-      <form onSubmit={handleSubmit} className="mt-9 flex flex-col gap-3.5">
-        <label
-          htmlFor="password"
-          className="text-[0.6875rem] uppercase tracking-[0.16em] text-muted"
+      <div className="mt-9 flex flex-col gap-3.5">
+        {/* A plain link, not a fetch: the sign-in is a chain of full-page
+          * redirects through Cognito and back to /api/auth/callback. */}
+        <a
+          href={href}
+          className="inline-flex min-h-11 w-fit items-center bg-fg px-5 text-sm font-semibold tracking-tight text-bg transition-colors duration-200 ease-out hover:bg-accent motion-reduce:transition-none"
         >
-          Password
-        </label>
-        <div className="flex items-stretch gap-3">
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            autoComplete="current-password"
-            aria-invalid={error ? "true" : undefined}
-            aria-describedby={error ? "password-error" : undefined}
-            className={`min-h-11 w-full max-w-80 border px-3 text-sm text-fg placeholder:text-muted ${
-              error ? "border-peak" : "border-line"
-            }`}
-          />
-          <button
-            type="submit"
-            className="min-h-11 shrink-0 bg-fg px-5 text-sm font-semibold tracking-tight text-bg transition-colors duration-200 ease-out hover:bg-accent motion-reduce:transition-none"
-          >
-            Log in
-          </button>
-        </div>
+          Sign in
+        </a>
         {error && (
-          <p
-            id="password-error"
-            role="alert"
-            className="flex items-center gap-2 text-[0.8125rem] text-peak"
-          >
+          <p role="alert" className="flex items-center gap-2 text-[0.8125rem] text-peak">
             <svg
               aria-hidden="true"
               width="14"
@@ -148,7 +115,7 @@ function LoginForm() {
             {error}
           </p>
         )}
-      </form>
+      </div>
     </>
   );
 }

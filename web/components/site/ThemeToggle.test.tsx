@@ -45,8 +45,8 @@ describe("ThemeToggle", () => {
     render(<ThemeToggle />);
     expect(screen.getByRole("button")).toHaveAccessibleName("Switch to light mode");
 
-    const themeLight = COMMANDS.find((command) => command.id === "theme-light");
-    act(() => themeLight?.run({ push: vi.fn() }));
+    const theme = COMMANDS.find((command) => command.id === "theme");
+    act(() => theme?.run({ push: vi.fn() }));
 
     expect(screen.getByRole("button")).toHaveAccessibleName("Switch to dark mode");
     expect(document.documentElement.classList.contains("dark")).toBe(false);
