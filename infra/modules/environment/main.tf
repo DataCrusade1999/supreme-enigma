@@ -1,12 +1,16 @@
-# Everything that exists once per branch: the branch's data bucket, Lambda function,
-# its invocation alarm, and the two Vercel env vars that point the app at them.
-# Shared resources (ECR, IAM, the Vercel project) live in infra/shared and are found
-# here by name, so this stack never reads shared's state.
+# Everything that exists once per branch: the branch's data bucket, Lambda function and
+# its exec role, its invocation alarm, the two Vercel env vars that point the app at
+# them, and what the branch's deployments may do on their Vercel role. Shared resources
+# (ECR, the Vercel roles, the Vercel project) live in infra/shared and are found here
+# by name, so this stack never reads shared's state.
 
 data "aws_caller_identity" "current" {}
 
-data "aws_iam_role" "lambda_exec" {
-  name = "${var.project_name}-lambda-exec"
+# The Vercel role this environment's deployments assume. Vercel's OIDC subject has
+# only production and preview, so dev and stage share the preview role — see the
+# per-env IAM spec §6.
+data "aws_iam_role" "vercel" {
+  name = contains(var.vercel_target, "production") ? "${var.project_name}-vercel" : "${var.project_name}-vercel-preview"
 }
 
 data "aws_ecr_repository" "looper" {
@@ -129,13 +133,49 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
 # --- Lambda ---
 # Each branch's CI run updates its own function's image code — see .github/workflows/deploy.yml.
 
+# One exec role per environment, so each function can reach only its own bucket.
+# The app passes this environment's S3_BUCKET_NAME in every invoke payload.
+resource "aws_iam_role" "lambda_exec" {
+  name = "${var.project_name}-lambda-exec-${var.env}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_s3" {
+  name = "${var.project_name}-lambda-s3-${var.env}"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject"]
+      Resource = ["${aws_s3_bucket.data.arn}/*"]
+    }]
+  })
+}
+
 resource "aws_lambda_function" "this" {
   function_name = local.lambda_function_name
-  role          = data.aws_iam_role.lambda_exec.arn
+  role          = aws_iam_role.lambda_exec.arn
   package_type  = "Image"
   image_uri     = "${data.aws_ecr_repository.looper.repository_url}:${var.bootstrap_image_tag}"
   timeout       = 60
   memory_size   = 1024
+
+  depends_on = [aws_iam_role_policy_attachment.lambda_basic, aws_iam_role_policy.lambda_s3]
 
   lifecycle {
     ignore_changes = [image_uri]
@@ -200,4 +240,48 @@ resource "vercel_project_environment_variable" "lambda_function_name" {
   target     = var.vercel_target
   git_branch = var.vercel_git_branch
   sensitive  = false
+}
+
+# --- What this environment's deployments may do, on the Vercel role for its target.
+#     The resume grants are not here: the resume lives in main's bucket and every
+#     environment uses it, so they stay in infra/shared/shared.tf. ---
+
+resource "aws_iam_role_policy" "vercel" {
+  name = "${var.project_name}-vercel-${var.env}"
+  role = data.aws_iam_role.vercel.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "AudioScratchObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = ["${aws_s3_bucket.data.arn}/uploads/*", "${aws_s3_bucket.data.arn}/outputs/*"]
+      },
+      {
+        Sid      = "NewsDeskObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = ["${aws_s3_bucket.data.arn}/news-desk/*"]
+      },
+      {
+        # Same reason as ResumeHeadObjectNotFound in infra/shared/shared.tf: without
+        # ListBucket, S3 answers a GetObject for a missing key with 403, not 404. The
+        # News Desk's first page load reads a snapshot that does not exist yet, and
+        # would report that as a permissions failure. Grants listing key names in this
+        # environment's bucket.
+        Sid      = "NewsDeskMissingSnapshotIs404"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [aws_s3_bucket.data.arn]
+      },
+      {
+        Sid      = "InvokeProcessor"
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = [aws_lambda_function.this.arn]
+      }
+    ]
+  })
 }
