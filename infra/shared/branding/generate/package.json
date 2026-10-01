@@ -1,7 +1,7 @@
 {
   "name": "cognito-branding-generate",
   "private": true,
-  "description": "Rebuilds infra/main/branding.json and the SVGs in infra/main/branding/",
+  "description": "Rebuilds infra/shared/branding.json and the SVGs in infra/shared/branding/",
   "scripts": {
     "build": "node settings.js && node assets.js"
   },
