@@ -13,7 +13,7 @@ export const MARKER = "<!-- terraform-plan -->";
 export const MAX_COMMENT = 65000;
 
 export function summarize(plan) {
-  const s = { add: 0, change: 0, destroy: 0, replace: [], deletes: [] };
+  const s = { add: 0, change: 0, destroy: 0, forget: 0, replace: [], deletes: [] };
   for (const { address, change } of plan.resource_changes ?? []) {
     const a = change.actions;
     const del = a.includes("delete");
@@ -21,32 +21,50 @@ export function summarize(plan) {
     if (del && create) s.replace.push(address);
     if (create) s.add++;
     if (a.includes("update")) s.change++;
-    if (del) {
-      s.destroy++;
-      s.deletes.push(address);
-    }
+    if (del) s.destroy++;
+    // A `removed` block drops the resource from state without destroying it. That
+    // still loses it from Terraform's control, so the destroy guard counts it.
+    if (a.includes("forget")) s.forget++;
+    if (del || a.includes("forget")) s.deletes.push(address);
   }
   return s;
 }
 
 function section({ name, plan, text }) {
   const s = summarize(plan);
-  if (s.add + s.change + s.destroy === 0) return `### \`${name}\` — No changes\n`;
-  const lines = [`### \`${name}\` — ${s.add} to add, ${s.change} to change, ${s.destroy} to destroy`];
+  if (s.add + s.change + s.destroy + s.forget === 0) return `### \`${name}\` — No changes\n`;
+  let counts = `${s.add} to add, ${s.change} to change, ${s.destroy} to destroy`;
+  if (s.forget) counts += `, ${s.forget} to forget`;
+  const lines = [`### \`${name}\` — ${counts}`];
   if (s.deletes.length) lines.push("", `⚠ destroys or replaces: ${s.deletes.map((d) => `\`${d}\``).join(", ")}`);
   const f = fence(text);
   lines.push("", "<details><summary>Plan</summary>", "", `${f}\n${text}\n${f}`, "", "</details>");
   return lines.join("\n") + "\n";
 }
 
+// Truncates inside a stack's plan text, never across the markup, so the fence and
+// </details> that section() writes always close and the note renders as text.
 export function renderComment(stacks, title) {
-  const head = `${MARKER}\n## ${title}\n\n`;
-  let md = head + stacks.map(section).join("\n");
-  if (md.length > MAX_COMMENT) {
-    const note = "\n\n_…truncated — the full plan is in the job summary._\n";
-    md = md.slice(0, MAX_COMMENT - note.length - 10) + "\n```\n" + note;
+  const note = "\n_…truncated — the full plan is in the job summary._\n";
+  let md = `${MARKER}\n## ${title}\n\n`;
+  for (const [i, stack] of stacks.entries()) {
+    const sep = i ? "\n" : "";
+    const full = sep + section(stack);
+    if (md.length + full.length <= MAX_COMMENT) {
+      md += full;
+      continue;
+    }
+    // A shorter text can need a longer fence than the empty one; 16 covers that.
+    const room = MAX_COMMENT - md.length - (sep + section({ ...stack, text: "" })).length - note.length - 16;
+    if (room > 0) md += sep + section({ ...stack, text: stack.text.slice(0, room) });
+    return md + note;
   }
   return md;
+}
+
+// The workflow names each stack's files with every `/` turned into `-`.
+export function stackName(base) {
+  return base.replaceAll("-", "/");
 }
 
 function main([cmd, ...args]) {
@@ -64,7 +82,7 @@ function main([cmd, ...args]) {
       .map((f) => {
         const base = f.slice(0, -5);
         return {
-          name: base.replace("-", "/"),
+          name: stackName(base),
           plan: JSON.parse(readFileSync(join(dir, f), "utf8")),
           text: readFileSync(join(dir, `${base}.txt`), "utf8"),
         };

@@ -9,7 +9,7 @@ Every Terraform plan and apply runs on the owner's workstation. `CLAUDE.md` and 
 ## 2. Goals and non-goals
 
 Goals:
-- Every PR that touches `infra/` gets lint, a plan of the stacks it affects, and a security scan of that plan, posted on the PR.
+- Every PR that touches `infra/` gets lint and a plan of the stacks it affects, posted on the PR; its security scan is the existing Trivy filesystem scan in `deploy.yml` (§4.1).
 - Merging applies: `dev` → `envs/dev`, `stage` → `envs/stage`, `main` → `shared` then `envs/main`.
 - No destroy or replace is applied without a deliberate, separate act.
 - Drift is detected weekly and tracked as an issue.
@@ -55,16 +55,16 @@ Which stacks an event touches:
 | push to `dev` / `stage` | `envs/<branch>` | `tf-apply-nonprod` |
 | push to `main` | `shared`, then `envs/main` | `tf-apply-prod` |
 | schedule | all four | `tf-plan` |
-| `workflow_dispatch` | the `stack` input, which must match the ref: `envs/dev` on `dev`, `envs/stage` on `stage`, `shared`/`envs/main` on `main`; `drift` on any ref runs §4.4 | `tf-apply-prod` on `main`, `tf-apply-nonprod` on `dev`/`stage`, `tf-plan` for `drift` |
+| `workflow_dispatch` | the `stack` input, which must match the ref: `envs/dev` on `dev`, `envs/stage` on `stage`, `shared`/`envs/main` on `main`; `drift` runs §4.4 and only from `dev`, since `tf-plan` trusts no other branch (the job checks out each branch itself) | `tf-apply-prod` on `main`, `tf-apply-nonprod` on `dev`/`stage`, `tf-plan` for `drift` |
 
 ### 4.1 PR job (`plan`)
 
 1. `terraform fmt -check -recursive infra/`.
 2. `tflint --init` then `tflint --recursive --config "$GITHUB_WORKSPACE/infra/.tflint.hcl"` (`terraform-linters/setup-tflint`, pinned). `infra/.tflint.hcl` enables the `terraform` ruleset (`recommended` preset) and the `aws` plugin.
 3. For each stack (on a PR into `dev`, `shared` is planned from `dev`'s code, so the comment previews what `main` will eventually apply): `terraform init -lockfile=readonly`, `terraform validate`, `terraform plan -lock=false -out=<stack>.tfplan -detailed-exitcode`, `terraform show -json <stack>.tfplan > <stack>.json`, `terraform show -no-color <stack>.tfplan > <stack>.txt`. `-lock=false`: a PR plan is read-only, and the plan role can then avoid writing lock files on PRs.
-4. `trivy config --severity HIGH,CRITICAL --exit-code 1 --ignorefile .trivyignore <stack>.json` for each plan (`aquasecurity/trivy-action`, same pin as `deploy.yml`).
-5. One PR comment, updated in place on every push (found by a hidden marker line), with per stack: `No changes`, or the add/change/destroy counts and the plan text in a collapsed block, truncated to GitHub's 65,536-character comment limit with a pointer to the job summary. The same text goes to `$GITHUB_STEP_SUMMARY`. A plan that would destroy or replace anything gets a heading line `⚠ destroys or replaces: <addresses>` so it is visible before merge.
-6. The job fails on `fmt`, `tflint`, `validate`, a plan error, or a Trivy finding. A non-empty plan is not a failure.
+4. No Trivy step. A plan scan was built and dropped in #339: `deploy.yml`'s `test` job already runs a Trivy filesystem scan, with misconfiguration checks, over `infra/*.tf` on every PR, and on #340 both scans reported the same `AWS-0345` findings. The plan scan also read the live policy from state, so a fixed `.tf` kept failing until the fix was applied.
+5. One PR comment, rewritten on every run that is not cancelled (found by a hidden marker line), titled with the head commit and marked incomplete when lint or plan failed, so a stale `⚠` line never survives a later push. Per stack: `No changes`, or the add/change/destroy counts and the plan text in a collapsed block, truncated to GitHub's 65,536-character comment limit with a pointer to the job summary. The same text goes to `$GITHUB_STEP_SUMMARY`. A plan that would destroy or replace anything gets a heading line `⚠ destroys or replaces: <addresses>` so it is visible before merge.
+6. The job fails on `fmt`, `tflint`, `validate` or a plan error. A non-empty plan is not a failure.
 
 ### 4.2 Apply job (`apply`, on push)
 

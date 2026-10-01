@@ -24,8 +24,8 @@ Per-resource detail and the reasoning behind each quirk is in
 
 ## Plan before every merge
 
-The `Terraform` workflow (`.github/workflows/terraform.yml`) lints, plans and
-scans every PR that touches `infra/`, and posts the plans of `shared` and
+The `Terraform` workflow (`.github/workflows/terraform.yml`) lints and plans
+every PR that touches `infra/`, and posts the plans of `shared` and
 `envs/<base branch>` as one PR comment. Read it before merging: `No changes`
 for a refactor, or exactly the intended diff, and no `⚠ destroys or replaces`
 line you did not intend.

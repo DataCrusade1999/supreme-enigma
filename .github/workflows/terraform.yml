@@ -79,6 +79,7 @@ jobs:
           tflint --chdir=infra --init --config="$GITHUB_WORKSPACE/infra/.tflint.hcl"
           tflint --chdir=infra --recursive --config="$GITHUB_WORKSPACE/infra/.tflint.hcl"
       - name: Plan
+        id: plan
         env:
           BASE: ${{ github.base_ref }}
         run: |
@@ -95,21 +96,25 @@ jobs:
             terraform -chdir="infra/$stack" show -no-color tfplan > "plans/$name.txt"
             echo "::endgroup::"
           done
-      - name: Scan plans
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: config
-          scan-ref: plans
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          trivyignores: .trivyignore
+      # No Trivy step here: the `test` job in deploy.yml scans infra/*.tf on every PR.
+      # Posted on every run that was not cancelled, so the comment always describes
+      # the head commit: a failed lint or plan replaces the previous plan (and any ⚠
+      # line in it) with what this run got, marked incomplete.
       - name: Comment
-        if: always() && hashFiles('plans/*.json') != ''
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PLAN: ${{ steps.plan.outcome }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          node .github/scripts/tf-summary.mjs comment plans "Terraform plan" > comment.md
+          title="Terraform plan — \`${HEAD_SHA::7}\`"
+          if [ "$PLAN" != success ]; then
+            title="$title — ❌ incomplete: lint or plan failed, and a stack missing below was not planned ([run]($RUN))"
+          fi
+          mkdir -p plans
+          node .github/scripts/tf-summary.mjs comment plans "$title" > comment.md
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq '[.[] | select(.body | startswith("<!-- terraform-plan -->"))][0].id // empty')
           if [ -n "$id" ]; then
@@ -205,6 +210,13 @@ jobs:
       group: terraform-drift
       cancel-in-progress: false
     steps:
+      # The plan role trusts only PRs and dev (where the schedule runs). The job checks
+      # out each branch itself, so the ref it was dispatched from does not matter.
+      - name: Require dev
+        if: github.ref_name != 'dev'
+        run: |
+          echo "::error::Dispatch drift from dev: gh workflow run terraform.yml --ref dev -f stack=drift"
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: main, path: main }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
