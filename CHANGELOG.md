@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-01
+
 ### Added
 
 - "Add a passkey" link on the `/tools` hub. It signs you in, opens Cognito's passkey setup, and returns to the hub saying whether the passkey was added. Cognito never offers passkey setup to the owner account, which an admin created (#297).
