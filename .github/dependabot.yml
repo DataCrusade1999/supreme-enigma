@@ -37,6 +37,12 @@ updates:
       # typescript-eslint ships TS 7 support (typescript-eslint#10940).
       - dependency-name: typescript
         versions: [">=6"]
+      # eslint-plugin-react (via eslint-config-next) calls
+      # context.getFilename(), which ESLint 10 removed; lint throws
+      # "contextOrFilename.getFilename is not a function" loading
+      # react/display-name. Unignore once eslint-plugin-react supports ESLint 10.
+      - dependency-name: eslint
+        versions: [">=10"]
 
   - package-ecosystem: pip
     directory: /lambda
