@@ -91,11 +91,14 @@ Actions.
 
 ## Infra-as-code
 
-Two Terraform layers: `infra/bootstrap` (one-time, just the TF state S3
-bucket, never destroyed) and `infra/main` (everything else — S3, ECR,
-Lambda, IAM, Vercel project; `terraform destroy` here is the kill switch).
-Provider is pinned to the `personal` AWS CLI profile in `providers.tf`,
-not read from the shell.
+`infra/bootstrap` (one-time, just the TF state S3 bucket, never destroyed),
+then four stacks with one state each: `infra/shared` (ECR, IAM, the Vercel
+project and the other one-of-each resources, applied from `main` only) and
+`infra/envs/{dev,stage,main}` (each environment's bucket, Lambda, alarm and
+Vercel env vars, through `infra/modules/environment`). Destroying the env
+stacks and then `shared` is the kill switch. Credentials come from the
+environment (`AWS_PROFILE=personal` locally); no backend or provider block
+names a profile.
 
 ---
 

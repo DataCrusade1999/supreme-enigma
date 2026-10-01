@@ -14,6 +14,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - CI bills fewer Actions minutes: about 7 per PR run instead of 10, 2 per `dev` push instead of 12, and about 44 per PR into `stage` down to 7. Lint, unit, Lambda, Trivy and Linux e2e run as one `test` job instead of four parallel ones; `test` is skipped on a push to `dev` that does not touch `lambda/`; docs-only PRs get no CI run; Windows and macOS e2e run only on PRs into `main`; `promotion-guard` moved to its own workflow; Dependabot runs monthly (#320).
 - `chromatic` is skipped on a push to `dev` that does not touch `web/` or `deploy.yml` (#322).
 - web: vite 8, @vitejs/plugin-react 6, vitest 5, React 19.3 and the rest of October's minor and patch bumps. Dependabot no longer proposes ESLint 10, which `eslint-config-next`'s React plugin does not support yet (#324).
+- Terraform state is split into `infra/shared` and one stack per environment under `infra/envs/` (#327). No resource changed.
 - The skipped cross-OS e2e job is listed as `E2E` instead of the literal `E2E (${{ matrix.os }})`. On PRs into `main` its legs are still named `E2E (windows-latest)` and `E2E (macos-latest)`.
 
 ### Removed
