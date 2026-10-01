@@ -61,7 +61,13 @@ Work is tracked as GitHub issues, labeled `area: *` (bgm-looper/bgm-extractor/po
 
 **File the issue before starting the work, and close it from the PR with `Closes #N`.** This is a precondition, not a convention — it holds for every authored PR into `dev` regardless of size: features, fixes, docs, chores, one-line changes. The issue is where the *why* lives; a PR alone records what changed but not what prompted it, and a change too small to describe in an issue is usually too small to need a PR. Two categories are exempt because they cannot comply: **promotion PRs** (`dev → stage`, `stage → main`), which carry work whose issues already exist, and **bot PRs** (dependabot, `chore/changelog-sync-*`), which are opened before anyone sees them.
 
+**An explicit direct-push instruction replaces the issue-and-PR flow.** If the user says to push straight to dev ("commit and push to origin dev", "no issue and no PR"), commit on `dev` and push to `origin/dev` without filing an issue or opening a PR, and do not ask whether they want one. The issue-first rule applies only when a PR is being opened. The instruction covers the work it was given for; without it, the default flow applies.
+
 **`Closes #N` only fires when the PR merges into the default branch.** `dev` is the default branch here, so a PR into `dev` closes its issue on merge, while the same keyword on a `dev → stage` or `stage → main` promotion is silently inert — GitHub only honours it on the default branch. That means an issue closes when the fix reaches `dev`, not when it reaches production. That is the right moment to close it, but say so rather than waiting for a close that will never come, and do not write `Closes #N` on a promotion PR expecting it to work. A design-spec-and-plan pair existing under `docs/superpowers/` does not imply an issue exists yet or vice versa — check the project board for current status, not just the docs.
+
+## Scope of a fix
+
+When the user names one instance of a problem (one URL showing `%2F`, one button missing the pointer cursor), assume they want the class fixed. Search for the other instances of that same problem and fix them in the same change, or list the ones you left and why. Do not touch code that is not an instance of the named problem.
 
 ## Writing
 
