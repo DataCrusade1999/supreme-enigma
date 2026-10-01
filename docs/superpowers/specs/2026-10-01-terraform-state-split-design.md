@@ -1,13 +1,13 @@
 # Terraform state split — Design
 
 **Date:** 2026-10-01
-**Status:** Draft, awaiting the owner's review. Brainstormed with the owner on 2026-10-01; §3 records the decisions made there.
+**Status:** Approved 2026-10-01; §12 (three phases) added the same day at the owner's request. Brainstormed with the owner on 2026-10-01; §3 records the decisions made there.
 **Issue:** #327
-**Follow-up:** Terraform in CI (plan on PR, apply on merge, OIDC `tf-plan`/`tf-apply` roles). Separate spec and issue; it depends on this one.
+**Phase:** 1 of 3. §12 describes all three; phases 2 and 3 get their own issue, spec and plan, and each depends on the one before.
 
 ## 1. Problem
 
-The owner wants Terraform to run in CI the way most teams run it: `plan` on every pull request, `apply` when the PR merges, authenticated through OIDC. Today it runs only from the workstation.
+The owner wants Terraform to run in CI the way most teams run it: `plan` on every pull request, `apply` when the PR merges, authenticated through OIDC. Today it runs only from the workstation. The owner also wants fast feedback on infra changes: a change a feature needs should be live on `dev` as soon as it merges to `dev`, without waiting for the change to be promoted to `main`.
 
 `infra/main` keeps every resource in one state file, `main/terraform.tfstate`. That file holds main's, dev's and stage's buckets and Lambdas side by side with the shared IAM, Cognito, DNS and Vercel project. A CI apply triggered by a push to `dev` would therefore plan and apply against production resources too. Per-branch apply needs per-environment state first.
 
@@ -22,7 +22,8 @@ Goals:
 
 Non-goals:
 
-- The CI workflow, the `tf-plan`/`tf-apply` roles and moving the seven secrets into GitHub. That is the follow-up spec.
+- Moving IAM permissions and Vercel env vars from `shared` into the env stacks. That is phase 2 (§12).
+- The CI workflow, the `tf-plan`/`tf-apply` roles and moving the secrets into GitHub. That is phase 3 (§12).
 - Separate AWS accounts per environment.
 - Moving resume data out of main's bucket.
 - Changing `infra/bootstrap`.
@@ -33,7 +34,9 @@ Non-goals:
 | Decision | Choice | Why |
 |---|---|---|
 | State layout | Split per environment, not one state applied from one branch | Matches the per-branch `dev → stage → main` promotion; lets each branch apply only its own environment. |
-| Who applies `shared` | `main` only (enforced in the follow-up) | Shared resources (IAM, OIDC, Cognito, DNS, the Vercel project) serve every environment, so they are production and take the strictest path. A shared change that a dev feature needs ships first as its own small PR and is promoted ahead of the feature. |
+| Who applies `shared` | `main` only (enforced in phase 3) | Shared resources serve every environment, so they are production and take the strictest path. Phase 2 shrinks `shared` to things that rarely change, so a feature almost never waits on it. |
+| What a feature's infra lives in | The env stacks, from phase 2 on | Lets a change reach `dev` on merge to `dev`. The owner asked for fast feedback over keeping each role's permissions in one file. |
+| Order of the work | Split first as a pure move, then the IAM/env-var move, then CI | Phase 1 can be verified by `No changes` alone. Phase 2 changes live IAM and needs its own reviewed plan. Mixing them would hide real changes among moves. |
 | Folder layout | One root directory per stack, envs calling one module | Each directory has a fixed backend key, so a local run cannot point dev's config at main's state by forgetting `init -reconfigure`. |
 | Owner of `portfolio-data-<acct>` | `envs/main` | It is main's data bucket. `RESUME_BUCKET_NAME` and the IAM grants in `shared` name it by its deterministic name. Destroying `envs/main` deletes the resume data dev and stage read; that data is production's anyway. |
 | Migration method | `terraform state mv` between local copies of the state, then `state push` | `moved` blocks do not cross backends. `import` blocks would need a looked-up ID for each of 83 resources, several with compound Vercel IDs. `state mv` is mechanical and leaves the old remote state untouched until the end. |
@@ -192,3 +195,48 @@ There is no automated test for Terraform in this repo, and this change adds none
 | Name-built ARNs differ from the real ones | Policy documents would differ from the live ones, so step 7 shows the diff. |
 | Two states manage the same resources | Step 8 retires the old key before the PR is opened for merge, and the PR merges the same day. |
 | A Vercel env var moves into the module with a changed `target`/`git_branch` | Vercel would replace it; step 7 shows a replacement and the code is corrected. |
+
+## 12. The three phases
+
+Each phase has its own issue, spec and plan. Each one starts only after the previous one is merged and verified. Phases 2 and 3 are outlined here so that phase 1's layout serves them; their own specs decide the details.
+
+### Phase 1 — State split (this spec, #327)
+
+Four stacks, a pure move, `No changes` everywhere. Terraform still runs only from the workstation.
+
+### Phase 2 — Feature infra moves into the env stacks
+
+Goal: anything a feature typically needs (an IAM permission, a Vercel env var) is declared in the env stacks, so it can be applied to `dev` alone. `shared` keeps only what rarely changes: the OIDC providers, the IAM roles themselves, Cognito, ACM, SES and DNS, the Vercel project and its domains, firewall and bypass, ECR, SNS and the budget.
+
+Outline:
+
+- **Per-env IAM policies on the shared roles.** Each env stack attaches an `aws_iam_role_policy` to the roles in `shared`, looked up by name, and scoped to that env's bucket and function:
+  - `lambda_exec`: the env's slice of today's `lambda_s3` statement.
+  - `vercel`: the env's slices of `AudioScratchObjects`, `NewsDeskObjects`, `NewsDeskMissingSnapshotIs404` and `InvokeProcessor`.
+  - `ResumeObjects` and `ResumeHeadObjectNotFound` stay with main's bucket, which all three environments use. The phase 2 spec decides whether they live in `shared` or `envs/main`.
+- **The swap happens in one apply per stack, ordered so no permission is ever missing:** apply the three env stacks first, which adds the per-env policies alongside the old combined ones, then remove the moved statements from `shared` and apply it. This is a real IAM change, reviewed as a plan.
+- **Vercel env vars.** New env vars that a feature adds are declared in the env stacks, per target. Existing env-agnostic env vars stay in `shared` unless the phase 2 spec finds a reason to move one.
+- **Known limit.** Vercel's OIDC subject distinguishes only `production` and `preview`. Dev and stage therefore sign in as the same identity, and that identity holds both dev's and stage's grants. Today the single `vercel` role trusts both subjects, so production can also use dev's and stage's grants and vice versa. Splitting it into a production role and a preview role would close that, and the phase 2 spec decides whether to.
+
+### Phase 3 — Terraform in CI
+
+Goal: plan on every PR that touches `infra/`, and apply on merge, authenticated with OIDC and no stored AWS keys.
+
+Outline, from the decisions made on 2026-10-01:
+
+- **Two roles in `shared`.** `tf-plan` trusts this repo's `pull_request` subject and has read-only access, plus write access to the `.tflock` keys. `tf-apply` trusts only the `main`, `dev` and `stage` branch refs. The `pull_request` trust reverses the comment at `shared.tf:171-175`; the owner accepted it because the repo is private with one contributor. The plan job also receives the Vercel token, which can always write, because Vercel has no read-only tokens. That is an accepted risk.
+- **What runs where.**
+
+  | Event | Plans | Applies |
+  |---|---|---|
+  | PR into `dev` | `envs/dev`, `shared` | — |
+  | PR into `stage` | `envs/stage`, `shared` | — |
+  | PR into `main` | `envs/main`, `shared` | — |
+  | Push to `dev` | — | `envs/dev` |
+  | Push to `stage` | — | `envs/stage` |
+  | Push to `main` | — | `shared`, then `envs/main` |
+
+- **CI minutes.** A separate workflow file with a `paths: infra/**` filter, like `promotion-guard.yml`, and all steps in one job: the repo's billing lesson is that each extra job bills a full minute.
+- **No approval gate beyond the PR.** GitHub Environments with required reviewers are unavailable on a private repo without Pro. The reviewed PR plan is the gate.
+- **Secrets.** The variables each stack needs become GitHub Actions secrets.
+- **The workstation stays the break-glass path.** A local `apply` in `envs/dev` is allowed for quick iteration; the next CI apply on `dev` brings it back in line with git. If `tf-apply` ever breaks its own trust policy, recovery is a local apply of `shared`.
