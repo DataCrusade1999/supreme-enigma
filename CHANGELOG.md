@@ -177,6 +177,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
   proof the checks arrive unaided, carries the same manual-approval signature as
   #206. Closes #207.
 
+### Security
+
+- Every route sends `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and a `Permissions-Policy` that turns off camera, microphone and geolocation. Other sites can no longer frame `/login` or `/keystatic`. The CSP sets no `script-src`, which would need per-request nonces, and no `form-action`, because the newsletter form posts to Buttondown (#283).
+- Every GitHub Action in `.github/workflows/` is pinned to a full commit SHA, with the version in a trailing comment. A repointed tag can no longer change what runs in `deploy`, which assumes the AWS deploy role. Dependabot bumps the SHA and the comment together (#283).
+
 ## [1.5.2] - 2026-09-17
 
 ### Fixed
