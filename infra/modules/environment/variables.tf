@@ -22,6 +22,7 @@ variable "vercel_git_branch" {
   type        = string
   default     = null
 }
+
 # Used only for each Lambda function's initial `image_uri` at creation time — every
 # aws_lambda_function.this has `lifecycle.ignore_changes = [image_uri]`,
 # so CI's `update-function-code` is what actually keeps the deployed image current, and
