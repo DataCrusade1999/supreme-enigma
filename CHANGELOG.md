@@ -181,6 +181,7 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 - Every route sends `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and a `Permissions-Policy` that turns off camera, microphone and geolocation. Other sites can no longer frame `/login` or `/keystatic`. The CSP sets no `script-src`, which would need per-request nonces, and no `form-action`, because the newsletter form posts to Buttondown (#283).
 - Every GitHub Action in `.github/workflows/` is pinned to a full commit SHA, with the version in a trailing comment. A repointed tag can no longer change what runs in `deploy`, which assumes the AWS deploy role. Dependabot bumps the SHA and the comment together (#283).
+- `next` 16.3.4 → 16.3.8 for GHSA-vcvr-r3jv-pc5j (critical), and `brace-expansion` 2.1.4 → 2.1.7 for CVE-2026-102276 and CVE-2026-102278 (#304).
 
 ## [1.5.2] - 2026-09-17
 
