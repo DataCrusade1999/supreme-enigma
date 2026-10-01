@@ -99,9 +99,11 @@ data "aws_iam_policy_document" "tf_apply_nonprod" {
     resources = [for e in local.nonprod_envs : "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.lambda_function_names[e]}"]
   }
   statement {
-    sid       = "Alarms"
-    actions   = ["cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:TagResource", "cloudwatch:UntagResource"]
-    resources = [for e in local.nonprod_envs : "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:alarm:${local.lambda_function_names[e]}-invocation-rate"]
+    sid     = "Alarms"
+    actions = ["cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:TagResource", "cloudwatch:UntagResource"]
+    # `-*`, not the exact name, so a rename (the guard test in the rollout) can create
+    # the new alarm. Still disjoint: main's alarm is `bgm-looper-processor-invocation-rate`.
+    resources = [for e in local.nonprod_envs : "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:alarm:${local.lambda_function_names[e]}-*"]
   }
   statement {
     sid = "ExecRoles"
