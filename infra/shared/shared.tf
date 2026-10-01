@@ -1,5 +1,5 @@
 # Resources that exist once and are used by all three environments (main/dev/stage) —
-# the ECR repo, IAM (exec role + service-account users), the Vercel project itself, and
+# the ECR repo, the CI deploy role and the two Vercel roles, the Vercel project itself, and
 # the app secrets/config that don't vary by branch. Applied from main only; per-environment
 # resources (Lambda functions, S3 buckets, and the env vars that point at them) live in
 # infra/modules/environment, called from infra/envs/<env>.
@@ -26,8 +26,8 @@ locals {
   vercel_team_id = "team_bSWug4zpM7jfChbYKg7G4PMI"
 
   # Per-environment names, built from the same rule as infra/modules/environment so
-  # this stack never reads an env stack's state. The list orders match what the
-  # policies used before the split (lambdas main/dev/stage, buckets dev/main/stage).
+  # this stack never reads an env stack's state. The Lambda list order matches what
+  # ci_deploy's policy used before the split (main/dev/stage).
   env_suffix = { main = "", dev = "-dev", stage = "-stage" }
 
   lambda_function_names = { for e, s in local.env_suffix : e => "${var.project_name}-processor${s}" }
@@ -37,7 +37,6 @@ locals {
     for e in ["main", "dev", "stage"] :
     "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.lambda_function_names[e]}"
   ]
-  all_data_bucket_arns = [for e in ["dev", "main", "stage"] : "arn:aws:s3:::${local.data_bucket_names[e]}"]
 }
 
 # --- ECR (one repo, per-branch tag prefixes — see infra/modules/environment's Lambda functions
@@ -106,41 +105,10 @@ resource "aws_ecr_lifecycle_policy" "looper" {
   })
 }
 
-# --- IAM: one Lambda exec role shared by all three functions. The Vercel runtime and CI
-#     deploy identities are federated roles, further down beside their OIDC providers —
-#     there are no IAM users and no long-lived access keys in this project ---
-
-resource "aws_iam_role" "lambda_exec" {
-  name = "${var.project_name}-lambda-exec"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action    = "sts:AssumeRole"
-      Effect    = "Allow"
-      Principal = { Service = "lambda.amazonaws.com" }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_basic" {
-  role       = aws_iam_role.lambda_exec.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_iam_role_policy" "lambda_s3" {
-  name = "${var.project_name}-lambda-s3"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:GetObject", "s3:PutObject"]
-      Resource = [for arn in local.all_data_bucket_arns : "${arn}/*"]
-    }]
-  })
-}
+# --- IAM: each Lambda's exec role is per environment, in infra/modules/environment. The
+#     Vercel runtime and CI deploy identities are federated roles, further down beside
+#     their OIDC providers — there are no IAM users and no long-lived access keys in
+#     this project ---
 
 locals {
   # Only main's bucket holds resume data — dev/stage read and write it too, via the
@@ -248,14 +216,8 @@ resource "aws_iam_role" "vercel" {
       Condition = {
         StringEquals = {
           "oidc.vercel.com/${local.vercel_team_slug}:aud" = "https://vercel.com/${local.vercel_team_slug}"
-          # Two entries, not three. Vercel has no per-branch environment: main is
-          # "production" and both dev and stage deploy as "preview", so there is no
-          # stage subject to name. That grants nothing new — all three branches
-          # already share this one policy, exactly as the IAM user did.
-          "oidc.vercel.com/${local.vercel_team_slug}:sub" = [
-            "owner:${local.vercel_team_slug}:project:${var.project_name}:environment:production",
-            "owner:${local.vercel_team_slug}:project:${var.project_name}:environment:preview",
-          ]
+          # Production only. Preview deployments assume aws_iam_role.vercel_preview.
+          "oidc.vercel.com/${local.vercel_team_slug}:sub" = "owner:${local.vercel_team_slug}:project:${var.project_name}:environment:production"
         }
       }
     }]
@@ -289,67 +251,7 @@ resource "aws_iam_role" "vercel_preview" {
 # its comment explains why. The s3:DeleteObject grant that came across with it is gone:
 # nothing under web/ issues a DeleteObjectCommand, and deleting drafts is the job of the
 # resume/drafts/ lifecycle rule in infra/modules/environment, not the app's.
-resource "aws_iam_role_policy" "vercel" {
-  name = "${var.project_name}-vercel-policy"
-  role = aws_iam_role.vercel.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AudioScratchObjects"
-        Effect = "Allow"
-        Action = ["s3:PutObject", "s3:GetObject"]
-        Resource = flatten([
-          for arn in local.all_data_bucket_arns : ["${arn}/uploads/*", "${arn}/outputs/*"]
-        ])
-      },
-      {
-        Sid      = "ResumeObjects"
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = ["${local.resume_bucket_arn}/resume/*"]
-      },
-      {
-        # HeadObject on a key that does not exist returns 403, not 404, unless the
-        # caller holds s3:ListBucket on the bucket — so without this the app's
-        # objectExists() rethrows on every absent key and the first extraction and
-        # the first publish both 500. Deliberately unconditioned: S3 evaluates this
-        # for its 404-vs-403 decision with no s3:prefix in context, so an
-        # s3:prefix-scoped grant does not restore the 404. Bucket ARN only, so this
-        # grants listing key names in main's bucket and nothing else — GetObject
-        # stays scoped to uploads/, outputs/ and resume/ above.
-        Sid      = "ResumeHeadObjectNotFound"
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
-        Resource = [local.resume_bucket_arn]
-      },
-      {
-        Sid      = "NewsDeskObjects"
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = [for arn in local.all_data_bucket_arns : "${arn}/news-desk/*"]
-      },
-      {
-        # Same reason as ResumeHeadObjectNotFound above: without ListBucket, S3 answers
-        # a GetObject for a missing key with 403, not 404. The News Desk's first page
-        # load reads a snapshot that does not exist yet, and would report that as a
-        # permissions failure. Grants listing key names in the three data buckets.
-        Sid      = "NewsDeskMissingSnapshotIs404"
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
-        Resource = local.all_data_bucket_arns
-      },
-      {
-        Sid      = "InvokeProcessor"
-        Effect   = "Allow"
-        Action   = ["lambda:InvokeFunction"]
-        Resource = local.all_lambda_function_arns
-      }
-    ]
-  })
-}
-
+#
 # The resume lives in main's bucket and all three environments read and write it,
 # so these grants stay here rather than in the env stacks, on both Vercel roles.
 locals {
