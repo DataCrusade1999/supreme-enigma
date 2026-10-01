@@ -1,0 +1,257 @@
+# Terraform in CI (#339, docs/superpowers/specs/2026-10-02-terraform-ci-design.md).
+# PRs plan, pushes apply, a plan that deletes or replaces anything stops for a
+# manual `apply-destroys` run, and a weekly plan files drift as an issue.
+# One job per event: GitHub bills each job rounded up to a minute (#320).
+# Never upload or print a plan's JSON — it holds sensitive values in plain text.
+name: Terraform
+
+on:
+  pull_request:
+    branches: [dev, stage, main]
+    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs"]
+  push:
+    branches: [dev, stage, main]
+    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs"]
+  schedule:
+    - cron: "30 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Stack to apply from this branch, or drift"
+        required: true
+        type: choice
+        options: [envs/dev, envs/stage, envs/main, shared, drift]
+      confirm:
+        description: "Type apply-destroys to apply a plan that deletes or replaces resources"
+        required: false
+        default: ""
+
+permissions: {}
+
+env:
+  TF_IN_AUTOMATION: "1"
+  TF_INPUT: "0"
+  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugin-cache
+  ROLE_PREFIX: arn:aws:iam::223376380711:role/bgm-looper-tf
+  TF_VAR_vercel_api_token: ${{ secrets.TF_VAR_VERCEL_API_TOKEN }}
+  TF_VAR_app_password: ${{ secrets.TF_VAR_APP_PASSWORD }}
+  TF_VAR_openrouter_api_key: ${{ secrets.TF_VAR_OPENROUTER_API_KEY }}
+  TF_VAR_google_client_secret: ${{ secrets.TF_VAR_GOOGLE_CLIENT_SECRET }}
+  TF_VAR_github_repo: ${{ vars.TF_VAR_GITHUB_REPO }}
+  TF_VAR_alert_email: ${{ vars.TF_VAR_ALERT_EMAIL }}
+  TF_VAR_google_client_id: ${{ vars.TF_VAR_GOOGLE_CLIENT_ID }}
+
+jobs:
+  plan:
+    # Dependabot's runs get neither these secrets nor an OIDC token. Its Terraform
+    # bumps land through an owner-opened batch PR (merging-a-pr skill), which is planned.
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: terraform-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.1
+          terraform_wrapper: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.64.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.ROLE_PREFIX }}-plan
+          aws-region: us-east-1
+      - name: Lint
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          terraform fmt -check -recursive infra/
+          tflint --chdir=infra --init --config="$GITHUB_WORKSPACE/infra/.tflint.hcl"
+          tflint --chdir=infra --recursive --config="$GITHUB_WORKSPACE/infra/.tflint.hcl"
+      - name: Plan
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          mkdir -p plans
+          for stack in shared "envs/$BASE"; do
+            name=${stack//\//-}
+            echo "::group::$stack"
+            terraform -chdir="infra/$stack" init -lockfile=readonly
+            terraform -chdir="infra/$stack" validate
+            # One retry: Vercel's framework-list endpoint times out now and then.
+            terraform -chdir="infra/$stack" plan -lock=false -out=tfplan \
+              || { sleep 15; terraform -chdir="infra/$stack" plan -lock=false -out=tfplan; }
+            terraform -chdir="infra/$stack" show -json tfplan > "plans/$name.json"
+            terraform -chdir="infra/$stack" show -no-color tfplan > "plans/$name.txt"
+            echo "::endgroup::"
+          done
+      - name: Scan plans
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: plans
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          trivyignores: .trivyignore
+      - name: Comment
+        if: always() && hashFiles('plans/*.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          node .github/scripts/tf-summary.mjs comment plans "Terraform plan" > comment.md
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.body | startswith("<!-- terraform-plan -->"))][0].id // empty')
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md >/dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@comment.md >/dev/null
+          fi
+
+  apply:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.stack != 'drift')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-apply-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - name: Resolve stacks
+        id: stacks
+        env:
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
+          INPUT: ${{ inputs.stack }}
+        run: |
+          case "$BRANCH" in
+            dev)   owned="envs/dev";        role=apply-nonprod ;;
+            stage) owned="envs/stage";      role=apply-nonprod ;;
+            main)  owned="shared envs/main"; role=apply-prod ;;
+            *) echo "::error::Terraform applies only from dev, stage or main"; exit 1 ;;
+          esac
+          if [ "$EVENT" = workflow_dispatch ]; then
+            case " $owned " in
+              *" $INPUT "*) owned="$INPUT" ;;
+              *) echo "::error::$INPUT is not applied from $BRANCH (this branch owns: $owned)"; exit 1 ;;
+            esac
+          fi
+          echo "list=$owned" >> "$GITHUB_OUTPUT"
+          echo "role=$role" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.1
+          terraform_wrapper: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.ROLE_PREFIX }}-${{ steps.stacks.outputs.role }}
+          aws-region: us-east-1
+      - name: Plan and apply
+        env:
+          STACKS: ${{ steps.stacks.outputs.list }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          for stack in $STACKS; do
+            echo "::group::$stack"
+            terraform -chdir="infra/$stack" init -lockfile=readonly
+            set +e
+            terraform -chdir="infra/$stack" plan -detailed-exitcode -out=tfplan
+            rc=$?
+            # One retry: Vercel's framework-list endpoint times out now and then.
+            if [ $rc -eq 1 ]; then sleep 15; terraform -chdir="infra/$stack" plan -detailed-exitcode -out=tfplan; rc=$?; fi
+            set -e
+            echo "::endgroup::"
+            if [ $rc -eq 0 ]; then echo "### \`$stack\` — No changes" >> "$GITHUB_STEP_SUMMARY"; continue; fi
+            [ $rc -eq 2 ] || { echo "::error::plan failed for $stack"; exit 1; }
+            terraform -chdir="infra/$stack" show -json tfplan > /tmp/plan.json
+            deletes=$(node .github/scripts/tf-summary.mjs deletes /tmp/plan.json 2>/tmp/deletes.txt)
+            rm /tmp/plan.json
+            { echo "### \`$stack\`"; echo '```'; terraform -chdir="infra/$stack" show -no-color tfplan; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$deletes" -gt 0 ] && [ "$CONFIRM" != apply-destroys ]; then
+              { echo "**Stopped: this plan deletes or replaces $deletes resources:**"; sed 's/^/- `/; s/$/`/' /tmp/deletes.txt; } >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::$stack deletes or replaces $deletes resources. Apply with workflow_dispatch stack=$stack confirm=apply-destroys on ${GITHUB_REF_NAME}."
+              exit 1
+            fi
+            terraform -chdir="infra/$stack" apply tfplan
+          done
+
+  drift:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.stack == 'drift')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+      issues: write
+    concurrency:
+      group: terraform-drift
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: main, path: main }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: stage, path: stage }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: dev, path: dev }
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.1
+          terraform_wrapper: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ hashFiles('main/infra/**/.terraform.lock.hcl') }}
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.ROLE_PREFIX }}-plan
+          aws-region: us-east-1
+      - name: Plan every stack from the branch that applies it
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR" plans
+          drift=0
+          for pair in main:shared stage:envs/stage dev:envs/dev main:envs/main; do
+            branch=${pair%%:*}; stack=${pair#*:}; name=${stack//\//-}
+            echo "::group::$stack ($branch)"
+            terraform -chdir="$branch/infra/$stack" init -lockfile=readonly
+            set +e
+            terraform -chdir="$branch/infra/$stack" plan -lock=false -detailed-exitcode -out=tfplan
+            rc=$?
+            set -e
+            echo "::endgroup::"
+            [ $rc -eq 1 ] && { echo "::error::plan failed for $stack"; exit 1; }
+            [ $rc -eq 2 ] && drift=1
+            terraform -chdir="$branch/infra/$stack" show -json tfplan > "plans/$name.json"
+            terraform -chdir="$branch/infra/$stack" show -no-color tfplan > "plans/$name.txt"
+          done
+          echo "drift=$drift" >> "$GITHUB_ENV"
+      - name: File or close the drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node dev/.github/scripts/tf-summary.mjs comment plans "Drift check — $RUN" > drift.md
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift --state open --json number --jq '.[0].number // empty')
+          if [ "$drift" = 1 ]; then
+            if [ -n "$issue" ]; then gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body-file drift.md
+            else gh issue create --repo "$GITHUB_REPOSITORY" --title "chore(infra): drift detected" --label drift --label "area: infra" --body-file drift.md; fi
+          elif [ -n "$issue" ]; then
+            gh issue close "$issue" --repo "$GITHUB_REPOSITORY" --comment "No drift as of $RUN."
+          fi
