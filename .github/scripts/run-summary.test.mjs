@@ -15,46 +15,43 @@ function run(env) {
 
 const needs = (o) => JSON.stringify(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { result: v, outputs: {} }])));
 
-test("all green renders four rows with ✅ and the Linux-only note", () => {
+test("all green renders one row per job with ✅", () => {
   const { status, stdout } = run({
-    NEEDS: needs({ unit: "success", lambda: "success", e2e: "success", security: "success" }),
+    NEEDS: needs({ test: "success", "e2e-cross-os": "success", chromatic: "skipped" }),
     EVENT_NAME: "pull_request",
-    BASE_REF: "dev",
+    BASE_REF: "main",
   });
   assert.equal(status, 0);
   assert.match(stdout, /^## CI summary\n/);
-  assert.match(stdout, /\| Lint \+ unit tests \| ✅ success \|/);
-  assert.match(stdout, /\| Lambda tests \| ✅ success \|/);
-  assert.match(stdout, /\| E2E \(Playwright\) \| ✅ success \|/);
-  assert.match(stdout, /\| Security scan \| ✅ success \|/);
-  assert.match(stdout, /Cross-OS e2e: no \(pull_request into dev\)/);
+  assert.match(stdout, /\| Tests \(lint, unit, Lambda, e2e, security\) \| ✅ success \|/);
+  assert.match(stdout, /\| E2E \(Windows, macOS\) \| ✅ success \|/);
 });
 
 test("failure, skipped and cancelled map to ❌ ⏭️ 🚫", () => {
   const { stdout } = run({
-    NEEDS: needs({ unit: "failure", lambda: "skipped", e2e: "cancelled", security: "success" }),
-    EVENT_NAME: "push",
-    BASE_REF: "",
+    NEEDS: needs({ test: "failure", "e2e-cross-os": "cancelled", chromatic: "skipped" }),
+    EVENT_NAME: "pull_request",
+    BASE_REF: "main",
   });
-  assert.match(stdout, /\| Lint \+ unit tests \| ❌ failure \|/);
-  assert.match(stdout, /\| Lambda tests \| ⏭️ skipped \|/);
-  assert.match(stdout, /\| E2E \(Playwright\) \| 🚫 cancelled \|/);
-  assert.match(stdout, /Cross-OS e2e: no \(push\)/);
+  assert.match(stdout, /\| Tests \(lint, unit, Lambda, e2e, security\) \| ❌ failure \|/);
+  assert.match(stdout, /\| E2E \(Windows, macOS\) \| 🚫 cancelled \|/);
+  assert.match(stdout, /\| chromatic \| ⏭️ skipped \|/);
 });
 
-test("promotion PR and dispatch say cross-OS ran", () => {
-  const base = needs({ unit: "success", lambda: "success", e2e: "success", security: "success" });
-  assert.match(run({ NEEDS: base, EVENT_NAME: "pull_request", BASE_REF: "stage" }).stdout, /Cross-OS e2e: yes \(pull_request into stage\)/);
-  assert.match(run({ NEEDS: base, EVENT_NAME: "workflow_dispatch", BASE_REF: "" }).stdout, /Cross-OS e2e: yes \(workflow_dispatch\)/);
+test("cross-OS e2e runs on PRs into main only", () => {
+  const base = needs({ test: "success", "e2e-cross-os": "success" });
+  assert.match(run({ NEEDS: base, EVENT_NAME: "pull_request", BASE_REF: "main" }).stdout, /Cross-OS e2e: yes \(pull_request into main\)/);
+  assert.match(run({ NEEDS: base, EVENT_NAME: "pull_request", BASE_REF: "stage" }).stdout, /Cross-OS e2e: no \(pull_request into stage\)/);
+  assert.match(run({ NEEDS: base, EVENT_NAME: "workflow_dispatch", BASE_REF: "" }).stdout, /Cross-OS e2e: no \(workflow_dispatch\)/);
 });
 
 test("unknown jobs are listed by id so a renamed job is not silently dropped", () => {
   const { stdout } = run({
-    NEEDS: needs({ unit: "success", lambda: "success", e2e: "success", security: "success", chromatic: "success" }),
+    NEEDS: needs({ test: "success", "some-new-job": "success" }),
     EVENT_NAME: "push",
     BASE_REF: "",
   });
-  assert.match(stdout, /\| chromatic \| ✅ success \|/);
+  assert.match(stdout, /\| some-new-job \| ✅ success \|/);
 });
 
 test("bad NEEDS exits 1", () => {
