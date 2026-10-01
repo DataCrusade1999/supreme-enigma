@@ -77,11 +77,15 @@ for what's protected.
 
 ## CI/CD
 
-`.github/workflows/deploy.yml`: `unit`, `lambda`, `e2e` and `security` jobs
-run in parallel on every push/PR → `changes` job (path-filters whether
-`lambda/` changed) → `deploy` job (build/push image, `update-function-code`)
+`.github/workflows/deploy.yml`: `changes` job on push (whether `lambda/`
+changed) → one `test` job (Trivy, lint, Vitest, pytest, Linux Playwright;
+skipped on a `dev` push that does not touch `lambda/`, and on docs-only PRs)
+→ `deploy` job (build/push image, `update-function-code`)
 → `release` job (main-only: auto-version from Conventional Commits, updates
-`CHANGELOG.md`, creates GitHub Release, opens changelog-sync PR to `dev`).
+`CHANGELOG.md`, creates GitHub Release, opens changelog-sync PR to `dev`). Windows and macOS
+Playwright run only on PRs into `main`; `promotion-guard.yml` checks every
+promotion PR. The layout is shaped by the free plan's 2,000 Actions
+minutes/month (#320).
 Vercel's own git integration deploys the app independently of GitHub
 Actions.
 

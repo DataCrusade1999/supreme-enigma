@@ -12,11 +12,16 @@ version: 2
 # one cannot hold up the batch. Terraform still opens one PR per directory:
 # groups do not span `directories` (`group-by: dependency-name` would, but
 # only as one PR per dependency).
+#
+# Monthly, not weekly: each grouped PR is a full CI run, and the Dependabot
+# job that opens them is billed against the same 2,000 Actions minutes.
+# A fixable HIGH/CRITICAL CVE does not wait for the month: Trivy in the
+# test job fails CI on it, and Dependabot alerts are on.
 updates:
   - package-ecosystem: npm
     directory: /web
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
@@ -36,7 +41,7 @@ updates:
   - package-ecosystem: pip
     directory: /lambda
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
@@ -49,7 +54,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     commit-message:
       prefix: chore
       include: scope
@@ -72,7 +77,7 @@ updates:
       - /infra/bootstrap
       - /infra/main
     schedule:
-      interval: weekly
+      interval: monthly
     commit-message:
       prefix: chore
       include: scope

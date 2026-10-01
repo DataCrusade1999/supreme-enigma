@@ -1,14 +1,13 @@
 // Writes the one-glance table for the whole run. Step summaries are per
 // job, so the only place a single overview can come from is a job that
 // depends on every other one - that is the `summary` job in deploy.yml,
-// which runs `if: always()` and hands us `toJSON(needs)`.
+// which runs only when the cross-OS e2e legs did and hands us
+// `toJSON(needs)`.
 import { ICONS, emit } from "./summary-lib.mjs";
 
 const LABELS = {
-  unit: "Lint + unit tests",
-  lambda: "Lambda tests",
-  e2e: "E2E (Playwright)",
-  security: "Security scan",
+  test: "Tests (lint, unit, Lambda, e2e, security)",
+  "e2e-cross-os": "E2E (Windows, macOS)",
 };
 
 let needs;
@@ -22,9 +21,7 @@ try {
 
 const eventName = process.env.EVENT_NAME ?? "";
 const baseRef = process.env.BASE_REF ?? "";
-const crossOs =
-  eventName === "workflow_dispatch" ||
-  (eventName === "pull_request" && (baseRef === "stage" || baseRef === "main"));
+const crossOs = eventName === "pull_request" && baseRef === "main";
 const where = eventName === "pull_request" ? `${eventName} into ${baseRef}` : eventName;
 
 const lines = ["## CI summary", "", "| Job | Result |", "|---|---|"];
@@ -37,7 +34,7 @@ for (const id of ids) {
 }
 lines.push(
   "",
-  `Cross-OS e2e: ${crossOs ? "yes" : "no"} (${where}). Runs on promotion PRs and workflow_dispatch.`,
+  `Cross-OS e2e: ${crossOs ? "yes" : "no"} (${where}). Runs on PRs into main only.`,
 );
 
 emit(lines);

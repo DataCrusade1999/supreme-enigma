@@ -1,0 +1,65 @@
+name: Promotion guard
+
+# Its own workflow, not a job in deploy.yml, because deploy.yml's
+# `pull_request` trigger has `paths-ignore` for docs. A promotion that carries
+# only docs and CHANGELOG.md is exactly the one this has to see, and a filter
+# that skipped it would let it merge unchecked. One job of a few seconds, so
+# it runs on every promotion PR, filter or no filter.
+on:
+  pull_request:
+    branches: [stage, main]
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Refuses a promotion whose merge base predates the last release's changelog
+  # heading. Merging in that state corrupts CHANGELOG.md: git sees the release
+  # transform as one side's change and the branch's new entries as the other's,
+  # and splices them without a conflict - a duplicate heading when the branch
+  # carries a copy of the transform, entries filed under a version that did not
+  # ship them when it does not. It happens when
+  # the chore/changelog-sync-* PR has not been merged yet, or was merged with
+  # --squash, which copies the release commit instead of inheriting it.
+  #
+  # Checked here rather than in the release job on purpose: by the time
+  # `release` runs, the promotion that duplicated the heading has already
+  # happened, so detection there is after the damage. This refuses the merge
+  # that would cause it.
+  #
+  # The invariant is the previous release *tag* being an ancestor of the branch
+  # being promoted - not `main` being an ancestor of `dev`, which is false on
+  # every healthy run, because the merge commit a promotion creates lives only
+  # on the target branch.
+  #
+  # Branch protection is not enforced on this repo (private, no Pro), so this
+  # is a red X rather than a hard block. Do not merge past it.
+  promotion-guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Assert the last release is an ancestor of the branch being promoted
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --quiet origin +refs/heads/main:refs/remotes/origin/main
+          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' origin/main 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            echo "No release tag reachable from main yet - nothing to check."
+            exit 0
+          fi
+          # Deliberately the PR head, not HEAD: on a pull_request event HEAD is
+          # the synthetic merge commit, whose base parent already contains the
+          # tag, so the check would pass for free and test nothing.
+          if git merge-base --is-ancestor "$LAST_TAG" "$HEAD_SHA"; then
+            echo "$LAST_TAG is an ancestor of $HEAD_REF - the merge base already carries its changelog heading."
+            exit 0
+          fi
+          echo "::error::$LAST_TAG is not an ancestor of $HEAD_REF, so merging this promotion would corrupt CHANGELOG.md - either a duplicate $LAST_TAG heading, or entries that did not ship in $LAST_TAG spliced in under it (issue #168). Merge the chore/changelog-sync-$LAST_TAG PR into dev first, with --merge and never --squash, then promote again."
+          exit 1
