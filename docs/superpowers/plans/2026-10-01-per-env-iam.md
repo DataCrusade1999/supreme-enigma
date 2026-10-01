@@ -19,6 +19,7 @@
 - Nothing old is removed before Task 7 (PR B).
 - Names: exec role `bgm-looper-lambda-exec-<env>`; Lambda S3 policy `bgm-looper-lambda-s3-<env>`; per-env Vercel policy `bgm-looper-vercel-<env>`; preview role `bgm-looper-vercel-preview`; resume policies `bgm-looper-vercel-resume`, `bgm-looper-vercel-preview-resume`.
 - Comments move verbatim with the statements they describe.
+- `$SP` / `<scratchpad>` is `C:/Users/ashut/AppData/Local/Temp/claude/E--Personal-looper/9e68e70b-3bfd-424a-b7c1-07c59f942930/scratchpad`, or any directory outside the repo.
 - Commit messages reference `#333` and end with `Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>`. Follow the `merging-a-pr` skill before every merge.
 
 ## Review Focus
@@ -26,7 +27,7 @@
 1. **Policy scope.** Each per-env policy must name only that env's bucket and function. A copy-paste that leaves `all_data_bucket_arns` in the module would plan fine and grant everything. Task 4 greps the plan's JSON for the other envs' names.
 2. **Role picked by target.** Stage has `vercel_target = ["preview"]` plus `git_branch`; it must attach to the preview role, main to `bgm-looper-vercel`. Task 4 checks the `role` in each plan.
 3. **IAM propagation on the function role switch.** A just-created role can be briefly unassumable by Lambda. The provider retries `InvalidParameterValueException: The role defined for the function cannot be assumed by Lambda`; if the apply still fails, re-run the same plan step (Task 4 Step 4).
-4. **`APP_AWS_ROLE_ARN` overlap.** Creating the preview value before narrowing the existing one gives Vercel two `preview` values. `depends_on` orders it; Task 3 checks the plan order is update-then-create.
+4. **`APP_AWS_ROLE_ARN` overlap.** Creating the preview value before narrowing the existing one gives Vercel two `preview` values. Task 2's `depends_on` makes Terraform update the production value first; an apply error naming a duplicate key means it did not, and the fix is to apply the same stack again.
 5. **Builds between Task 3 and Task 6.** A preview build in that window picks up the preview role. Covered by running Tasks 3-4 back to back and redeploying in Task 5.
 
 ---
@@ -342,11 +343,10 @@ Expected: `Plan: 4 to add, 1 to change, 0 to destroy.` Adds: `aws_iam_role.lambd
 - [ ] **Step 2: Check scope and role** (Review Focus 1 and 2)
 
 ```bash
-others=$(printf '%s\n' dev stage main | grep -vx <env> | sed 's/^main$/processor"/' )
-grep -nE 'portfolio-data-(dev|stage)?-?223376380711|bgm-looper-processor' $SP/<env>.txt | grep -v "$(terraform output -raw data_bucket_name)" | grep -v "$(terraform output -raw lambda_function_name)[^-]" 
+grep -oE 'portfolio-data[a-z-]*-223376380711|bgm-looper-processor[a-z-]*' $SP/<env>.txt | sort -u
 grep -n 'role *= *"bgm-looper-vercel' $SP/<env>.txt
 ```
-Expected: the first grep prints nothing (no other env's bucket or function in this plan). The second shows `bgm-looper-vercel` for `main`, `bgm-looper-vercel-preview` for `dev` and `stage`. If the first grep is noisy, read the two policy JSON blocks in `$SP/<env>.txt` directly and confirm every ARN is this env's.
+Expected: the first grep prints exactly this env's bucket and function (`portfolio-data-dev-223376380711` and `bgm-looper-processor-dev` for dev; no suffix for main), nothing else. The second shows `bgm-looper-vercel` for `main` and `bgm-looper-vercel-preview` for `dev` and `stage`.
 
 - [ ] **Step 3: Apply**
 
@@ -423,7 +423,7 @@ Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 
 - [ ] **Step 2: Edit `shared.tf`**
 - Delete `resource "aws_iam_role" "lambda_exec"`, `resource "aws_iam_role_policy_attachment" "lambda_basic"`, `resource "aws_iam_role_policy" "lambda_s3"`.
-- Delete `resource "aws_iam_role_policy" "vercel"` and the comment block above it ("Carried over from the deleted vercel-sa user's inline policy …"). Move that comment's first three sentences ("Carried over … its comment explains why.") above `locals { vercel_resume_statements`, since `ResumeHeadObjectNotFound` now lives there; drop the sentence about `s3:DeleteObject` only if it no longer has a statement to describe — keep it, it explains an absence that still holds.
+- Delete `resource "aws_iam_role_policy" "vercel"`. Move the five-line comment block above it ("Carried over from the deleted vercel-sa user's inline policy …") verbatim to directly above the `vercel_resume_statements` locals block's own comment: it explains `ResumeHeadObjectNotFound` and the absent `s3:DeleteObject`, both of which still hold.
 - In `resource "aws_iam_role" "vercel"`, set the `sub` condition to the production subject only, and replace the "Two entries, not three…" comment with: `# Production only. Preview deployments assume aws_iam_role.vercel_preview.`
 - Delete `all_data_bucket_arns` from the `locals` block at the top, and the comment line naming bucket order; keep `all_lambda_function_arns` (used by `ci_deploy`).
 
