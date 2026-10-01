@@ -9,6 +9,14 @@ locals {
   account_id          = data.aws_caller_identity.current.account_id
 
   nonprod_envs = ["dev", "stage"]
+
+  # Bucket configuration only, never objects: Terraform manages no object, and `s3:*`
+  # trips Trivy's AWS-0345 on the plan. Removing CORS, lifecycle or the public access
+  # block is a Put of the same name, so these cover deletes too.
+  tf_bucket_actions = [
+    "s3:CreateBucket", "s3:PutBucket*", "s3:DeleteBucket*",
+    "s3:PutLifecycleConfiguration", "s3:PutEncryptionConfiguration",
+  ]
 }
 
 data "aws_iam_policy_document" "tf_trust" {
@@ -74,12 +82,9 @@ data "aws_iam_policy_document" "tf_apply_nonprod" {
     resources = [for e in local.nonprod_envs : "${local.tf_state_bucket_arn}/envs/${e}/*"]
   }
   statement {
-    sid     = "Buckets"
-    actions = ["s3:*"]
-    resources = flatten([for e in local.nonprod_envs : [
-      "arn:aws:s3:::${local.data_bucket_names[e]}",
-      "arn:aws:s3:::${local.data_bucket_names[e]}/*",
-    ]])
+    sid       = "Buckets"
+    actions   = local.tf_bucket_actions
+    resources = [for e in local.nonprod_envs : "arn:aws:s3:::${local.data_bucket_names[e]}"]
   }
   statement {
     sid       = "NoBucketDelete"
@@ -160,10 +165,15 @@ data "aws_iam_policy_document" "tf_apply_prod" {
   statement {
     sid = "Services"
     actions = [
-      "s3:*", "lambda:*", "cloudwatch:*", "sns:*", "budgets:*", "ecr:*",
+      "lambda:*", "cloudwatch:*", "sns:*", "budgets:*", "ecr:*",
       "cognito-idp:*", "ses:*", "acm:*", "logs:*",
     ]
     resources = ["*"]
+  }
+  statement {
+    sid       = "Bucket"
+    actions   = local.tf_bucket_actions
+    resources = ["arn:aws:s3:::${local.data_bucket_names["main"]}"]
   }
   statement {
     sid     = "ProjectIam"
