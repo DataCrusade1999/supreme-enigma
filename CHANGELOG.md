@@ -7,6 +7,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- The `tf_apply_prod` role, which CI uses to apply `infra/shared` from `dev`,
+  may now manage Verified Permissions and DynamoDB. The access control work
+  (#300) adds a policy store and a grants table to `shared`; this lands first
+  so the grant is in place before the apply that needs it. Refs #300.
+
 ## [1.7.2] - 2026-10-02
 
 ### Changed
