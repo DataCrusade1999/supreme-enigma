@@ -2,23 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, verifySessionCookieValue } from "./lib/auth";
 import { isGatedPath } from "./lib/route-gate";
 
-export async function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname === "/api/authz-spike") {
-    const out: Record<string, unknown> = {
-      oidcHeader: request.headers.has("x-vercel-oidc-token"),
-      oidcEnv: Boolean(process.env.VERCEL_OIDC_TOKEN),
-    };
-    try {
-      const { awsCredentialsProvider } = await import("@vercel/oidc-aws-credentials-provider");
-      const creds = await awsCredentialsProvider({ roleArn: process.env.APP_AWS_ROLE_ARN! })();
-      out.provider = "ok";
-      out.temporary = creds.accessKeyId.startsWith("ASIA");
-    } catch (err) {
-      out.provider = String(err);
-    }
-    return NextResponse.json(out);
-  }
-
+export function proxy(request: NextRequest) {
   if (!isGatedPath(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
