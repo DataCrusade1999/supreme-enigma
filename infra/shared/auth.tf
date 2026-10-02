@@ -266,6 +266,12 @@ resource "aws_cognito_user" "owner" {
     email          = var.alert_email
     email_verified = "true"
   }
+
+  # Cognito writes "identities" when a federated sign-in is linked to this user
+  # (docs/runbooks/link-owner-google.md). Removing it would undo the link.
+  lifecycle {
+    ignore_changes = [attributes["identities"]]
+  }
 }
 
 resource "vercel_project_environment_variable" "cognito_domain" {
