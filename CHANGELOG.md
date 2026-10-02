@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-10-02
+
 ### Changed
 
 - CI applies `infra/shared` when a change merges to `dev`, before `envs/dev`, instead of when it reaches `main`. A `shared` change and the env-stack change that depends on it now land in one merge, and a `shared` change reaches production at that point, with no `stage` step. Pushes to `stage` and `main` apply only their own environment (#345).
