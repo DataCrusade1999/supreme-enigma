@@ -42,6 +42,7 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
 
 ## Best practices / gotchas learned
 
+- **Automated PR reviews run only on private repositories.** AWS's docs: "DevOps Agent does not automatically review pull requests or merge requests on public repositories." This repo is public, and the last automatic review was #349 on 2026-10-02 (#361). `list_tasks` with `task_type: RELEASE_READINESS_REVIEW` shows whether one was ever created. Request reviews with `create_release_readiness_review`; the result is a report (`recommendedAction`, `risks`), with no commit status and no inline comments. Making the repo private again restores the automatic reviews, and brings back the 2,000-minute Actions cap with them.
 - **Static-only by default.** `skip_automated_testing: true` for a release
   readiness review unless you specifically want it to spin up a sandbox and
   run generated UI/API tests — static analysis is faster and cheaper, and
