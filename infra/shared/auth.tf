@@ -297,11 +297,3 @@ resource "vercel_project_environment_variable" "cognito_user_pool_id" {
   target     = local.env_targets
   sensitive  = false
 }
-
-resource "vercel_project_environment_variable" "owner_email" {
-  project_id = vercel_project.looper.id
-  key        = "OWNER_EMAIL"
-  value      = var.alert_email
-  target     = local.env_targets
-  sensitive  = true
-}

@@ -7,6 +7,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Removed
+
+- The `OWNER_EMAIL` Vercel env var. Nothing has read it since the sign-in
+  callback stopped checking the owner's email in v1.8.0. Refs #300.
+
 ### Fixed
 
 - CI's Terraform plans of `infra/shared` failed since the Verified Permissions
