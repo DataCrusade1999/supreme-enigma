@@ -7,7 +7,21 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- An Amazon Verified Permissions policy store for the `/tools` namespace, with
+  its Cedar schema and four policies under `infra/shared/cedar/` (tested offline
+  with `@cedar-policy/cedar-wasm`), the Cognito user pool as its identity
+  source, and Cognito groups `owner` and `friends`, with the owner in `owner`.
+  Both Vercel roles may call `IsAuthorizedWithToken` on the store, and
+  `AVP_POLICY_STORE_ID` is set for production and preview. Nothing reads it
+  yet. Refs #300.
+
 ### Changed
+
+- The web client's ID and access tokens now last 15 minutes and its refresh
+  token 7 days, with token revocation on. The current session cookie is
+  unaffected: the callback checks the ID token once. Refs #300.
 
 - The `tf_apply_prod` role, which CI uses to apply `infra/shared` from `dev`,
   may now manage Verified Permissions and DynamoDB. The access control work

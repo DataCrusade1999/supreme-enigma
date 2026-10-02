@@ -188,6 +188,19 @@ resource "aws_cognito_user_pool_client" "web" {
   supported_identity_providers         = ["COGNITO", aws_cognito_identity_provider.google.provider_name]
   explicit_auth_flows                  = ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
   prevent_user_existence_errors        = "ENABLED"
+
+  # The ID token is what Verified Permissions checks, so its lifetime is how long
+  # a removed member keeps access. The refresh token matches the old 7-day session.
+  id_token_validity       = 15
+  access_token_validity   = 15
+  refresh_token_validity  = 7
+  enable_token_revocation = true
+
+  token_validity_units {
+    id_token      = "minutes"
+    access_token  = "minutes"
+    refresh_token = "days"
+  }
 }
 
 locals {
