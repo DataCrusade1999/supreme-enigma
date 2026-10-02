@@ -17,6 +17,10 @@ locals {
     "s3:CreateBucket", "s3:PutBucket*", "s3:DeleteBucket*",
     "s3:PutLifecycleConfiguration", "s3:PutEncryptionConfiguration",
   ]
+
+  # The account's CloudTrail trail and its log bucket (#375), in audit.tf.
+  audit_trail_name  = "${var.project_name}-audit"
+  audit_bucket_name = "${var.project_name}-cloudtrail-${data.aws_caller_identity.current.account_id}"
 }
 
 data "aws_iam_policy_document" "tf_trust" {
@@ -194,7 +198,12 @@ data "aws_iam_policy_document" "tf_apply_prod" {
   statement {
     sid       = "Bucket"
     actions   = local.tf_bucket_actions
-    resources = ["arn:aws:s3:::${local.data_bucket_names["main"]}"]
+    resources = ["arn:aws:s3:::${local.data_bucket_names["main"]}", "arn:aws:s3:::${local.audit_bucket_name}"]
+  }
+  statement {
+    sid       = "AuditTrail"
+    actions   = ["cloudtrail:*"]
+    resources = ["arn:aws:cloudtrail:${var.aws_region}:${local.account_id}:trail/${local.audit_trail_name}"]
   }
   statement {
     sid     = "ProjectIam"
