@@ -171,6 +171,7 @@ data "aws_iam_policy_document" "tf_apply_prod" {
     actions = [
       "lambda:*", "cloudwatch:*", "sns:*", "budgets:*", "ecr:*",
       "cognito-idp:*", "ses:*", "acm:*", "logs:*",
+      "verifiedpermissions:*", "dynamodb:*",
     ]
     resources = ["*"]
   }
