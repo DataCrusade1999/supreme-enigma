@@ -11,7 +11,7 @@ locals {
   nonprod_envs = ["dev", "stage"]
 
   # Bucket configuration only, never objects: Terraform manages no object, and `s3:*`
-  # trips Trivy's AWS-0345 on the plan. Removing CORS, lifecycle or the public access
+  # trips Trivy's AWS-0345 in deploy.yml's test job. Removing CORS, lifecycle or the public access
   # block is a Put of the same name, so these cover deletes too.
   tf_bucket_actions = [
     "s3:CreateBucket", "s3:PutBucket*", "s3:DeleteBucket*",
@@ -23,7 +23,8 @@ data "aws_iam_policy_document" "tf_trust" {
   for_each = {
     plan    = ["${local.github_sub_prefix}:pull_request", "${local.github_sub_prefix}:ref:refs/heads/dev"]
     nonprod = ["${local.github_sub_prefix}:ref:refs/heads/dev", "${local.github_sub_prefix}:ref:refs/heads/stage"]
-    prod    = ["${local.github_sub_prefix}:ref:refs/heads/main"]
+    # dev applies `shared` (#345); main applies `envs/main`.
+    prod = ["${local.github_sub_prefix}:ref:refs/heads/dev", "${local.github_sub_prefix}:ref:refs/heads/main"]
   }
 
   statement {
@@ -59,8 +60,8 @@ resource "aws_iam_role_policy_attachment" "tf_plan_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
-# Pushes to dev and stage. Writes are limited by name to dev's and stage's resources
-# and state, so code that has only reached dev cannot change production in AWS. Two
+# envs/dev and envs/stage on pushes to dev and stage. Writes are limited by name to
+# dev's and stage's resources and state (`shared` on a dev push uses the prod role). Two
 # gaps, both in the spec §9: iam:PutRolePolicy has no policy-name condition, so this
 # role can write any inline policy on the preview Vercel role; and the Vercel token is
 # account-wide. Deleting a bucket or a function is excluded on purpose: that needs a
@@ -143,9 +144,12 @@ resource "aws_iam_role_policy" "tf_apply_nonprod" {
   policy = data.aws_iam_policy_document.tf_apply_nonprod.json
 }
 
-# Pushes to main and manual runs on main: shared and envs/main. Every service the
-# stacks manage, with IAM limited to this project's names. It can edit its own role —
-# inherent to letting CI manage the roles; a local apply is the way back.
+# `shared` on pushes to dev and `envs/main` on pushes to main (#345), plus manual runs
+# of either. Trusting dev means code merged to dev changes production's shared
+# resources — the owner's call, so a shared change and the env change that depends on
+# it land in one merge. Every service the stacks manage, with IAM limited to this
+# project's names. It can edit its own role — inherent to letting CI manage the roles;
+# a local apply is the way back.
 resource "aws_iam_role" "tf_apply_prod" {
   name               = "${var.project_name}-tf-apply-prod"
   assume_role_policy = data.aws_iam_policy_document.tf_trust["prod"].json

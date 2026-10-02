@@ -10,10 +10,10 @@ Every Terraform plan and apply runs on the owner's workstation. `CLAUDE.md` and 
 
 Goals:
 - Every PR that touches `infra/` gets lint and a plan of the stacks it affects, posted on the PR; its security scan is the existing Trivy filesystem scan in `deploy.yml` (§4.1).
-- Merging applies: `dev` → `envs/dev`, `stage` → `envs/stage`, `main` → `shared` then `envs/main`.
+- Merging applies: `dev` → `shared` then `envs/dev`, `stage` → `envs/stage`, `main` → `envs/main` (§13; originally `main` applied `shared`).
 - No destroy or replace is applied without a deliberate, separate act.
 - Drift is detected weekly and tracked as an issue.
-- OIDC only. No long-lived AWS credentials. Code that has only reached `dev` cannot change production's AWS resources or state.
+- OIDC only. No long-lived AWS credentials. Code that has only reached `dev` cannot change production's AWS resources or state. **Withdrawn by §13** for `shared`, which `dev` now applies.
 - Stays well inside the 2,000 free Actions minutes.
 
 Non-goals:
@@ -53,9 +53,9 @@ Which stacks an event touches:
 |---|---|---|
 | PR into `dev` / `stage` / `main` | `shared`, `envs/<base branch>` | `tf-plan` |
 | push to `dev` / `stage` | `envs/<branch>` | `tf-apply-nonprod` |
-| push to `main` | `shared`, then `envs/main` | `tf-apply-prod` |
+| push to `main` | `envs/main` (`shared` before §13) | `tf-apply-prod` |
 | schedule | all four | `tf-plan` |
-| `workflow_dispatch` | the `stack` input, which must match the ref: `envs/dev` on `dev`, `envs/stage` on `stage`, `shared`/`envs/main` on `main`; `drift` runs §4.4 and only from `dev`, since `tf-plan` trusts no other branch (the job checks out each branch itself) | `tf-apply-prod` on `main`, `tf-apply-nonprod` on `dev`/`stage`, `tf-plan` for `drift` |
+| `workflow_dispatch` | the `stack` input, which must match the ref: `shared`/`envs/dev` on `dev`, `envs/stage` on `stage`, `envs/main` on `main` (§13); `drift` runs §4.4 and only from `dev`, since `tf-plan` trusts no other branch (the job checks out each branch itself) | `tf-apply-prod` on `main`, `tf-apply-nonprod` on `dev`/`stage`, `tf-plan` for `drift` |
 
 ### 4.1 PR job (`plan`)
 
@@ -80,7 +80,7 @@ Runs §4.2 for the one `stack` input on the ref it was dispatched from, with ste
 
 ### 4.4 Drift job (`schedule`)
 
-Runs on `dev` (the default branch, where `schedule` runs) with `tf-plan` and `-lock=false`, and plans each stack from the branch that applies it: `envs/dev` from `dev`, `envs/stage` from `stage`, `shared` and `envs/main` from `main` (one `actions/checkout` per branch into its own directory). Planning `shared` from `dev` would report every unpromoted change as drift. The token's subject is the workflow's ref, `dev`, whichever branch is checked out.
+Runs on `dev` (the default branch, where `schedule` runs) with `tf-plan` and `-lock=false`, and plans each stack from the branch that applies it: `shared` and `envs/dev` from `dev`, `envs/stage` from `stage`, `envs/main` from `main` (§13; `shared` was planned from `main` before) (one `actions/checkout` per branch into its own directory). Planning `shared` from `dev` would report every unpromoted change as drift. The token's subject is the workflow's ref, `dev`, whichever branch is checked out.
 
 Result:
 - Any stack exit 2: find the open issue labelled `drift` (`gh issue list --label drift --state open`). Comment on it with the per-stack summary, or create it (`chore(infra): drift detected`, labels `drift`, `area: infra`).
@@ -161,3 +161,14 @@ About 15 billed minutes per infra change carried to production (three PR plans, 
 - PR 1: `fmt`, `validate`, `tflint` clean locally; local `shared` plan adds exactly the three roles and their policies; `aws iam get-role` for each.
 - PR 2: the workflow's own PR run, then §8 steps 3-6.
 - A negative test of the nonprod scope: from a `dev` push, a deliberate change to an `envs/main` resource is impossible by construction (the dev job never plans `envs/main`); instead, verify with the IAM policy simulator (`aws iam simulate-principal-policy`) that `tf-apply-nonprod` is denied `s3:PutBucketPolicy` on `portfolio-data-<acct>`, `lambda:UpdateFunctionConfiguration` on `bgm-looper-processor`, `iam:PutRolePolicy` on `bgm-looper-vercel`, and `s3:PutObject` on `shared/terraform.tfstate`.
+
+## 13. Amendment: `shared` is applied from `dev` (#345)
+
+Applying `shared` only from `main` meant a change to an env stack that looks up a new `shared` resource failed its `dev` and `stage` applies until the `shared` change reached `main`. The owner chose to apply `shared` from `dev` instead.
+
+- **Only one branch applies `shared`.** Its state is single, so applies from several branches would each revert the others' unpromoted changes: in-place updates silently, deletes only stopped by the destroy guard. `dev` is that branch because it leads.
+- A push to `dev` applies `shared` with `tf-apply-prod`, which now also trusts `ref:refs/heads/dev`, then `envs/dev` with `tf-apply-nonprod`. Pushes to `stage` and `main` apply only their own env stack. The apply loop moved to `.github/scripts/tf-apply.sh` so the job can switch roles between the two, and the stack routing to `.github/scripts/tf-stacks.sh`, tested by `tf-stacks.test.mjs`.
+- PR plans include `shared` only on PRs into `dev`; on a promotion, the target branch's older copy of `shared` would show `dev`'s applied changes as reverts. Drift plans `shared` from `dev`.
+- A manual `apply-destroys` run for `shared` is dispatched from `dev`.
+
+What this gives up: §2's goal that code which has only reached `dev` cannot change production. A `shared` change (IAM roles, Cognito, the Vercel project, budget alerts) reaches production when it merges to `dev`, with no `stage` step, and anyone who can merge to `dev` can make one. The destroy guard still stops deletes and replaces.

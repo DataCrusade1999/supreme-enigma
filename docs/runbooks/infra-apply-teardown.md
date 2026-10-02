@@ -13,7 +13,7 @@ Per-resource detail and the reasoning behind each quirk is in
 - Shared prerequisites in [README.md](README.md#shared-prerequisites).
 - Four stacks, each with its own state and its own gitignored
   `terraform.tfvars` (copy that directory's `terraform.tfvars.example`):
-  `infra/shared` (the one-of-each resources, applied from `main` only; seven
+  `infra/shared` (the one-of-each resources, applied from `dev` only; seven
   required variables) and `infra/envs/dev`, `infra/envs/stage`,
   `infra/envs/main` (each environment's bucket, Lambda, alarm and two Vercel
   env vars; only `vercel_api_token`). A fresh clone fails with
@@ -54,8 +54,9 @@ Two things `plan` will never tell you:
 
 ## Apply
 
-Merging applies. A push to `dev` applies `envs/dev`, to `stage` `envs/stage`,
-and to `main` `shared` then `envs/main`. A plan that deletes or replaces
+Merging applies. A push to `dev` applies `shared` then `envs/dev`, to `stage`
+`envs/stage`, and to `main` `envs/main`. `shared` is applied from `dev` only, so
+a `shared` change reaches production when it merges to `dev`. A plan that deletes or replaces
 anything stops before applying; once you have read it, apply it from the
 branch that owns the stack:
 
