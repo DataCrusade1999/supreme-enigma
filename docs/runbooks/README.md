@@ -12,6 +12,7 @@ sequence), `.claude/rules/infra.md` (Terraform per-file detail),
 | [stale-lambda-recovery.md](stale-lambda-recovery.md) | The DSP pipeline is suspected to be running an old image. |
 | [incident-tool-down.md](incident-tool-down.md) | BGM Looper is failing for a user. |
 | [infra-apply-teardown.md](infra-apply-teardown.md) | Running `terraform plan`/`apply`, or the kill switch. |
+| [link-owner-google.md](link-owner-google.md) | Once, after access control ships: make Google sign in as the owner user. |
 
 ## Shared prerequisites
 
