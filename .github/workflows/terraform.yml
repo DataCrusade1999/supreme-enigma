@@ -1,6 +1,7 @@
 # Terraform in CI (#339, docs/superpowers/specs/2026-10-02-terraform-ci-design.md).
 # PRs plan, pushes apply, a plan that deletes or replaces anything stops for a
-# manual `apply-destroys` run, and a weekly plan files drift as an issue.
+# manual `apply-destroys` run, and a weekly plan files drift as an issue. Each branch
+# applies its own env stack; dev also applies `shared`, first (#345).
 # One job per event: GitHub bills each job rounded up to a minute (#320).
 # Never upload or print a plan's JSON — it holds sensitive values in plain text.
 name: Terraform
@@ -8,10 +9,10 @@ name: Terraform
 on:
   pull_request:
     branches: [dev, stage, main]
-    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs"]
+    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs", ".github/scripts/tf-apply.sh", ".github/scripts/tf-stacks.sh"]
   push:
     branches: [dev, stage, main]
-    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs"]
+    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs", ".github/scripts/tf-apply.sh", ".github/scripts/tf-stacks.sh"]
   schedule:
     - cron: "30 3 * * 1"
   workflow_dispatch:
@@ -84,7 +85,7 @@ jobs:
           BASE: ${{ github.base_ref }}
         run: |
           mkdir -p plans
-          for stack in shared "envs/$BASE"; do
+          for stack in $(bash .github/scripts/tf-stacks.sh plan); do
             mkdir -p "plans/$stack"
             echo "::group::$stack"
             terraform -chdir="infra/$stack" init -lockfile=readonly
@@ -107,11 +108,15 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PLAN: ${{ steps.plan.outcome }}
+          BASE: ${{ github.base_ref }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="Terraform plan — \`${HEAD_SHA::7}\`"
           if [ "$PLAN" != success ]; then
             title="$title — ❌ incomplete: lint or plan failed, and a stack missing below was not planned ([run]($RUN))"
+          fi
+          if [ "$BASE" != dev ]; then
+            title="$title — \`shared\` is applied from \`dev\` and not planned here; a \`shared\` change in this PR applies only once it is on \`dev\`"
           fi
           mkdir -p plans
           node .github/scripts/tf-summary.mjs comment plans "$title" > comment.md
@@ -134,28 +139,16 @@ jobs:
       group: terraform-apply-${{ github.ref_name }}
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # `shared` runs first, with the prod role, on dev only; the branch's env stack
+      # follows with its own role. Routing and its tests: .github/scripts/tf-stacks.*
       - name: Resolve stacks
         id: stacks
         env:
           EVENT: ${{ github.event_name }}
           BRANCH: ${{ github.ref_name }}
           INPUT: ${{ inputs.stack }}
-        run: |
-          case "$BRANCH" in
-            dev)   owned="envs/dev";        role=apply-nonprod ;;
-            stage) owned="envs/stage";      role=apply-nonprod ;;
-            main)  owned="shared envs/main"; role=apply-prod ;;
-            *) echo "::error::Terraform applies only from dev, stage or main"; exit 1 ;;
-          esac
-          if [ "$EVENT" = workflow_dispatch ]; then
-            case " $owned " in
-              *" $INPUT "*) owned="$INPUT" ;;
-              *) echo "::error::$INPUT is not applied from $BRANCH (this branch owns: $owned)"; exit 1 ;;
-            esac
-          fi
-          echo "list=$owned" >> "$GITHUB_OUTPUT"
-          echo "role=$role" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        run: bash .github/scripts/tf-stacks.sh resolve >> "$GITHUB_OUTPUT"
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.15.1
@@ -164,39 +157,29 @@ jobs:
         with:
           path: ${{ env.TF_PLUGIN_CACHE_DIR }}
           key: tf-plugins-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
-      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      - name: Assume the prod role for shared
+        if: steps.stacks.outputs.shared != ''
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.ROLE_PREFIX }}-apply-prod
+          aws-region: us-east-1
+      - name: Apply shared
+        if: steps.stacks.outputs.shared != ''
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: bash .github/scripts/tf-apply.sh shared
+      - name: Assume the env stack's role
+        if: steps.stacks.outputs.env != ''
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ env.ROLE_PREFIX }}-${{ steps.stacks.outputs.role }}
           aws-region: us-east-1
-      - name: Plan and apply
+      - name: Apply ${{ steps.stacks.outputs.env }}
+        if: steps.stacks.outputs.env != ''
         env:
-          STACKS: ${{ steps.stacks.outputs.list }}
           CONFIRM: ${{ inputs.confirm }}
-        run: |
-          mkdir -p "$TF_PLUGIN_CACHE_DIR"
-          for stack in $STACKS; do
-            echo "::group::$stack"
-            terraform -chdir="infra/$stack" init -lockfile=readonly
-            set +e
-            terraform -chdir="infra/$stack" plan -detailed-exitcode -out=tfplan
-            rc=$?
-            # One retry: Vercel's framework-list endpoint times out now and then.
-            if [ $rc -eq 1 ]; then sleep 15; terraform -chdir="infra/$stack" plan -detailed-exitcode -out=tfplan; rc=$?; fi
-            set -e
-            echo "::endgroup::"
-            if [ $rc -eq 0 ]; then echo "### \`$stack\` — No changes" >> "$GITHUB_STEP_SUMMARY"; continue; fi
-            [ $rc -eq 2 ] || { echo "::error::plan failed for $stack"; exit 1; }
-            terraform -chdir="infra/$stack" show -json tfplan > /tmp/plan.json
-            deletes=$(node .github/scripts/tf-summary.mjs deletes /tmp/plan.json 2>/tmp/deletes.txt)
-            rm /tmp/plan.json
-            { echo "### \`$stack\`"; echo '```'; terraform -chdir="infra/$stack" show -no-color tfplan; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-            if [ "$deletes" -gt 0 ] && [ "$CONFIRM" != apply-destroys ]; then
-              { echo "**Stopped: this plan deletes or replaces $deletes resources:**"; sed 's/^/- `/; s/$/`/' /tmp/deletes.txt; } >> "$GITHUB_STEP_SUMMARY"
-              echo "::error::$stack deletes or replaces $deletes resources. Apply with workflow_dispatch stack=$stack confirm=apply-destroys on ${GITHUB_REF_NAME}."
-              exit 1
-            fi
-            terraform -chdir="infra/$stack" apply tfplan
-          done
+          STACK: ${{ steps.stacks.outputs.env }}
+        run: bash .github/scripts/tf-apply.sh "$STACK"
 
   drift:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.stack == 'drift')
@@ -239,7 +222,7 @@ jobs:
         run: |
           mkdir -p "$TF_PLUGIN_CACHE_DIR" plans
           drift=0
-          for pair in main:shared stage:envs/stage dev:envs/dev main:envs/main; do
+          for pair in dev:shared stage:envs/stage dev:envs/dev main:envs/main; do
             branch=${pair%%:*}; stack=${pair#*:}
             mkdir -p "plans/$stack"
             echo "::group::$stack ($branch)"

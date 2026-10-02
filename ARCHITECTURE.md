@@ -93,7 +93,7 @@ Actions.
 
 `infra/bootstrap` (one-time, just the TF state S3 bucket, never destroyed),
 then four stacks with one state each: `infra/shared` (ECR, IAM, the Vercel
-project and the other one-of-each resources, applied from `main` only) and
+project and the other one-of-each resources, applied from `dev` only) and
 `infra/envs/{dev,stage,main}` (each environment's bucket, Lambda, alarm and
 Vercel env vars, through `infra/modules/environment`). Destroying the env
 stacks and then `shared` is the kill switch. Credentials come from the
