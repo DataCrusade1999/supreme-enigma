@@ -15,7 +15,9 @@ export default defineConfig({
       COGNITO_DOMAIN: "https://login.invalid",
       COGNITO_CLIENT_ID: "e2e",
       COGNITO_USER_POOL_ID: "us-east-1_e2e",
-      OWNER_EMAIL: "owner@example.com",
+      // Decisions come from the Cedar files in infra/shared/cedar, evaluated
+      // in-process; there is no Verified Permissions or Cognito under e2e.
+      AUTHZ_MODE: "local",
       COOKIE_SECRET: "devsecret",
       // `next build` hard-fails without all three of these while collecting
       // page data for /api/keystatic/[...params] — dummy values are enough,
