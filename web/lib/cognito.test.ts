@@ -1,12 +1,11 @@
 import { createHash } from "crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { authorizeUrl, exchangeCode, isOwner, pkcePair, safeNext } from "./cognito";
+import { authorizeUrl, exchangeCode, pkcePair, refreshIdToken, safeNext, verifyIdToken } from "./cognito";
 
 beforeEach(() => {
   process.env.COGNITO_DOMAIN = "https://login.example.com";
   process.env.COGNITO_CLIENT_ID = "client123";
   process.env.COGNITO_USER_POOL_ID = "us-east-1_pool";
-  process.env.OWNER_EMAIL = "owner@example.com";
 });
 
 describe("safeNext", () => {
@@ -53,10 +52,10 @@ describe("authorizeUrl", () => {
 
 describe("exchangeCode", () => {
   it("posts the code and verifier and returns the ID token", async () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id_token: "idtok" }) }));
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id_token: "idtok", refresh_token: "rt" }) }));
     vi.stubGlobal("fetch", fetchMock);
 
-    expect(await exchangeCode({ code: "c", verifier: "v", redirectUri: "https://site/api/auth/callback" })).toBe("idtok");
+    expect(await exchangeCode({ code: "c", verifier: "v", redirectUri: "https://site/api/auth/callback" })).toEqual({ idToken: "idtok", refreshToken: "rt" });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://login.example.com/oauth2/token");
     expect(init.method).toBe("POST");
@@ -76,35 +75,40 @@ describe("exchangeCode", () => {
   });
 });
 
-describe("isOwner", () => {
-  const verifierFor = (payload: Record<string, unknown>) => ({ verify: vi.fn(async () => payload) });
+describe("exchangeCode", () => {
+  it("throws when Cognito returns no refresh token", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ id_token: "idtok" }) })));
+    await expect(exchangeCode({ code: "c", verifier: "v", redirectUri: "r" })).rejects.toThrow("no tokens");
+  });
+});
 
-  it("accepts the owner's verified email", async () => {
-    expect(await isOwner("t", verifierFor({ email: "owner@example.com", email_verified: true }))).toBe(true);
+describe("refreshIdToken", () => {
+  it("posts the refresh token and returns the new ID token", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id_token: "new" }) }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await refreshIdToken("rt")).toBe("new");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://login.example.com/oauth2/token");
+    expect(Object.fromEntries(new URLSearchParams(init.body as string))).toEqual({
+      grant_type: "refresh_token",
+      client_id: "client123",
+      refresh_token: "rt",
+    });
   });
 
-  it("ignores case, since Google may capitalise the address", async () => {
-    expect(await isOwner("t", verifierFor({ email: "Owner@Example.com", email_verified: "true" }))).toBe(true);
+  it("throws when Cognito refuses the refresh token", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 400, json: async () => ({}) })));
+    await expect(refreshIdToken("rt")).rejects.toThrow("400");
+  });
+});
+
+describe("verifyIdToken", () => {
+  it("is true when the verifier accepts the token", async () => {
+    expect(await verifyIdToken("t", { verify: vi.fn(async () => ({ sub: "u" })) })).toBe(true);
   });
 
-  it.each([
-    [{ email: "someone@example.com", email_verified: true }],
-    [{ email: "owner@example.com", email_verified: false }],
-    [{ email: "owner@example.com", email_verified: "false" }],
-    [{ email: "owner@example.com" }],
-    [{ email_verified: true }],
-  ])("refuses %j", async (payload) => {
-    expect(await isOwner("t", verifierFor(payload))).toBe(false);
-  });
-
-  it("refuses a token that does not verify", async () => {
-    expect(await isOwner("t", { verify: vi.fn(async () => { throw new Error("bad sig"); }) })).toBe(false);
-  });
-
-  it("names the missing variable when OWNER_EMAIL is not set", async () => {
-    delete process.env.OWNER_EMAIL;
-    await expect(
-      isOwner("t", verifierFor({ email: "owner@example.com", email_verified: true })),
-    ).rejects.toThrow("OWNER_EMAIL is not set");
+  it("is false when it throws", async () => {
+    expect(await verifyIdToken("t", { verify: vi.fn(async () => { throw new Error("bad sig"); }) })).toBe(false);
   });
 });

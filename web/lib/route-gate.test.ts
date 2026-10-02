@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isGatedPath, toolNameFor, TOOLS } from "./route-gate";
+import { actionFor, isGatedPath, isMetered, toolNameFor, TOOLS } from "./route-gate";
 
 describe("isGatedPath", () => {
   it.each([
@@ -119,6 +119,67 @@ describe("TOOLS", () => {
     for (const tool of TOOLS) {
       expect(tool.kind).not.toBe("");
       expect(tool.blurb).not.toBe("");
+    }
+  });
+});
+
+describe("actionFor", () => {
+  it.each([
+    ["GET", "/tools", "hub", "view", false],
+    ["GET", "/tools/bgm-looper", "bgm-looper", "view", false],
+    ["POST", "/api/looper/upload-url", "bgm-looper", "looper:process", false],
+    ["POST", "/api/looper/process", "bgm-looper", "looper:process", true],
+    ["GET", "/tools/money-planner", "money-planner", "view", false],
+    ["GET", "/tools/news-desk", "news-desk", "view", false],
+    ["POST", "/api/news-desk/indicators", "news-desk", "newsdesk:pin", false],
+    ["DELETE", "/api/news-desk/indicators/cpi-food", "news-desk", "newsdesk:pin", false],
+    ["POST", "/api/news-desk/refresh", "news-desk", "newsdesk:refresh", true],
+    ["POST", "/api/news-desk/ask", "news-desk", "newsdesk:ask", true],
+    ["GET", "/tools/resume-admin", "resume-admin", "view", false],
+    ["GET", "/tools/resume-admin/preview/abc123", "resume-admin", "view", false],
+    ["GET", "/api/resume/draft", "resume-admin", "resume:draft", false],
+    ["PUT", "/api/resume/draft", "resume-admin", "resume:draft", false],
+    ["POST", "/api/resume/upload-url", "resume-admin", "resume:draft", false],
+    ["POST", "/api/resume/extract", "resume-admin", "resume:extract", false],
+    ["POST", "/api/resume/publish", "resume-admin", "resume:publish", false],
+    ["GET", "/tools/newsletter-admin", "newsletter-admin", "view", false],
+    ["POST", "/api/newsletter/send", "newsletter-admin", "newsletter:send", false],
+    ["GET", "/keystatic", "keystatic", "keystatic:use", false],
+    ["GET", "/keystatic/blog/hello", "keystatic", "keystatic:use", false],
+    ["POST", "/api/keystatic/github/oauth/callback", "keystatic", "keystatic:use", false],
+  ])("%s %s -> %s %s (consumes: %s)", (method, path, tool, action, consumes) => {
+    expect(actionFor(method, path)).toEqual({ tool, action, consumes });
+  });
+
+  it("treats HEAD like GET and ignores a trailing slash", () => {
+    expect(actionFor("HEAD", "/tools/news-desk")).toEqual({ tool: "news-desk", action: "view", consumes: false });
+    expect(actionFor("GET", "/tools/news-desk/")).toEqual({ tool: "news-desk", action: "view", consumes: false });
+    expect(actionFor("get", "/tools")).toEqual({ tool: "hub", action: "view", consumes: false });
+  });
+
+  it.each([
+    ["POST", "/tools/news-desk"],
+    ["GET", "/api/news-desk/ask"],
+    ["DELETE", "/api/news-desk/indicators"],
+    ["GET", "/tools/something-new"],
+    ["GET", "/api/looper/anything"],
+  ])("leaves %s %s unmapped, so the proxy denies it", (method, path) => {
+    expect(actionFor(method, path)).toBeNull();
+  });
+});
+
+describe("isMetered", () => {
+  it("is true for exactly the three metered actions", () => {
+    expect(["looper:process", "newsdesk:refresh", "newsdesk:ask"].every((a) => isMetered(a as never))).toBe(true);
+    expect(isMetered("view")).toBe(false);
+    expect(isMetered("resume:extract")).toBe(false);
+  });
+});
+
+describe("TOOLS", () => {
+  it("gives every tool the action its page needs", () => {
+    for (const tool of TOOLS) {
+      expect(actionFor("GET", tool.href)).toMatchObject({ tool: tool.id, action: tool.pageAction });
     }
   });
 });

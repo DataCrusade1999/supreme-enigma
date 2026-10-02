@@ -4,11 +4,11 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/cognito", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/cognito")>()),
   exchangeCode: vi.fn(),
-  isOwner: vi.fn(),
+  verifyIdToken: vi.fn(),
 }));
 
-import { exchangeCode, isOwner } from "@/lib/cognito";
-import { COOKIE_NAME, verifySessionCookieValue } from "@/lib/auth";
+import { exchangeCode, verifyIdToken } from "@/lib/cognito";
+import { ID_COOKIE, REFRESH_COOKIE, unseal } from "@/lib/auth";
 import { createOAuthState, OAUTH_COOKIE } from "@/lib/oauth-state";
 import { GET } from "./route";
 
@@ -34,9 +34,9 @@ function redirectedTo(res: Response) {
 }
 
 describe("GET /api/auth/callback", () => {
-  it("signs the owner in and sends them where they were going", async () => {
-    vi.mocked(exchangeCode).mockResolvedValue("idtok");
-    vi.mocked(isOwner).mockResolvedValue(true);
+  it("signs any verified user in and sends them where they were going", async () => {
+    vi.mocked(exchangeCode).mockResolvedValue({ idToken: "idtok", refreshToken: "rt" });
+    vi.mocked(verifyIdToken).mockResolvedValue(true);
 
     const res = await callback({ code: "c", state: "s1" }, cookieFor("s1"));
 
@@ -46,7 +46,9 @@ describe("GET /api/auth/callback", () => {
       verifier: "ver",
       redirectUri: "https://site.example/api/auth/callback",
     });
-    expect(verifySessionCookieValue(res.cookies.get(COOKIE_NAME)!.value, "secret")).toBe(true);
+    expect(verifyIdToken).toHaveBeenCalledWith("idtok");
+    expect(unseal(res.cookies.get(ID_COOKIE)!.value, "secret")).toBe("idtok");
+    expect(unseal(res.cookies.get(REFRESH_COOKIE)!.value, "secret")).toBe("rt");
     expect(res.cookies.get(OAUTH_COOKIE)!.value).toBe("");
   });
 
@@ -56,7 +58,7 @@ describe("GET /api/auth/callback", () => {
     expect(redirectedTo(res)).toBe("/tools?passkey=added");
     expect(res.cookies.get(OAUTH_COOKIE)!.value).toBe("");
     expect(exchangeCode).not.toHaveBeenCalled();
-    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+    expect(res.cookies.get(ID_COOKIE)).toBeUndefined();
   });
 
   it.each(["invalid_session", "<script>"])("reports any other passkey result (%j) as not added", async (result) => {
@@ -83,13 +85,13 @@ describe("GET /api/auth/callback", () => {
     const res = await callback({ code: "c", state: "s1" });
     expect(redirectedTo(res)).toBe("/login?error=state");
     expect(exchangeCode).not.toHaveBeenCalled();
-    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+    expect(res.cookies.get(ID_COOKIE)).toBeUndefined();
   });
 
   it("refuses a state from another sign-in", async () => {
     const res = await callback({ code: "c", state: "other" }, cookieFor("s1"));
     expect(redirectedTo(res)).toBe("/login?error=state");
-    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+    expect(res.cookies.get(ID_COOKIE)).toBeUndefined();
   });
 
   it("reports a sign-in Cognito cancelled", async () => {
@@ -97,29 +99,21 @@ describe("GET /api/auth/callback", () => {
     expect(redirectedTo(res)).toBe("/login?error=denied");
   });
 
-  it("refuses anyone but the owner", async () => {
-    vi.mocked(exchangeCode).mockResolvedValue("idtok");
-    vi.mocked(isOwner).mockResolvedValue(false);
+  it("refuses a token that fails verification", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(exchangeCode).mockResolvedValue({ idToken: "idtok", refreshToken: "rt" });
+    vi.mocked(verifyIdToken).mockResolvedValue(false);
 
     const res = await callback({ code: "c", state: "s1" }, cookieFor("s1"));
-    expect(redirectedTo(res)).toBe("/login?error=not-allowed");
-    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+    expect(redirectedTo(res)).toBe("/login?error=failed");
+    expect(res.cookies.get(ID_COOKIE)).toBeUndefined();
   });
 
   it("reports a cancel as cancelled even when the state cookie has expired", async () => {
     const res = await callback({ error: "access_denied", state: "s1" });
     expect(redirectedTo(res)).toBe("/login?error=denied");
     expect(exchangeCode).not.toHaveBeenCalled();
-    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
-  });
-
-  it("redirects rather than failing when the owner check throws", async () => {
-    vi.mocked(exchangeCode).mockResolvedValue("idtok");
-    vi.mocked(isOwner).mockRejectedValue(new Error("OWNER_EMAIL is not set"));
-
-    const res = await callback({ code: "c", state: "s1" }, cookieFor("s1"));
-    expect(redirectedTo(res)).toBe("/login?error=failed");
-    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+    expect(res.cookies.get(ID_COOKIE)).toBeUndefined();
   });
 
   it("redirects rather than failing when COOKIE_SECRET is not set", async () => {
@@ -128,7 +122,7 @@ describe("GET /api/auth/callback", () => {
     const res = await callback({ code: "c", state: "s1" }, stateCookie);
     expect(redirectedTo(res)).toBe("/login?error=failed");
     expect(exchangeCode).not.toHaveBeenCalled();
-    expect(res.cookies.get(COOKIE_NAME)).toBeUndefined();
+    expect(res.cookies.get(ID_COOKIE)).toBeUndefined();
   });
 
   it("reports a failed code exchange", async () => {

@@ -40,7 +40,6 @@ function parseNext(
 const ERRORS: Record<string, string> = {
   state: "That sign-in expired or came from another tab. Try again.",
   denied: "Sign-in was cancelled.",
-  "not-allowed": "That account can't open these tools.",
   failed: "Sign-in failed. Try again.",
 };
 

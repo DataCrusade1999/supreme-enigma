@@ -9,20 +9,26 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
-- An Amazon Verified Permissions policy store for the `/tools` namespace, with
-  its Cedar schema and four policies under `infra/shared/cedar/` (tested offline
-  with `@cedar-policy/cedar-wasm`), the Cognito user pool as its identity
-  source, and Cognito groups `owner` and `friends`, with the owner in `owner`.
-  Both Vercel roles may call `IsAuthorizedWithToken` on the store, and
-  `AVP_POLICY_STORE_ID` is set for production and preview. Nothing reads it
-  yet. Refs #300.
+- Access control for `/tools`: Amazon Verified Permissions decides every
+  request from Cedar policies, with Cognito groups `owner` and `friends`.
+  Anyone can sign in with Google; an account in neither group sees "Access
+  requested" and an address to write to. Friends see BGM Looper, Money Planner
+  and News Desk; actions that cost money need a separate grant, which arrives
+  with part 2. Refs #300.
+- The Verified Permissions policy store behind it, with its Cedar schema and
+  four policies under `infra/shared/cedar/` (tested offline with
+  `@cedar-policy/cedar-wasm`), the Cognito user pool as its identity source,
+  and Cognito groups `owner` and `friends`, with the owner in `owner`. Both
+  Vercel roles may call `IsAuthorizedWithToken` on the store, and
+  `AVP_POLICY_STORE_ID` is set for production and preview. Refs #300.
 
 ### Changed
 
+- The session is now the user's Cognito tokens in two encrypted cookies,
+  refreshed every 15 minutes, replacing the signed timestamp. Everyone signs in
+  again once. Refs #300.
 - The web client's ID and access tokens now last 15 minutes and its refresh
-  token 7 days, with token revocation on. The current session cookie is
-  unaffected: the callback checks the ID token once. Refs #300.
-
+  token 7 days, with token revocation on. Refs #300.
 - The `tf_apply_prod` role, which CI uses to apply `infra/shared` from `dev`,
   may now manage Verified Permissions and DynamoDB. The access control work
   (#300) adds a policy store and a grants table to `shared`; this lands first

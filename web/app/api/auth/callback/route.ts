@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { COOKIE_NAME, createSessionCookieValue } from "@/lib/auth";
-import { exchangeCode, isOwner, safeNext } from "@/lib/cognito";
+import { setSessionCookies } from "@/lib/auth";
+import { exchangeCode, safeNext, verifyIdToken, type Tokens } from "@/lib/cognito";
 import { OAUTH_COOKIE, readOAuthState } from "@/lib/oauth-state";
 
 export const dynamic = "force-dynamic";
@@ -50,9 +50,9 @@ export async function GET(request: NextRequest) {
   const code = params.get("code");
   if (!code) return toLogin(request, "failed");
 
-  let idToken: string;
+  let tokens: Tokens;
   try {
-    idToken = await exchangeCode({
+    tokens = await exchangeCode({
       code,
       verifier: saved.verifier,
       redirectUri: `${request.nextUrl.origin}/api/auth/callback`,
@@ -62,26 +62,16 @@ export async function GET(request: NextRequest) {
     return toLogin(request, "failed");
   }
 
-  let owner: boolean;
-  try {
-    owner = await isOwner(idToken);
-  } catch (err) {
-    console.error("auth: owner check failed", err);
+  if (!(await verifyIdToken(tokens.idToken))) {
+    console.error("auth: the ID token from the code exchange failed verification");
     return toLogin(request, "failed");
   }
-  if (!owner) return toLogin(request, "not-allowed");
 
   // saved.next was cleaned by the login route and is signed, but this is the
-  // redirect that matters, so it is cleaned again here.
+  // redirect that matters, so it is cleaned again here. Any Cognito user gets a
+  // session; the proxy asks Verified Permissions what the session may open.
   const response = NextResponse.redirect(new URL(safeNext(saved.next), request.url));
   response.cookies.set(OAUTH_COOKIE, "", { path: "/api/auth", maxAge: 0 });
-  // Same cookie and attributes the password route set, so proxy.ts is unchanged.
-  response.cookies.set(COOKIE_NAME, createSessionCookieValue(secret), {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
+  setSessionCookies(response, tokens, secret);
   return response;
 }
