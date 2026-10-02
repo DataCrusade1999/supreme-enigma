@@ -4,7 +4,7 @@
 
 **Goal:** Every gated request is allowed or denied by Amazon Verified Permissions, from Cedar policies, with Cognito groups `owner` and `friends` as the identity source, and the session carries the user's Cognito tokens.
 
-**Architecture:** Terraform creates a Verified Permissions policy store whose schema and four policies are files under `infra/main/cedar/`. The callback stops checking `OWNER_EMAIL` and seals the ID and refresh tokens into two encrypted cookies. `proxy.ts` maps `(method, path)` to `(tool, action)` through `ROUTE_ACTIONS` in `route-gate.ts`, refreshes the ID token when it is about to expire, and asks an `Authorizer` for a decision: Verified Permissions in production, the same Cedar files evaluated in-process under e2e.
+**Architecture:** Terraform creates a Verified Permissions policy store whose schema and four policies are files under `infra/shared/cedar/`. The callback stops checking `OWNER_EMAIL` and seals the ID and refresh tokens into two encrypted cookies. `proxy.ts` maps `(method, path)` to `(tool, action)` through `ROUTE_ACTIONS` in `route-gate.ts`, refreshes the ID token when it is about to expire, and asks an `Authorizer` for a decision: Verified Permissions in production, the same Cedar files evaluated in-process under e2e.
 
 **Tech Stack:** Next.js 16 (`proxy.ts` on Node.js), TypeScript, Vitest, Playwright, `@aws-sdk/client-verifiedpermissions`, `@cedar-policy/cedar-wasm` (dev only), Terraform `hashicorp/aws ~> 6.62`.
 
@@ -12,10 +12,14 @@
 
 ## Global Constraints
 
-- Branch: `feat/access-control-core` from `dev`. The PR into `dev` says `Refs #300` (part 3 closes it). Merge with `gh pr merge <N> --squash --delete-branch`, after invoking the `merging-a-pr` skill.
+- Three PRs into `dev`, in order, each saying `Refs #300` (part 3 closes the issue), each merged with `gh pr merge <N> --squash --delete-branch` after invoking the `merging-a-pr` skill:
+  1. `chore/access-control-ci-perms` (Task 0): the CI apply role's new permissions.
+  2. `feat/access-control-store` (Tasks 1–2): the Cedar files and the Terraform.
+  3. `feat/access-control-core` (Tasks 3–12): the web change.
+  Each waits for the one before it to merge and for the `Terraform` workflow's apply on `dev` to finish. A Vercel deployment keeps the env vars it was created with, and the deployment for a push to `dev` is created before CI's apply sets `AVP_POLICY_STORE_ID`, so the web change cannot share a PR with the Terraform that creates it.
 - Commits end with `Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>`.
 - Every manual `aws` command takes `--profile personal --region us-east-1`.
-- Terraform runs from `infra/main/` with `-var-file=terraform.tfvars`. Run `terraform plan` against real state before merging and confirm `No changes.` after the apply.
+- Terraform runs in CI (`.github/workflows/terraform.yml`). A PR that touches `infra/` gets a plan comment per stack; read it before merging (root `CLAUDE.md` § Merging a PR). A push to `dev` applies `shared` with `tf_apply_prod`, so everything in `infra/shared` reaches production when it merges to `dev`. A plan that destroys or replaces anything stops the apply until someone runs the workflow by hand with `confirm: apply-destroys`. Local runs (`infra/shared/`, `AWS_PROFILE=personal`, `-var-file=terraform.tfvars`) are for `fmt`/`validate` and the break-glass path, not the normal apply.
 - Cedar namespace `Site`. Entity types `Site::User`, `Site::Group`, `Site::Tool`. Group entity IDs are `<user pool ID>|<group name>`; the policy files write that as `${pool}|owner`.
 - Tool IDs: `hub`, `bgm-looper`, `money-planner`, `news-desk`, `resume-admin`, `newsletter-admin`, `keystatic`, `access-admin`.
 - Action IDs: `view`, `newsdesk:pin` (group `free`); `looper:process`, `newsdesk:refresh`, `newsdesk:ask` (group `metered`); `resume:draft`, `resume:extract`, `resume:publish`, `newsletter:send`, `keystatic:use`, `access:manage` (group `ownerOnly`).
@@ -39,28 +43,82 @@
 
 ---
 
+### Task 0: Let CI apply Verified Permissions and DynamoDB
+
+`tf_apply_prod` applies `shared` from `dev`, and its `Services` statement has no `verifiedpermissions:*` or `dynamodb:*`. Without them Task 2's apply fails with `AccessDenied`. The permission goes in its own PR because a role cannot reliably use a grant made in the same apply (IAM is eventually consistent). `dynamodb:*` is for part 2's grants table; it is added now so part 2 doesn't need a PR of its own for it.
+
+**Files:**
+- Modify: `infra/shared/ci.tf` (`data "aws_iam_policy_document" "tf_apply_prod"`, statement `Services`)
+
+- [ ] **Step 1: Branch**
+
+```bash
+cd /e/Personal/looper && git switch dev && git pull && git switch -c chore/access-control-ci-perms
+```
+
+- [ ] **Step 2: Add the two services**
+
+In `tf_apply_prod`'s `Services` statement, change the `actions` list to:
+
+```hcl
+    actions = [
+      "lambda:*", "cloudwatch:*", "sns:*", "budgets:*", "ecr:*",
+      "cognito-idp:*", "ses:*", "acm:*", "logs:*",
+      "verifiedpermissions:*", "dynamodb:*",
+    ]
+```
+
+`tf_apply_nonprod` doesn't change: it applies only `envs/dev` and `envs/stage`, which hold none of these resources.
+
+- [ ] **Step 3: Format, commit, PR**
+
+```bash
+cd /e/Personal/looper/infra/shared && terraform fmt -check
+cd /e/Personal/looper
+git add infra/shared/ci.tf
+git commit -m "chore(infra): let CI apply Verified Permissions and DynamoDB (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
+git push -u origin chore/access-control-ci-perms
+gh pr create --base dev --title "chore(infra): let CI apply Verified Permissions and DynamoDB (#300)" --body "$(cat <<'EOF'
+The access control work (#300) adds a Verified Permissions policy store and a DynamoDB table to infra/shared. tf_apply_prod, which applies shared from dev, has neither service. This adds both, in its own PR so the grant is in place before the apply that needs it.
+
+Refs #300
+EOF
+)"
+```
+
+- [ ] **Step 4: Merge and wait for the apply**
+
+The `Terraform` workflow's plan comment must show `shared`: `1 to change` (`aws_iam_role_policy.tf_apply_prod`), and `No changes` for every other stack. Invoke the `merging-a-pr` skill and merge. Then wait for the apply on `dev`:
+
+```bash
+gh run list --workflow terraform.yml --branch dev --limit 1
+gh run watch <id> --exit-status
+```
+
+---
+
 ### Task 1: Cedar schema, policies and offline policy tests
 
 **Files:**
-- Create: `infra/main/cedar/schema.cedarschema.json`
-- Create: `infra/main/cedar/policies/owner-all.cedar`, `friends-free.cedar`, `friends-metered.cedar`, `owner-only-guard.cedar`
+- Create: `infra/shared/cedar/schema.cedarschema.json`
+- Create: `infra/shared/cedar/policies/owner-all.cedar`, `friends-free.cedar`, `friends-metered.cedar`, `owner-only-guard.cedar`
 - Create: `web/lib/authz/cedar-files.ts`
 - Test: `web/lib/authz/policies.test.ts`
 - Modify: `web/package.json` (dev dependency)
 
 **Interfaces:**
-- Produces: `loadCedar(poolId: string, dir?: string): CedarFiles` with `CedarFiles = { schema: Record<string, unknown>; policies: Record<string, string> }`; `CEDAR_DIR` (absolute path to `infra/main/cedar`, resolved from `process.cwd()`, which is `web/` under Vitest, `next start` and Playwright).
+- Produces: `loadCedar(poolId: string, dir?: string): CedarFiles` with `CedarFiles = { schema: Record<string, unknown>; policies: Record<string, string> }`; `CEDAR_DIR` (absolute path to `infra/shared/cedar`, resolved from `process.cwd()`, which is `web/` under Vitest, `next start` and Playwright).
 
 - [ ] **Step 1: Branch and install the Cedar evaluator**
 
 ```bash
-cd /e/Personal/looper && git switch dev && git pull && git switch -c feat/access-control-core
+cd /e/Personal/looper && git switch dev && git pull && git switch -c feat/access-control-store
 cd web && npm install --save-dev @cedar-policy/cedar-wasm@^4.13.0
 ```
 
 - [ ] **Step 2: Write the schema**
 
-`infra/main/cedar/schema.cedarschema.json`:
+`infra/shared/cedar/schema.cedarschema.json`:
 
 ```json
 {
@@ -104,13 +162,13 @@ The context shape is repeated per action rather than declared once under `common
 
 No `@id` annotations: Terraform names each policy by file, and the tests key them by file name.
 
-`infra/main/cedar/policies/owner-all.cedar`:
+`infra/shared/cedar/policies/owner-all.cedar`:
 
 ```cedar
 permit (principal in Site::Group::"${pool}|owner", action, resource);
 ```
 
-`infra/main/cedar/policies/friends-free.cedar`:
+`infra/shared/cedar/policies/friends-free.cedar`:
 
 ```cedar
 permit (principal in Site::Group::"${pool}|friends", action in Site::Action::"free", resource)
@@ -119,7 +177,7 @@ when {
 };
 ```
 
-`infra/main/cedar/policies/friends-metered.cedar`:
+`infra/shared/cedar/policies/friends-metered.cedar`:
 
 ```cedar
 permit (principal in Site::Group::"${pool}|friends", action in Site::Action::"metered", resource)
@@ -130,7 +188,7 @@ when {
 };
 ```
 
-`infra/main/cedar/policies/owner-only-guard.cedar`:
+`infra/shared/cedar/policies/owner-only-guard.cedar`:
 
 ```cedar
 forbid (principal, action in Site::Action::"ownerOnly", resource)
@@ -300,7 +358,7 @@ Expected: all PASS. If the import of `@cedar-policy/cedar-wasm/nodejs` fails, th
 
 ```bash
 cd /e/Personal/looper
-git add infra/main/cedar web/lib/authz web/package.json web/package-lock.json
+git add infra/shared/cedar web/lib/authz web/package.json web/package-lock.json
 git commit -m "feat(access): Cedar schema and policies with offline tests (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 ```
 
@@ -309,12 +367,12 @@ git commit -m "feat(access): Cedar schema and policies with offline tests (#300)
 ### Task 2: Terraform — policy store, groups, token lifetimes
 
 **Files:**
-- Create: `infra/main/access.tf`
-- Modify: `infra/main/auth.tf` (the `aws_cognito_user_pool_client.web` block, lines 179-191)
+- Create: `infra/shared/access.tf`
+- Modify: `infra/shared/auth.tf` (the `aws_cognito_user_pool_client.web` block, lines 179-191)
 
 **Interfaces:**
 - Consumes: the Cedar files from Task 1.
-- Produces: Vercel env var `AVP_POLICY_STORE_ID`; Cognito groups `owner` and `friends`, with the owner user in `owner`; the Vercel role may call `verifiedpermissions:IsAuthorizedWithToken` on the store.
+- Produces: Vercel env var `AVP_POLICY_STORE_ID`; Cognito groups `owner` and `friends`, with the owner user in `owner`; both Vercel roles may call `verifiedpermissions:IsAuthorizedWithToken` on the store.
 
 - [ ] **Step 1: Write `access.tf`**
 
@@ -397,21 +455,31 @@ resource "aws_cognito_user_in_group" "owner" {
   username     = aws_cognito_user.owner.username
 }
 
-resource "aws_iam_role_policy" "vercel_access" {
-  name = "${var.project_name}-vercel-access"
-  role = aws_iam_role.vercel.id
+# Both Vercel roles get the same statements: production assumes aws_iam_role.vercel,
+# dev and stage assume aws_iam_role.vercel_preview, and everything here (the policy
+# store, later the pool and the grants table) is shared by all three environments.
+# Same pattern as vercel_resume_statements in shared.tf.
+locals {
+  vercel_access_statements = [
+    {
+      Sid      = "AuthorizeRequests"
+      Effect   = "Allow"
+      Action   = ["verifiedpermissions:IsAuthorizedWithToken"]
+      Resource = [aws_verifiedpermissions_policy_store.site.arn]
+    },
+  ]
+}
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "AuthorizeRequests"
-        Effect   = "Allow"
-        Action   = ["verifiedpermissions:IsAuthorizedWithToken"]
-        Resource = [aws_verifiedpermissions_policy_store.site.arn]
-      },
-    ]
-  })
+resource "aws_iam_role_policy" "vercel_access" {
+  name   = "${var.project_name}-vercel-access"
+  role   = aws_iam_role.vercel.id
+  policy = jsonencode({ Version = "2012-10-17", Statement = local.vercel_access_statements })
+}
+
+resource "aws_iam_role_policy" "vercel_preview_access" {
+  name   = "${var.project_name}-vercel-preview-access"
+  role   = aws_iam_role.vercel_preview.id
+  policy = jsonencode({ Version = "2012-10-17", Statement = local.vercel_access_statements })
 }
 
 resource "vercel_project_environment_variable" "avp_policy_store_id" {
@@ -425,7 +493,7 @@ resource "vercel_project_environment_variable" "avp_policy_store_id" {
 
 - [ ] **Step 2: Set token lifetimes on the web client**
 
-In `infra/main/auth.tf`, inside `resource "aws_cognito_user_pool_client" "web"`, after `prevent_user_existence_errors = "ENABLED"`, add:
+In `infra/shared/auth.tf`, inside `resource "aws_cognito_user_pool_client" "web"`, after `prevent_user_existence_errors = "ENABLED"`, add:
 
 ```hcl
 
@@ -443,44 +511,61 @@ In `infra/main/auth.tf`, inside `resource "aws_cognito_user_pool_client" "web"`,
   }
 ```
 
-- [ ] **Step 3: Format, validate, plan**
+- [ ] **Step 3: Format and validate**
 
 ```bash
-cd /e/Personal/looper/infra/main
+cd /e/Personal/looper/infra/shared
 terraform fmt && terraform validate
-terraform plan -var-file=terraform.tfvars
 ```
 
-Expected: `Plan: 11 to add, 1 to change, 0 to destroy`. The additions are the store, the schema, 4 policies, the identity source, 2 groups, the group membership, the IAM policy and the env var (12 if Terraform counts the env var separately; any count is fine as long as nothing is destroyed). The one change is `aws_cognito_user_pool_client.web`, updated in place. Stop and investigate anything marked `-/+` or `destroy`.
+A local `terraform plan -var-file=terraform.tfvars` (with `AWS_PROFILE=personal`) is a quick preview if you want one; the plan that counts is the one CI posts on the PR.
 
-- [ ] **Step 4: Apply**
-
-Safe before the web change merges: nothing reads the new env var yet, and shorter tokens don't affect the current timestamp session.
-
-```bash
-terraform apply -var-file=terraform.tfvars
-```
-
-If `aws_cognito_user_in_group.owner` fails with `UserNotFoundException`, the admin API didn't accept the email alias. Read the stored username (a UUID) with `aws cognito-idp list-users --user-pool-id us-east-1_TagY3QxyT --filter 'email = "<alert_email>"' --query 'Users[0].Username' --output text --profile personal --region us-east-1`, set `username` to that literal with a comment saying the pool stores a UUID and the admin API didn't accept the email alias here, and apply again.
-
-- [ ] **Step 5: Check the result against the API**
-
-```bash
-STORE=$(aws verifiedpermissions list-policy-stores --profile personal --region us-east-1 --query 'policyStores[0].policyStoreId' --output text)
-aws verifiedpermissions list-policies --policy-store-id "$STORE" --profile personal --region us-east-1 --query 'length(policies)'
-aws cognito-idp admin-list-groups-for-user --user-pool-id us-east-1_TagY3QxyT --username "$(grep alert_email terraform.tfvars | cut -d'"' -f2)" --profile personal --region us-east-1 --query 'Groups[].GroupName'
-terraform plan -var-file=terraform.tfvars
-```
-
-Expected: `4`; `["owner"]`; `No changes.`
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Commit, PR, read the plan**
 
 ```bash
 cd /e/Personal/looper
-git add infra/main/access.tf infra/main/auth.tf
+git add infra/shared/access.tf infra/shared/auth.tf
 git commit -m "feat(infra): Verified Permissions policy store and Cognito groups (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
+git push -u origin feat/access-control-store
+gh pr create --base dev --title "feat(infra): Verified Permissions policy store and Cognito groups (#300)" --body "$(cat <<'EOF'
+Part 1a of #300 (plan: docs/superpowers/plans/2026-09-29-access-control-authorization.md, Tasks 1-2).
+
+- Cedar schema and four policies under infra/shared/cedar, tested offline with cedar-wasm
+- Verified Permissions policy store (STRICT), schema, policies and Cognito identity source
+- Cognito groups owner and friends, with the owner user in owner
+- ID and access tokens 15 minutes, refresh token 7 days
+- IsAuthorizedWithToken on both Vercel roles; AVP_POLICY_STORE_ID for production and preview
+
+Nothing reads the new env var yet. The shorter tokens don't affect the current session cookie, which the callback issues after checking the ID token once.
+
+Refs #300
+EOF
+)"
 ```
+
+The `Terraform` workflow's plan for `shared` must show about `12 to add, 1 to change, 0 to destroy`: the store, the schema, 4 policies, the identity source, 2 groups, the group membership, 2 IAM policies and the env var; the change is `aws_cognito_user_pool_client.web`, updated in place. The env stacks show `No changes`. Stop and investigate anything marked `-/+` or `destroy`.
+
+- [ ] **Step 5: Merge and wait for the apply**
+
+Invoke the `merging-a-pr` skill and merge. The push to `dev` applies `shared`; wait for it:
+
+```bash
+gh run list --workflow terraform.yml --branch dev --limit 1
+gh run watch <id> --exit-status
+```
+
+If `aws_cognito_user_in_group.owner` fails with `UserNotFoundException`, the admin API didn't accept the email alias. Read the stored username (a UUID) with `aws cognito-idp list-users --user-pool-id us-east-1_TagY3QxyT --filter 'email = "<alert_email>"' --query 'Users[0].Username' --output text --profile personal --region us-east-1`, set `username` to that literal with a comment saying the pool stores a UUID and the admin API didn't accept the email alias here, and fix it forward in a new PR.
+
+- [ ] **Step 6: Check the result against the API**
+
+```bash
+cd /e/Personal/looper
+STORE=$(aws verifiedpermissions list-policy-stores --profile personal --region us-east-1 --query 'policyStores[0].policyStoreId' --output text)
+aws verifiedpermissions list-policies --policy-store-id "$STORE" --profile personal --region us-east-1 --query 'length(policies)'
+aws cognito-idp admin-list-groups-for-user --user-pool-id us-east-1_TagY3QxyT --username "$(grep alert_email infra/shared/terraform.tfvars | cut -d'"' -f2)" --profile personal --region us-east-1 --query 'Groups[].GroupName'
+```
+
+Expected: `4`; `["owner"]`.
 
 ---
 
@@ -491,7 +576,13 @@ Every check in this plan runs in `proxy.ts`, and the Vercel OIDC credentials hav
 **Files:**
 - Modify (temporarily): `web/proxy.ts`
 
-- [ ] **Step 1: Add the probe**
+- [ ] **Step 1: Branch, then add the probe**
+
+Start the web PR's branch from `dev` after Task 2's PR merged and its apply finished:
+
+```bash
+cd /e/Personal/looper && git switch dev && git pull && git switch -c feat/access-control-core
+```
 
 At the top of `proxy()` in `web/proxy.ts`, before the `isGatedPath` check, add:
 
@@ -999,7 +1090,7 @@ export type ToolId =
   | "access-admin";
 
 // The actions Verified Permissions decides on. The Cedar schema in
-// infra/main/cedar/ declares the same twelve; the policy tests fail if they drift.
+// infra/shared/cedar/ declares the same twelve; the policy tests fail if they drift.
 export const METERED_ACTIONS = ["looper:process", "newsdesk:refresh", "newsdesk:ask"] as const;
 export type MeteredAction = (typeof METERED_ACTIONS)[number];
 export type ActionId =
@@ -2450,7 +2541,7 @@ export async function signIn(page: Page, baseURL: string, role: Role = "owner"):
 In `web/playwright.config.ts`'s `webServer.env`, remove `OWNER_EMAIL` and add:
 
 ```ts
-      // Decisions come from the Cedar files in infra/main/cedar, evaluated
+      // Decisions come from the Cedar files in infra/shared/cedar, evaluated
       // in-process; there is no Verified Permissions or Cognito under e2e.
       AUTHZ_MODE: "local",
 ```
@@ -2560,7 +2651,7 @@ A passkey registered to the Google user is lost when it is deleted in step 2. Re
      --profile personal --region us-east-1
    ```
 
-3. Link the Google identity to the native owner user (`<email>` is `alert_email` in `infra/main/terraform.tfvars`; `<id>` is the number after `Google_`):
+3. Link the Google identity to the native owner user (`<email>` is `alert_email` in `infra/shared/terraform.tfvars`; `<id>` is the number after `Google_`):
 
    ```bash
    aws cognito-idp admin-link-provider-for-user --user-pool-id $POOL \
@@ -2576,9 +2667,9 @@ Add to the table in `docs/runbooks/README.md`: `| [link-owner-google.md](link-ow
 
 - [ ] **Step 2: Update the docs**
 
-- `CLAUDE.md` Structure bullet for `web/`: after "…`web/lib/route-gate.ts` is the single source of truth for what's gated *and* for the list of tools itself", add: "and, through `ROUTE_ACTIONS`, for which Cedar action each gated route needs. Amazon Verified Permissions decides every gated request (`web/lib/authz/`, policies in `infra/main/cedar/`)."
+- `CLAUDE.md` Structure bullet for `web/`: after "…`web/lib/route-gate.ts` is the single source of truth for what's gated *and* for the list of tools itself", add: "and, through `ROUTE_ACTIONS`, for which Cedar action each gated route needs. Amazon Verified Permissions decides every gated request (`web/lib/authz/`, policies in `infra/shared/cedar/`)."
 - `.claude/rules/web.md`: replace the sign-in bullet's last three sentences (from "The session cookie itself is unchanged" to the end) with: "The session is two AES-256-GCM cookies, `site_id` (the ID token) and `site_refresh` (the refresh token), keyed from `COOKIE_SECRET` in `web/lib/auth.ts`. Any Cognito user gets a session; `proxy.ts` refreshes the ID token when it has a minute left and asks the `Authorizer` (`web/lib/authz/`) for a decision on the `(tool, action)` that `actionFor()` maps the request to. An unmapped gated route is denied, and `lib/route-coverage.test.ts` fails for any gated `route.ts` or `page.tsx` without a row. Under Playwright, `AUTHZ_MODE=local` evaluates the same Cedar files in-process, and `web/e2e/session.ts` forges a cookie per role (`owner` by default, `friends`, `pending`). `AUTHZ_MODE=local` with `VERCEL` set denies everything." Replace "requires `OWNER_EMAIL` with `email_verified`" with "verifies it". In the `playwright.config.ts` bullet, replace "dummy `COGNITO_*`/`OWNER_EMAIL`" with "dummy `COGNITO_*`, `AUTHZ_MODE=local`".
-- `.claude/rules/infra.md`: add a bullet: "**`infra/main/cedar/` is deployed by Terraform, not Vercel.** `access.tf` loads the schema and one `aws_verifiedpermissions_policy` per `.cedar` file, filling `${pool}` with the user pool ID. The policy store is `STRICT`, so a policy that doesn't match the schema fails at apply; `web/lib/authz/policies.test.ts` runs the same files through `cedar-wasm` first. A change under `cedar/` doesn't trigger a Vercel build (the `ignore_command` allowlist is `web/` and `content/`) and doesn't need one."
+- `.claude/rules/infra.md`: add a bullet: "**`infra/shared/cedar/` is deployed by Terraform, not Vercel.** `access.tf` loads the schema and one `aws_verifiedpermissions_policy` per `.cedar` file, filling `${pool}` with the user pool ID. The policy store is `STRICT`, so a policy that doesn't match the schema fails at apply; `web/lib/authz/policies.test.ts` runs the same files through `cedar-wasm` first. A change under `cedar/` doesn't trigger a Vercel build (the `ignore_command` allowlist is `web/` and `content/`) and doesn't need one."
 - `ARCHITECTURE.md`: in its auth/sign-in section, add one paragraph: "Authorization: Amazon Verified Permissions, one policy store shared by all branches, with the Cognito pool as identity source. The proxy calls `IsAuthorizedWithToken` for every gated request ($0.000005 each). Groups `owner` and `friends`; see `docs/superpowers/specs/2026-09-29-access-control-design.md`."
 
 - [ ] **Step 3: CHANGELOG**
@@ -2599,10 +2690,9 @@ and under `### Changed` (create the heading if absent):
 
 ```bash
 cd /e/Personal/looper/web && npm test && npm run lint && npx tsc --noEmit
-cd /e/Personal/looper/infra/main && terraform plan -var-file=terraform.tfvars
 ```
 
-Expected: all green; `No changes.`
+Expected: all green. This PR doesn't touch `infra/`, so it gets no Terraform plan.
 
 - [ ] **Step 5: Commit, push, open the PR**
 
@@ -2612,10 +2702,9 @@ git add docs/runbooks CLAUDE.md .claude/rules ARCHITECTURE.md CHANGELOG.md
 git commit -m "docs: access control core (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 git push
 gh pr create --base dev --title "feat: Verified Permissions access control core (#300)" --body "$(cat <<'EOF'
-Part 1 of 3 of #300 (spec: docs/superpowers/specs/2026-09-29-access-control-design.md, plan: docs/superpowers/plans/2026-09-29-access-control-authorization.md).
+Part 1b of #300 (spec: docs/superpowers/specs/2026-09-29-access-control-design.md, plan: docs/superpowers/plans/2026-09-29-access-control-authorization.md).
 
-- Verified Permissions policy store, schema and four Cedar policies (applied from this branch; `terraform plan` shows `No changes.`)
-- Cognito groups `owner`/`friends`; ID token 15 min, refresh token 7 days
+- Uses the policy store, groups and token lifetimes applied by the infra PR (Tasks 1-2)
 - Session is the Cognito tokens in two encrypted cookies; the callback no longer checks OWNER_EMAIL
 - proxy.ts maps every gated route to a Cedar action and asks Verified Permissions; unmapped routes are denied
 - /access-requested and /access-denied; the hub lists only allowed tools
@@ -2646,4 +2735,4 @@ Then invoke the `merging-a-pr` skill and follow it to merge.
 
 - [ ] **Step 2: After this reaches `main`, remove `OWNER_EMAIL`**
 
-Only once `stage` and `main` run the new callback; until then they still read it. On a new branch from `dev`: delete `resource "vercel_project_environment_variable" "owner_email"` from `infra/main/auth.tf`, `terraform plan` (expect `1 to destroy`), `terraform apply`, and open a PR with `Refs #300`.
+Only once `stage` and `main` run the new callback; until then they still read it. On a new branch from `dev`: delete `resource "vercel_project_environment_variable" "owner_email"` from `infra/shared/auth.tf` and open a PR with `Refs #300`. CI's plan for `shared` shows `1 to destroy`, which is the intent. After the merge the apply on `dev` stops at the destroy; run it by hand with `gh workflow run terraform.yml --ref dev -f stack=shared -f confirm=apply-destroys`.
