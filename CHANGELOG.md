@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-02
+
 ### Added
 
 - Terraform runs in CI (#339). Every PR that touches `infra/` gets `fmt`, `validate`, `tflint` and a plan of the stacks it affects, posted on the PR; merging into `dev`, `stage` or `main` applies that branch's stacks. A plan that would delete or replace anything stops until applied by hand with a confirmed manual run, and a weekly plan files drift as an issue. Three OIDC roles, no keys; the dev and stage apply role cannot change production's AWS resources or state.
