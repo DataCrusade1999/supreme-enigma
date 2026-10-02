@@ -25,6 +25,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read-only unless a job asks for more (`deploy` and `release` do). Stated
+# here rather than left to the repo's default token setting, which lives
+# outside the repo.
+permissions:
+  contents: read
+
 # Every `runs-on` below pins `ubuntu-24.04` rather than `ubuntu-latest`.
 # `ubuntu-latest` resolves to 24.04 today, so the pin is behaviour-neutral,
 # but the label migrates to Ubuntu 26.04 starting 2026-10-19

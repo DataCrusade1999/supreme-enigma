@@ -159,9 +159,9 @@ There is no one-command rollback. In order of preference:
    no previous image to point at. Recovery is a rebuild from git history:
    revert on `dev`, promote, and let CI build a new image.
 
-Never reset or force-push `stage` or `main` to roll back. Branch protection
-is not enforced on this repo (GitHub blocks it on private repos without Pro),
-so nothing will stop you, and it desynchronises every branch.
+Never reset or force-push `stage` or `main` to roll back. The
+`permanent-branches` ruleset blocks force-pushes, but the repository admin
+can bypass it, and doing so desynchronises every branch.
 
 ## Escalation
 
