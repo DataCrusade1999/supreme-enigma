@@ -7,6 +7,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- A CloudTrail trail, `bgm-looper-audit`, recording management events in every
+  region to the `bgm-looper-cloudtrail-<account>` bucket, kept for 365 days.
+  Closes #375.
+
 ### Removed
 
 - The `OWNER_EMAIL` Vercel env var. Nothing has read it since the sign-in
