@@ -232,7 +232,7 @@ Each change writes one structured log line to Vercel's logs: `{event:"access", b
 
 ## 7. Email
 
-SES already holds `ashutosh-pandey.com` as a verified identity with DKIM and a DMARC record (`infra/main/email.tf`).
+SES already holds `ashutosh-pandey.com` as a verified identity with DKIM and a DMARC record (`infra/shared/email.tf`).
 
 ### Receiving
 
@@ -265,36 +265,37 @@ SES already holds `ashutosh-pandey.com` as a verified identity with DKIM and a D
 
 ## 8. Infrastructure
 
-### `infra/main/access.tf` (new)
+### `infra/shared/access.tf` (new)
 
 - `aws_verifiedpermissions_policy_store.site`, `validation_settings { mode = "STRICT" }`
-- `aws_verifiedpermissions_schema.site` from `infra/main/cedar/schema.cedarschema.json`
+- `aws_verifiedpermissions_schema.site` from `infra/shared/cedar/schema.cedarschema.json`
 - `aws_verifiedpermissions_identity_source.cognito`: the user pool ARN, `client_ids = [aws_cognito_user_pool_client.web.id]`, `group_configuration.group_entity_type = "Site::Group"`, `principal_entity_type = "Site::User"`
-- `aws_verifiedpermissions_policy` × 4, from `infra/main/cedar/policies/*.cedar` through `templatefile()` with the pool ID
+- `aws_verifiedpermissions_policy` × 4, from `infra/shared/cedar/policies/*.cedar` through `templatefile()` with the pool ID
 - `aws_cognito_user_group` `owner` and `friends`
 - `aws_cognito_user_in_group` putting `aws_cognito_user.owner` in `owner`
 - `aws_dynamodb_table.access_grants`, `PAY_PER_REQUEST`, TTL on `ttl`
-- An IAM policy on `aws_iam_role.vercel`:
+- An IAM policy on both Vercel roles, `aws_iam_role.vercel` (production) and `aws_iam_role.vercel_preview` (dev and stage), built from one statement list the way `vercel_resume_statements` is in `shared.tf`. Everything it grants is shared by the three environments, so it lives in `infra/shared`, not in `infra/modules/environment`:
   - `verifiedpermissions:IsAuthorizedWithToken` on the policy store
   - `cognito-idp:ListUsers`, `AdminListGroupsForUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminUserGlobalSignOut`, `AdminDeleteUser` on the user pool
   - `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query` on the table
   - `ses:SendEmail` on the domain identity, with the condition `ses:FromAddress = access@ashutosh-pandey.com`
 - Vercel env vars for production and preview: `AVP_POLICY_STORE_ID`, `ACCESS_GRANTS_TABLE`, `ACCESS_FROM_EMAIL`
 
-### `infra/main/auth.tf`
+### `infra/shared/auth.tf`
 
 - `aws_cognito_user_pool_client.web`: `id_token_validity = 15`, `access_token_validity = 15`, `refresh_token_validity = 7`, with `token_validity_units` of minutes, minutes and days. `enable_token_revocation = true`, the default, stated explicitly.
 - `OWNER_EMAIL` stays as a Vercel env var for now and is no longer read by the callback. It is removed in PR 1's cleanup (§11).
 
-### `infra/main/email.tf`
+### `infra/shared/email.tf`
 
 - `vercel_dns_record` MX at the apex, with `team_id`
 - `aws_ses_receipt_rule_set`, `aws_ses_active_receipt_rule_set`, `aws_ses_receipt_rule`
-- the `inbound-mail/` lifecycle rule and bucket policy statement on main's data bucket
+- the bucket policy statement on main's data bucket, which `shared` names with `local.data_bucket_names["main"]` rather than reading the env stack's state
+- the `inbound-mail/` lifecycle rule, which goes in `infra/modules/environment/main.tf`'s `aws_s3_bucket_lifecycle_configuration.data` instead: S3 allows one lifecycle configuration per bucket and the module already owns it. The rule lands on all three buckets and is harmless on dev and stage, which get no mail. It reaches main's bucket when the change is promoted to `main`; until then stored mail does not expire.
 - `aws_lambda_function.mail_forwarder` from `archive_file`, its role (`s3:GetObject` on `inbound-mail/*`, `ses:SendRawEmail` on the domain identity, CloudWatch Logs), and `aws_lambda_permission` for `ses.amazonaws.com` with `source_account`
 - `aws_sesv2_account_suppression_attributes`
 
-No new required variables. `archive_file` needs the `hashicorp/archive` provider, which `backend.tf`'s `required_providers` and the lock file don't have yet; PR 3 adds it. `hashicorp/aws` is already at `~> 6.62`, which has the Verified Permissions resources.
+No new required variables. The CI apply role that applies `shared` (`aws_iam_role.tf_apply_prod` in `ci.tf`) has no `verifiedpermissions:*` or `dynamodb:*` today; a separate PR adds both before any of these resources (§11). `archive_file` needs the `hashicorp/archive` provider, which `backend.tf`'s `required_providers` and the lock file don't have yet; PR 3 adds it. `hashicorp/aws` is already at `~> 6.62`, which has the Verified Permissions resources.
 
 ### The owner's Google identity
 
@@ -355,20 +356,22 @@ After that, Google, email code and passkey all sign in as the same user, with on
 
 ## 11. Rollout
 
-Three PRs into `dev`, in order. Each runs `terraform plan` against real state before merging. CI is blocked by Actions billing, so each follows the manual deploy path.
+Three parts, in order. Terraform runs in CI: a PR that touches `infra/` gets a plan posted by the `Terraform` workflow, and a push to `dev` applies `shared`, so everything in §8 reaches production when it merges to `dev`. The Vercel deployment for that same push is created before the apply finishes and keeps the env vars it was created with, so a web change that reads a new env var cannot ship in the same PR that creates it. Each part therefore lands its Terraform in its own PR first, waits for the apply on `dev`, and then merges the web change.
+
+0. **CI permissions.** `verifiedpermissions:*` and `dynamodb:*` on `tf_apply_prod`. Merged and applied before part 1's infra PR, because a role cannot reliably use a permission granted in the same apply.
 
 1. **Authorization core.**
    - First, prove that `awsCredentials()` (`@vercel/oidc-aws-credentials-provider`) gets credentials inside `proxy.ts` on a `dev` deployment. Every check in §5 depends on it, and the Vercel OIDC token has so far only been used from route handlers. If it doesn't work, the checks move out of the proxy into a shared `authorize()` called by each gated route handler and each gated page's layout, with the same `ROUTE_ACTIONS` table; the rest of the design stays the same.
    - Infra: the policy store, schema, identity source, policies, groups, owner membership, token lifetimes, Vercel env vars, and the IAM statements for Verified Permissions. The table and the SES statements wait for PRs 2 and 3.
    - Web: the token session and refresh, `lib/authz/`, `ROUTE_ACTIONS`, the proxy checks, `/access-requested`, the 403 page, hub filtering, and removal of `isOwner`.
    - Metered actions work only for the owner at this point, since no grants exist.
-   - Order: `terraform apply` (it only adds), then merge the web change. Every session ends; the owner signs in again.
+   - Order: the infra PR (Cedar files and the Terraform; it only adds), then the web PR once `dev`'s apply has run. The shorter token lifetimes reach production with the infra PR; the current callback checks the ID token once and keeps its own 7-day cookie, so that is safe. Every session ends when the web change deploys; the owner signs in again.
    - The runbook for linking the owner's Google identity.
-   - After it reaches `main`, remove the `OWNER_EMAIL` Vercel env var.
+   - After it reaches `main`, remove the `OWNER_EMAIL` Vercel env var. The plan for that PR destroys a resource, so CI's apply stops and needs a manual `apply-destroys` run of the `Terraform` workflow.
 2. **Grants and the Access page.** The table, the grant context and consumption in the proxy, the Access page and its API, and the IAM statements for Cognito admin calls and DynamoDB.
 3. **Email.** The MX record, receipt rules, `mail_forwarder`, the suppression list, the SES send permission, the three emails, and the production access request with its text.
 
-Docs updated along the way: `CLAUDE.md` (what `route-gate.ts` now holds, the new env vars), `.claude/rules/infra.md` (the receipt rule set is account-wide, the forwarder deploys through Terraform), the header comment in `infra/main/email.tf` (it says the account stays in the SES sandbox, which PR 3 ends), `.claude/rules/web.md` (the session format and `AUTHZ_MODE`), `ARCHITECTURE.md`, and `CHANGELOG.md` under `[Unreleased]` in each PR.
+Docs updated along the way: `CLAUDE.md` (what `route-gate.ts` now holds, the new env vars), `.claude/rules/infra.md` (the receipt rule set is account-wide, the forwarder deploys through Terraform), the header comment in `infra/shared/email.tf` (it says the account stays in the SES sandbox, which PR 3 ends), `.claude/rules/web.md` (the session format and `AUTHZ_MODE`), `ARCHITECTURE.md`, and `CHANGELOG.md` under `[Unreleased]` in each PR.
 
 ## 12. Cost
 
