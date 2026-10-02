@@ -13,6 +13,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
   region to the `bgm-looper-cloudtrail-<account>` bucket, kept for 365 days.
   Closes #375.
 
+- GuardDuty in us-east-1, foundational sources only (the optional protection
+  plans are turned off), with medium-and-above findings emailed through the
+  alerts topic. Closes #376.
+
 ### Removed
 
 - The `OWNER_EMAIL` Vercel env var. Nothing has read it since the sign-in
