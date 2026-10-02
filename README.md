@@ -132,7 +132,7 @@ npm test                                              # vitest (unit/component)
 npx playwright install chromium                       # once, per checkout
 npm run test:e2e                                      # playwright (e2e + a11y)
 npm run lint
-COOKIE_SECRET=devsecret COGNITO_DOMAIN=https://auth.ashutosh-pandey.com COGNITO_CLIENT_ID=… COGNITO_USER_POOL_ID=… OWNER_EMAIL=… npm run dev   # real COGNITO_* values: see CLAUDE.md
+COOKIE_SECRET=devsecret COGNITO_DOMAIN=https://auth.ashutosh-pandey.com COGNITO_CLIENT_ID=… COGNITO_USER_POOL_ID=… AUTHZ_MODE=local npm run dev   # real COGNITO_* values: see CLAUDE.md
 
 # Lambda DSP pipeline (into a local venv, to leave the global interpreter alone)
 cd lambda

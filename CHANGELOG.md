@@ -7,6 +7,35 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Access control for `/tools`: Amazon Verified Permissions decides every
+  request from Cedar policies, with Cognito groups `owner` and `friends`.
+  Anyone can sign in with Google; an account in neither group sees "Access
+  requested" and an address to write to. Friends see BGM Looper, Money Planner
+  and News Desk; actions that cost money need a separate grant, which arrives
+  with part 2. Refs #300.
+- The Verified Permissions policy store behind it, with its Cedar schema and
+  four policies under `infra/shared/cedar/` (tested offline with
+  `@cedar-policy/cedar-wasm`), the Cognito user pool as its identity source,
+  and Cognito groups `owner` and `friends`, with the owner in `owner`. Both
+  Vercel roles may call `IsAuthorizedWithToken` on the store, and
+  `AVP_POLICY_STORE_ID` is set for production and preview. Refs #300.
+
+### Changed
+
+- The session is now the user's Cognito tokens in two encrypted cookies,
+  refreshed every 15 minutes, replacing the signed timestamp. Everyone signs in
+  again once. Refs #300.
+- The web client's ID and access tokens now last 15 minutes and its refresh
+  token 7 days, with token revocation on. Refs #300.
+- The `tf_apply_prod` role, which CI uses to apply `infra/shared` from `dev`,
+  may now manage Verified Permissions and DynamoDB. The access control work
+  (#300) adds a policy store and a grants table to `shared`; this lands first
+  so the grant is in place before the apply that needs it. Refs #300.
+
+## [1.7.2] - 2026-10-02
+
 ### Changed
 
 - CI applies `infra/shared` when a change merges to `dev`, before `envs/dev`, instead of when it reaches `main`. A `shared` change and the env-stack change that depends on it now land in one merge, and a `shared` change reaches production at that point, with no `stage` step. Pushes to `stage` and `main` apply only their own environment (#345).
