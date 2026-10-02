@@ -356,7 +356,7 @@ After that, Google, email code and passkey all sign in as the same user, with on
 
 ## 11. Rollout
 
-Three parts, in order. Terraform runs in CI: a PR that touches `infra/` gets a plan posted by the `Terraform` workflow, and a push to `dev` applies `shared`, so everything in §8 reaches production when it merges to `dev`. The Vercel deployment for that same push is created before the apply finishes and keeps the env vars it was created with, so a web change that reads a new env var cannot ship in the same PR that creates it. Each part therefore lands its Terraform in its own PR first, waits for the apply on `dev`, and then merges the web change.
+One CI-permissions PR, then three parts, in order. Terraform runs in CI: a PR that touches `infra/` gets a plan posted by the `Terraform` workflow, and a push to `dev` applies `shared`, so everything in §8 reaches production when it merges to `dev`. The Vercel deployment for that same push is created before the apply finishes and keeps the env vars it was created with, so a web change that reads a new env var cannot ship in the same PR that creates it. Each part therefore lands its Terraform in its own PR first, waits for the apply on `dev`, and then merges the web change.
 
 0. **CI permissions.** `verifiedpermissions:*` and `dynamodb:*` on `tf_apply_prod`. Merged and applied before part 1's infra PR, because a role cannot reliably use a permission granted in the same apply.
 
