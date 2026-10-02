@@ -60,6 +60,22 @@ resource "aws_iam_role_policy_attachment" "tf_plan_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
+# ReadOnlyAccess has no verifiedpermissions:ListTagsForResource, which the provider
+# calls on every refresh of the policy store (#359).
+data "aws_iam_policy_document" "tf_plan" {
+  statement {
+    sid       = "VerifiedPermissionsReads"
+    actions   = ["verifiedpermissions:Get*", "verifiedpermissions:List*"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "tf_plan" {
+  name   = "${var.project_name}-tf-plan"
+  role   = aws_iam_role.tf_plan.id
+  policy = data.aws_iam_policy_document.tf_plan.json
+}
+
 # envs/dev and envs/stage on pushes to dev and stage. Writes are limited by name to
 # dev's and stage's resources and state (`shared` on a dev push uses the prod role). Two
 # gaps, both in the spec §9: iam:PutRolePolicy has no policy-name condition, so this

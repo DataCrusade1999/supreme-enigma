@@ -7,6 +7,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Fixed
+
+- CI's Terraform plans of `infra/shared` failed since the Verified Permissions
+  policy store was added: the read-only plan role couldn't list its tags. The
+  plan role now has the Verified Permissions read actions. Closes #359.
+- Terraform no longer tries to remove the owner Cognito user's `identities`
+  attribute, which Cognito writes when a Google sign-in is linked to the user.
+  Applying that change would have undone the link. Refs #300.
+
 ## [1.8.0] - 2026-10-02
 
 ### Added
