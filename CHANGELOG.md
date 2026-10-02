@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-02
+
 ### Added
 
 - Access control for `/tools`: Amazon Verified Permissions decides every
