@@ -24,10 +24,13 @@ Per-resource detail and the reasoning behind each quirk is in
 
 ## Plan before every merge
 
-**CI validates nothing under `infra/`** — `deploy.yml` has no `validate`, no
-`fmt -check`, no `plan`. Green test jobs say nothing about whether a
-Terraform change applies. For any PR touching `infra/`, plan all four stacks
-against real state before merging:
+The `Terraform` workflow (`.github/workflows/terraform.yml`) lints and plans
+every PR that touches `infra/`, and posts the plans of `shared` and
+`envs/<base branch>` as one PR comment. Read it before merging: `No changes`
+for a refactor, or exactly the intended diff, and no `⚠ destroys or replaces`
+line you did not intend.
+
+When the workflow cannot run, plan all four stacks locally against real state:
 
 ```bash
 export AWS_PROFILE=personal
@@ -50,6 +53,20 @@ Two things `plan` will never tell you:
 - **Whether the budget alarm can reach anyone.** See below.
 
 ## Apply
+
+Merging applies. A push to `dev` applies `envs/dev`, to `stage` `envs/stage`,
+and to `main` `shared` then `envs/main`. A plan that deletes or replaces
+anything stops before applying; once you have read it, apply it from the
+branch that owns the stack:
+
+```bash
+gh workflow run terraform.yml --ref dev -f stack=envs/dev -f confirm=apply-destroys
+```
+
+Nonprod applies cannot delete a bucket or a Lambda function; that, and any
+fix to a broken role or workflow, is a local apply.
+
+### Local apply (break-glass)
 
 From the directory of the stack that changed:
 
