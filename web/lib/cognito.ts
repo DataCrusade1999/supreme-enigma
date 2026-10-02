@@ -52,51 +52,62 @@ export function authorizeUrl(p: {
   return url.toString();
 }
 
-/** Trades the authorization code for tokens and returns the ID token. Public
- * client: the PKCE verifier stands in for a client secret. */
-export async function exchangeCode(p: { code: string; verifier: string; redirectUri: string }): Promise<string> {
+export type Tokens = { idToken: string; refreshToken: string };
+
+async function tokenRequest(params: Record<string, string>): Promise<Record<string, unknown>> {
   const res = await fetch(`${process.env.COGNITO_DOMAIN}/oauth2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: process.env.COGNITO_CLIENT_ID!,
-      code: p.code,
-      redirect_uri: p.redirectUri,
-      code_verifier: p.verifier,
-    }).toString(),
+    body: new URLSearchParams({ client_id: process.env.COGNITO_CLIENT_ID!, ...params }).toString(),
   });
-  if (!res.ok) throw new Error(`token exchange failed: ${res.status}`);
-  const { id_token } = await res.json();
-  return id_token;
+  if (!res.ok) throw new Error(`token request failed: ${res.status}`);
+  return res.json();
+}
+
+/** Trades the authorization code for tokens. Public client: the PKCE verifier
+ * stands in for a client secret. */
+export async function exchangeCode(p: { code: string; verifier: string; redirectUri: string }): Promise<Tokens> {
+  const body = await tokenRequest({
+    grant_type: "authorization_code",
+    code: p.code,
+    redirect_uri: p.redirectUri,
+    code_verifier: p.verifier,
+  });
+  if (typeof body.id_token !== "string" || typeof body.refresh_token !== "string") {
+    throw new Error("token exchange returned no tokens");
+  }
+  return { idToken: body.id_token, refreshToken: body.refresh_token };
+}
+
+/** A new ID token for a refresh token. Cognito doesn't rotate refresh tokens
+ * for this client, so the refresh cookie stays as it is. */
+export async function refreshIdToken(refreshToken: string): Promise<string> {
+  const body = await tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken });
+  if (typeof body.id_token !== "string") throw new Error("token refresh returned no ID token");
+  return body.id_token;
 }
 
 export type IdTokenVerifier = { verify(token: string): Promise<Record<string, unknown>> };
 
+let verifier: IdTokenVerifier | null = null;
+
+// One instance per process, so the pool's JWKS is fetched once and cached.
 function defaultVerifier(): IdTokenVerifier {
   // Checks signature (against the pool's JWKS), issuer, audience, token_use and expiry.
-  return CognitoJwtVerifier.create({
+  return (verifier ??= CognitoJwtVerifier.create({
     userPoolId: process.env.COGNITO_USER_POOL_ID!,
     tokenUse: "id",
     clientId: process.env.COGNITO_CLIENT_ID!,
-  }) as unknown as IdTokenVerifier;
+  }) as unknown as IdTokenVerifier);
 }
 
-/** Google sign-in creates a Cognito user for any Google account, so this is the
- * only thing standing between another account and a session. */
-export async function isOwner(idToken: string, verifier: IdTokenVerifier = defaultVerifier()): Promise<boolean> {
-  // A thrown error, not false: refusing the owner as "not allowed" would hide a
-  // missing env var behind the message for someone else's account.
-  const owner = process.env.OWNER_EMAIL;
-  if (!owner) throw new Error("OWNER_EMAIL is not set");
-
-  let payload: Record<string, unknown>;
+/** Whether a token really came from this pool and client and hasn't expired.
+ * Who may do what is Verified Permissions' decision, not this one. */
+export async function verifyIdToken(idToken: string, v: IdTokenVerifier = defaultVerifier()): Promise<boolean> {
   try {
-    payload = await verifier.verify(idToken);
+    await v.verify(idToken);
+    return true;
   } catch {
     return false;
   }
-  const email = typeof payload.email === "string" ? payload.email.toLowerCase() : null;
-  const verified = payload.email_verified === true || payload.email_verified === "true";
-  return verified && email !== null && email === owner.toLowerCase();
 }

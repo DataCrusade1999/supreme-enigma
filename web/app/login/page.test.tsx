@@ -43,7 +43,6 @@ describe("LoginPage", () => {
   it.each([
     ["state", "That sign-in expired or came from another tab. Try again."],
     ["denied", "Sign-in was cancelled."],
-    ["not-allowed", "That account can't open these tools."],
     ["failed", "Sign-in failed. Try again."],
   ])("explains error=%s", (code, message) => {
     mockSearch = `error=${code}`;
