@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The local authorizer (e2e only) loads Cedar's WASM build at runtime; bundling
+  // it breaks the .wasm file lookup.
+  serverExternalPackages: ["@cedar-policy/cedar-wasm"],
   async redirects() {
     return [
       // The login page used to live under the looper's own route. Links to it
