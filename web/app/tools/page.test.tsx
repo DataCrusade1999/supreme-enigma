@@ -7,6 +7,12 @@ import { TOOLS } from "../../lib/route-gate";
 // calls useRouter, which has no app router mounted under jsdom.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
+// A factory can't use the file's own imports: vi.mock is hoisted above them.
+vi.mock("../../lib/authz/visible-tools", async () => {
+  const { TOOLS } = await import("../../lib/route-gate");
+  return { visibleTools: vi.fn(async () => TOOLS) };
+});
+
 // An async server component: resolve its JSX first, then render (TESTING.md).
 const hub = (query: Record<string, string> = {}) => ToolsPage({ searchParams: Promise.resolve(query) });
 
@@ -57,5 +63,13 @@ describe("ToolsPage", () => {
   it("shows no passkey message otherwise", async () => {
     render(await hub({ passkey: "anything" }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("lists only the tools visibleTools returns", async () => {
+    const { visibleTools } = await import("../../lib/authz/visible-tools");
+    vi.mocked(visibleTools).mockResolvedValueOnce(TOOLS.filter((t) => t.id === "news-desk"));
+    render(await hub());
+    expect(screen.getByRole("link", { name: /News Desk/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Resume admin/ })).not.toBeInTheDocument();
   });
 });

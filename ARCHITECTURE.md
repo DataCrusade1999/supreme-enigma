@@ -68,12 +68,18 @@ access blocked, CORS (PUT/GET, `*` origin), 1-day object lifecycle.
 
 ## Auth
 
-Owner-only sign-in through Cognito managed login (`/api/auth/login` →
-Cognito at `auth.ashutosh-pandey.com` → `/api/auth/callback`, authorization
-code with PKCE), then an HttpOnly cookie HMAC-signed with `COOKIE_SECRET`
-whose payload is its issue time.
+Sign-in through Cognito managed login (`/api/auth/login` → Cognito at
+`auth.ashutosh-pandey.com` → `/api/auth/callback`, authorization code with
+PKCE), then the user's ID and refresh tokens in two HttpOnly cookies,
+AES-256-GCM-encrypted with a key derived from `COOKIE_SECRET`.
 `web/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth
 for what's protected.
+
+Authorization: Amazon Verified Permissions, one policy store shared by all
+branches, with the Cognito pool as identity source. The proxy calls
+`IsAuthorizedWithToken` for every gated request ($0.000005 each). Groups
+`owner` and `friends`; see
+`docs/superpowers/specs/2026-09-29-access-control-design.md`.
 
 ## CI/CD
 

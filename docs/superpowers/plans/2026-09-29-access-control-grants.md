@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Everything in part 1's Global Constraints still holds.
-- Branch: `feat/access-control-grants` from `dev` after part 1 merged. PR says `Refs #300`. Squash-merge after the `merging-a-pr` skill.
+- Two PRs into `dev`, in order, each saying `Refs #300`, each squash-merged after the `merging-a-pr` skill: `feat/access-control-grants-infra` (Task 1) from `dev` after part 1 merged, then `feat/access-control-grants` (Tasks 2–9) from `dev` after the first one merged and CI's apply on `dev` finished. The split is part 1's: a deployment keeps the env vars it was created with, so the code that reads `ACCESS_GRANTS_TABLE` ships after the apply that creates it. Part 1's Task 0 already gave `tf_apply_prod` `dynamodb:*`.
 - Table `site-access-grants`: partition key `sub` (S), sort key `action` (S), `PAY_PER_REQUEST`, TTL attribute `ttl`. Attributes `email` (S), `limit` (N), `used` (N), `expiresAt` (N, epoch s), `grantedAt` (N, epoch s), `note` (S, optional), `ttl` (N = `expiresAt` + 30 days). `limit` and `ttl` are DynamoDB reserved words: every expression uses `ExpressionAttributeNames`.
 - Grant form limits: `limit` 1–1000 (default 20), `expiresInDays` 1–90 (default 7), `note` at most 200 characters. Only the three metered actions can be granted.
 - Granting an action that already has a row overwrites it; `used` starts at 0.
@@ -36,20 +36,20 @@
 ### Task 1: Terraform — grants table, Cognito admin and DynamoDB permissions
 
 **Files:**
-- Modify: `infra/main/access.tf`
+- Modify: `infra/shared/access.tf`
 
 **Interfaces:**
-- Produces: table `site-access-grants`; Vercel env var `ACCESS_GRANTS_TABLE`; the Vercel role may read and write the table and call the six Cognito admin actions on the pool.
+- Produces: table `site-access-grants`; Vercel env var `ACCESS_GRANTS_TABLE`; both Vercel roles may read and write the table and call the six Cognito admin actions on the pool.
 
 - [ ] **Step 1: Branch**
 
 ```bash
-cd /e/Personal/looper && git switch dev && git pull && git switch -c feat/access-control-grants
+cd /e/Personal/looper && git switch dev && git pull && git switch -c feat/access-control-grants-infra
 ```
 
 - [ ] **Step 2: Add the table, env var and permissions**
 
-Append to `infra/main/access.tf`:
+Append to `infra/shared/access.tf`:
 
 ```hcl
 # One row per (user, metered action). Shared by all branches, like the pool:
@@ -85,7 +85,7 @@ resource "vercel_project_environment_variable" "access_grants_table" {
 }
 ```
 
-In the same file, add two statements to the `Statement` list of `aws_iam_role_policy.vercel_access`, after `AuthorizeRequests`:
+In the same file, add two statements to `local.vercel_access_statements`, after `AuthorizeRequests`. Both Vercel roles' policies are built from that list, so dev, stage and production all get them:
 
 ```hcl
       {
@@ -109,31 +109,41 @@ In the same file, add two statements to the `Statement` list of `aws_iam_role_po
       },
 ```
 
-- [ ] **Step 3: Plan, apply, check**
+- [ ] **Step 3: Format, commit, PR**
 
 ```bash
-cd infra/main
-terraform fmt && terraform validate
-terraform plan -var-file=terraform.tfvars
-```
-
-Expected: `2 to add, 1 to change, 0 to destroy` (the table, the env var, and the IAM policy in place).
-
-```bash
-terraform apply -var-file=terraform.tfvars
-aws dynamodb describe-time-to-live --table-name site-access-grants --profile personal --region us-east-1 --query 'TimeToLiveDescription.TimeToLiveStatus'
-terraform plan -var-file=terraform.tfvars
-```
-
-Expected: `"ENABLED"` (or `"ENABLING"` for a few minutes); `No changes.`
-
-- [ ] **Step 4: Commit**
-
-```bash
+cd /e/Personal/looper/infra/shared && terraform fmt && terraform validate
 cd /e/Personal/looper
-git add infra/main/access.tf
+git add infra/shared/access.tf
 git commit -m "feat(infra): access grants table and Access page permissions (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
+git push -u origin feat/access-control-grants-infra
+gh pr create --base dev --title "feat(infra): access grants table and Access page permissions (#300)" --body "$(cat <<'EOF'
+Part 2a of #300 (plan: docs/superpowers/plans/2026-09-29-access-control-grants.md, Task 1).
+
+- site-access-grants DynamoDB table, on-demand, TTL on ttl
+- ACCESS_GRANTS_TABLE for production and preview
+- Both Vercel roles may read and write the table and call the six Cognito admin actions on the pool
+
+Nothing reads the table yet.
+
+Refs #300
+EOF
+)"
 ```
+
+The `Terraform` workflow's plan for `shared` must show `2 to add, 2 to change, 0 to destroy`: the table and the env var added, both Vercel access policies updated in place. The env stacks show `No changes`.
+
+- [ ] **Step 4: Merge, wait for the apply, check**
+
+Invoke the `merging-a-pr` skill and merge, then:
+
+```bash
+gh run list --workflow terraform.yml --branch dev --limit 1
+gh run watch <id> --exit-status
+aws dynamodb describe-time-to-live --table-name site-access-grants --profile personal --region us-east-1 --query 'TimeToLiveDescription.TimeToLiveStatus'
+```
+
+Expected: the run succeeds; `"ENABLED"` (or `"ENABLING"` for a few minutes).
 
 ---
 
@@ -152,9 +162,10 @@ git commit -m "feat(infra): access grants table and Access page permissions (#30
   - `getGrantStore(env?: NodeJS.ProcessEnv): GrantStore` — DynamoDB normally; an in-memory store under `AUTHZ_MODE=local` off Vercel, so e2e runs without AWS.
   - `GRANT_TTL_S = 30 * 86400`
 
-- [ ] **Step 1: Install**
+- [ ] **Step 1: Branch and install**
 
 ```bash
+cd /e/Personal/looper && git switch dev && git pull && git switch -c feat/access-control-grants
 cd web && npm install @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb
 ```
 
@@ -1850,10 +1861,9 @@ Under e2e there is no Cognito, so the page itself shows "Couldn't load users."; 
 ```bash
 cd web && npm test && npm run lint && npx tsc --noEmit
 KEYSTATIC_GITHUB_CLIENT_ID=dummy KEYSTATIC_GITHUB_CLIENT_SECRET=dummy KEYSTATIC_SECRET=dummy npm run build && npm run test:e2e
-cd ../infra/main && terraform plan -var-file=terraform.tfvars
 ```
 
-Expected: all green; `No changes.`
+Expected: all green.
 
 - [ ] **Step 3: Docs and CHANGELOG**
 
@@ -1872,9 +1882,9 @@ git add web/e2e .claude/rules/web.md CHANGELOG.md
 git commit -m "docs: access grants and the Access page (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 git push -u origin feat/access-control-grants
 gh pr create --base dev --title "feat: access grants and the Access page (#300)" --body "$(cat <<'EOF'
-Part 2 of 3 of #300 (plan: docs/superpowers/plans/2026-09-29-access-control-grants.md).
+Part 2b of #300 (plan: docs/superpowers/plans/2026-09-29-access-control-grants.md).
 
-- `site-access-grants` DynamoDB table (applied from this branch; `terraform plan` shows `No changes.`)
+- Uses the `site-access-grants` table applied by the infra PR (Task 1)
 - Metered actions read the grant, pass it to Verified Permissions, and consume one use with a conditional update; denials say no_grant, quota_exhausted or grant_expired
 - /tools/access-admin and /api/access/* (owner only): approve, dismiss, remove, grant, revoke; the owner can't be changed here
 - The hub shows a friend's remaining uses

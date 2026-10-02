@@ -13,12 +13,13 @@
 ## Global Constraints
 
 - Everything in parts 1 and 2's Global Constraints still holds.
-- Branch: `feat/access-control-email` from `dev` after part 2 merged. This PR closes the issue: its body says `Closes #300`. Squash-merge after the `merging-a-pr` skill.
+- Two PRs into `dev`, in order, each squash-merged after the `merging-a-pr` skill: `feat/access-control-email-infra` (Tasks 1–2, the forwarder and the Terraform; `Refs #300`) from `dev` after part 2 merged, then `feat/access-control-email` (Tasks 4–6; `Closes #300`) from `dev` after the first merged and CI's apply on `dev` finished. Same reason as parts 1 and 2: the code that reads `ACCESS_FROM_EMAIL` ships after the apply that creates it.
+- Main's data bucket belongs to `infra/envs/main` (through `infra/modules/environment`). `shared` refers to it by name, `local.data_bucket_names["main"]`, and by ARN, `local.resume_bucket_arn` (the same bucket), and never reads the env stack's state.
 - Addresses: receiving and sending `access@ashutosh-pandey.com`; forwards go to `var.alert_email`. Forward `From:` is `Access request <access@ashutosh-pandey.com>`; site mail `From:` is `Access <access@ashutosh-pandey.com>`, `Reply-To` the same.
 - Forwarded subject prefix: `[access] `.
 - `inbound-mail/` objects expire after 30 days.
 - The receipt rule set is account-wide: only one can be active per region. It is named `site-inbound`; there is none today.
-- `lambda/src/mail_forwarder/` sits under `lambda/`, so a push that touches it makes `deploy.yml`'s `changes` job rebuild the looper's container image. That rebuild is harmless (same image) and is accepted; CI is blocked by Actions billing anyway. The forwarder itself deploys only through `terraform apply`.
+- `lambda/src/mail_forwarder/` sits under `lambda/`, so a push that touches it makes `deploy.yml`'s `changes` job rebuild the looper's container image. That rebuild is harmless (same image) and is accepted. The forwarder itself deploys only through Terraform, applied by CI with `shared`.
 - `lambda/.venv` has no boto3 (the Lambda runtime provides it), so the forwarder imports boto3 only inside `handler()` when no client is passed in, and its logic is a pure function the tests call directly.
 
 ## Review Focus
@@ -43,7 +44,7 @@
 - [ ] **Step 1: Branch**
 
 ```bash
-cd /e/Personal/looper && git switch dev && git pull && git switch -c feat/access-control-email
+cd /e/Personal/looper && git switch dev && git pull && git switch -c feat/access-control-email-infra
 ```
 
 - [ ] **Step 2: Write the failing tests**
@@ -257,15 +258,15 @@ git commit -m "feat(mail): forward access@ mail to the owner with Reply-To set (
 ### Task 2: Terraform — receiving, the forwarder, sending permission
 
 **Files:**
-- Modify: `infra/main/backend.tf`, `infra/main/.terraform.lock.hcl`, `infra/main/email.tf`, `infra/main/environments.tf` (lifecycle rule), `infra/main/access.tf` (Vercel send permission and env var)
+- Modify: `infra/shared/backend.tf`, `infra/shared/.terraform.lock.hcl`, `infra/shared/email.tf`, `infra/shared/access.tf` (Vercel send permission and env var), `infra/modules/environment/main.tf` (lifecycle rule)
 
 **Interfaces:**
-- Consumes: `lambda/src/mail_forwarder/` (Task 1); `aws_s3_bucket.data["main"]`, `aws_sesv2_email_identity.domain`, `aws_sesv2_email_identity.owner`, `var.alert_email`.
+- Consumes: `lambda/src/mail_forwarder/` (Task 1); `local.data_bucket_names["main"]` and `local.resume_bucket_arn` (main's data bucket), `aws_sesv2_email_identity.domain`, `aws_sesv2_email_identity.owner`, `var.alert_email`.
 - Produces: MX record; active receipt rule set `site-inbound`; Lambda `${var.project_name}-mail-forwarder`; Vercel env var `ACCESS_FROM_EMAIL`; the Vercel role may `ses:SendEmail` as `access@`.
 
 - [ ] **Step 1: Add the archive provider**
 
-In `infra/main/backend.tf`'s `required_providers`, add:
+In `infra/shared/backend.tf`'s `required_providers`, add:
 
 ```hcl
     archive = {
@@ -275,17 +276,19 @@ In `infra/main/backend.tf`'s `required_providers`, add:
 ```
 
 ```bash
-cd /e/Personal/looper/infra/main && terraform init -upgrade
+cd /e/Personal/looper/infra/shared && AWS_PROFILE=personal terraform init
+terraform providers lock -platform=linux_amd64 -platform=windows_amd64
 ```
 
-Expected: `hashicorp/archive` installed; `.terraform.lock.hcl` gains its entry. Commit the lock file with this task.
+Expected: `hashicorp/archive` installed; `.terraform.lock.hcl` gains its entry, with hashes for CI's platform (`linux_amd64`) as well as the workstation's. Not `init -upgrade`, which would also move the other providers. Commit the lock file with this task.
 
 - [ ] **Step 2: Expire stored mail after 30 days**
 
-In `infra/main/environments.tf`'s `aws_s3_bucket_lifecycle_configuration.data`, after the `expire-resume-archive` rule, add:
+In `infra/modules/environment/main.tf`'s `aws_s3_bucket_lifecycle_configuration.data`, after the `expire-resume-archive` rule, add (S3 allows one lifecycle configuration per bucket and the module owns it, so the rule can't live in `shared` with the rest):
 
 ```hcl
-  # Only main's bucket receives mail, but the rule is harmless on dev and stage.
+  # Only main's bucket receives mail (infra/shared/email.tf), but the rule is
+  # harmless on dev and stage.
   rule {
     id     = "expire-inbound-mail"
     status = "Enabled"
@@ -296,7 +299,7 @@ In `infra/main/environments.tf`'s `aws_s3_bucket_lifecycle_configuration.data`, 
 
 - [ ] **Step 3: Add receiving and the forwarder to `email.tf`**
 
-Replace the header comment of `infra/main/email.tf` (its first four lines) with:
+Replace the header comment of `infra/shared/email.tf` (its first four lines) with:
 
 ```hcl
 # SES for ashutosh-pandey.com. Sending: Cognito sign-in codes (spec
@@ -327,8 +330,10 @@ locals {
 }
 
 # SES checks at rule creation that it can write here, so the rule depends on this.
+# The bucket is main's, created by infra/envs/main; this is its only bucket policy,
+# so nothing else manages it. If the module ever adds one, merge this statement into it.
 resource "aws_s3_bucket_policy" "inbound_mail" {
-  bucket = aws_s3_bucket.data["main"].id
+  bucket = local.data_bucket_names["main"]
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -338,7 +343,7 @@ resource "aws_s3_bucket_policy" "inbound_mail" {
         Effect    = "Allow"
         Principal = { Service = "ses.amazonaws.com" }
         Action    = "s3:PutObject"
-        Resource  = "${aws_s3_bucket.data["main"].arn}/${local.inbound_prefix}*"
+        Resource  = "${local.resume_bucket_arn}/${local.inbound_prefix}*"
         Condition = {
           StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
         }
@@ -382,7 +387,7 @@ resource "aws_iam_role_policy" "mail_forwarder" {
       {
         Effect   = "Allow"
         Action   = "s3:GetObject"
-        Resource = "${aws_s3_bucket.data["main"].arn}/${local.inbound_prefix}*"
+        Resource = "${local.resume_bucket_arn}/${local.inbound_prefix}*"
       },
       {
         # Both identities: in the sandbox SES checks the recipient as well as the sender.
@@ -406,7 +411,7 @@ resource "aws_lambda_function" "mail_forwarder" {
 
   environment {
     variables = {
-      BUCKET       = aws_s3_bucket.data["main"].id
+      BUCKET       = local.data_bucket_names["main"]
       PREFIX       = local.inbound_prefix
       FORWARD_TO   = var.alert_email
       FROM_ADDRESS = local.access_address
@@ -439,7 +444,7 @@ resource "aws_ses_receipt_rule" "access" {
   scan_enabled  = true
 
   s3_action {
-    bucket_name       = aws_s3_bucket.data["main"].id
+    bucket_name       = local.data_bucket_names["main"]
     object_key_prefix = local.inbound_prefix
     position          = 1
   }
@@ -459,11 +464,11 @@ resource "aws_sesv2_account_suppression_attributes" "site" {
 }
 ```
 
-Add `infra/main/.build/` to the repo's `.gitignore` (the zip is rebuilt on every plan).
+Add `infra/shared/.build/` to the repo's `.gitignore` (the zip is rebuilt on every plan, in CI too).
 
 - [ ] **Step 4: Let the app send as `access@`**
 
-In `infra/main/access.tf`, add a statement to `aws_iam_role_policy.vercel_access`'s `Statement` list:
+In `infra/shared/access.tf`, add a statement to `local.vercel_access_statements` (both Vercel roles):
 
 ```hcl
       {
@@ -493,26 +498,48 @@ resource "vercel_project_environment_variable" "access_from_email" {
 
 Until production access (Task 3) is granted, sends to anyone but the owner fail with `MessageRejected`, which the page reports. Don't add other recipients' identities to the IAM resource to work around it.
 
-- [ ] **Step 5: Plan, apply, check**
+- [ ] **Step 5: Format, commit, PR**
 
 ```bash
-cd /e/Personal/looper/infra/main
-terraform fmt && terraform validate
-terraform plan -var-file=terraform.tfvars
+cd /e/Personal/looper/infra/shared && terraform fmt && terraform validate
+cd ../modules/environment && terraform fmt
+cd /e/Personal/looper
+git add infra/shared/backend.tf infra/shared/.terraform.lock.hcl infra/shared/email.tf infra/shared/access.tf infra/modules/environment/main.tf .gitignore
+git commit -m "feat(infra): receive access@ mail and let the site send from it (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
+git push -u origin feat/access-control-email-infra
+gh pr create --base dev --title "feat(infra): receive access@ mail and let the site send from it (#300)" --body "$(cat <<'EOF'
+Part 3a of #300 (plan: docs/superpowers/plans/2026-09-29-access-control-email.md, Tasks 1-2).
+
+- Apex MX to SES inbound; receipt rule set site-inbound (made active) with one rule for access@
+- The rule stores the message in main's data bucket under inbound-mail/ and invokes mail_forwarder, which resends it to the owner with Reply-To set to the sender
+- mail_forwarder deploys as a zip through Terraform, not deploy.yml
+- inbound-mail/ expires after 30 days (module lifecycle rule; reaches main's bucket when this is promoted to main)
+- Account suppression list for bounces and complaints
+- Both Vercel roles may ses:SendEmail as access@; ACCESS_FROM_EMAIL for production and preview
+
+Refs #300
+EOF
+)"
 ```
 
-Expected: about 13 to add, 2 to change (the lifecycle configurations and the Vercel IAM policy), 0 to destroy. Stop on any destroy.
+The `Terraform` workflow posts a plan per stack. `shared`: about 12 to add, 2 to change (the two Vercel access policies), 0 to destroy. `envs/dev`: 1 to change (its lifecycle configuration). Stop on any destroy.
+
+The `envs/stage` and `envs/main` lifecycle changes apply when this reaches those branches. Until it reaches `main`, mail stored in main's bucket doesn't expire.
+
+- [ ] **Step 6: Merge, wait for the apply, check**
+
+Invoke the `merging-a-pr` skill and merge. This PR touches `lambda/`, so it is a lambda-touching merge (one at a time). Then:
 
 ```bash
-terraform apply -var-file=terraform.tfvars
+gh run list --workflow terraform.yml --branch dev --limit 1
+gh run watch <id> --exit-status
 aws ses describe-active-receipt-rule-set --profile personal --region us-east-1 --query 'Metadata.Name'
 dig +short MX ashutosh-pandey.com
-terraform plan -var-file=terraform.tfvars
 ```
 
-Expected: `"site-inbound"`; `10 inbound-smtp.us-east-1.amazonaws.com.` (DNS can take a few minutes); `No changes.`
+Expected: the run succeeds; `"site-inbound"`; `10 inbound-smtp.us-east-1.amazonaws.com.` (DNS can take a few minutes).
 
-- [ ] **Step 6: Send a real email**
+- [ ] **Step 7: Send a real email**
 
 From any mailbox other than the owner's, send "test" to `access@ashutosh-pandey.com`. Within a minute the owner's inbox gets `[access] test` from `Access request <access@ashutosh-pandey.com>`, and Reply addresses the sender. If nothing arrives:
 
@@ -523,19 +550,11 @@ aws s3 ls s3://portfolio-data-223376380711/inbound-mail/ --profile personal --re
 
 An object in S3 but no log means the Lambda action didn't run (check the permission); a log with `MessageRejected` means an identity isn't verified.
 
-- [ ] **Step 7: Commit**
-
-```bash
-cd /e/Personal/looper
-git add infra/main/backend.tf infra/main/.terraform.lock.hcl infra/main/email.tf infra/main/environments.tf infra/main/access.tf .gitignore
-git commit -m "feat(infra): receive access@ mail and let the site send from it (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
-```
-
 ---
 
 ### Task 3: Request SES production access (manual, the owner)
 
-Step 1 was done on 2026-09-29 through the console form (Transactional, https://ashutosh-pandey.com, English), which has no use-case field. If AWS replies asking how the mail will be used, answer with the `--use-case-description` text below. The same day, #301 added a custom MAIL FROM (`mail.ashutosh-pandey.com`) and SPF records, so SES mail from the domain passes SPF, DKIM and DMARC. Skip to Step 2.
+Step 1 was done on 2026-09-29 through the console form (Transactional, https://ashutosh-pandey.com, English), which has no use-case field. If AWS replies asking how the mail will be used, answer with the `--use-case-description` text below. The same day, #301 added a custom MAIL FROM (`mail.ashutosh-pandey.com`) and SPF records, so SES mail from the domain passes SPF, DKIM and DMARC. AWS granted production access on 2026-10-01 (`get-account` shows `production: true`, `HEALTHY` on 2026-10-02), so this task is done.
 
 - [x] **Step 1: Submit the request**
 
@@ -546,10 +565,10 @@ aws sesv2 put-account-details --profile personal --region us-east-1 \
   --website-url https://ashutosh-pandey.com \
   --contact-language EN \
   --use-case-description "Transactional email for a personal website's private tools. When the site owner approves someone who asked for access, grants them a limited number of uses of a feature, or ends their access, the site sends that one person a short plain-text email from access@ashutosh-pandey.com. Recipients are only people who signed in and wrote to ask for access. Expected volume is under 50 emails a month. No marketing or bulk mail. Bounces and complaints are on the account-level suppression list, and the domain has DKIM and DMARC." \
-  --additional-contact-email-addresses "$(grep alert_email infra/main/terraform.tfvars | cut -d'"' -f2)"
+  --additional-contact-email-addresses "$(grep alert_email infra/shared/terraform.tfvars | cut -d'"' -f2)"
 ```
 
-- [ ] **Step 2: Wait for AWS**
+- [x] **Step 2: Wait for AWS**
 
 AWS replies by email, usually within a day. Check with:
 
@@ -572,9 +591,12 @@ aws sesv2 get-account --profile personal --region us-east-1 --query '{production
 - Consumes: `AccessUser` (part 2, `lib/access-admin.ts`); `Grant` (part 2); `METERED_LABELS` (part 2, `lib/authz/my-grants.ts`); `awsCredentials()`.
 - Produces: `sendApproved(user: AccessUser): Promise<string | null>`, `sendGrants(user: AccessUser, grants: Grant[]): Promise<string | null>`, `sendEnded(user: AccessUser, what: string): Promise<string | null>` — each returns `null` when sent, or the reason it wasn't.
 
-- [ ] **Step 1: Install**
+- [ ] **Step 1: Branch and install**
+
+Start from `dev` after Task 2's PR merged and its apply finished:
 
 ```bash
+cd /e/Personal/looper && git switch dev && git pull && git switch -c feat/access-control-email
 cd web && npm install @aws-sdk/client-sesv2
 ```
 
@@ -863,7 +885,7 @@ git commit -m "feat(access): email invitees when their access changes (#300)" -m
 
 - [ ] **Step 1: Docs**
 
-- `.claude/rules/infra.md`, new bullet: "**SES receiving is account-wide.** `email.tf` makes `site-inbound` the active receipt rule set in `us-east-1`; AWS allows one per region, so any other inbound mail setup in this account has to join this set. The apex MX record sends all mail for the domain to SES, and only `access@` has a rule. `mail_forwarder` (`lambda/src/mail_forwarder/`) deploys through `terraform apply` as a zip (`hashicorp/archive`, built into the gitignored `infra/main/.build/`), not through `deploy.yml`; a change there still makes `deploy.yml` rebuild the looper image, which is harmless. Stored messages expire from `inbound-mail/` after 30 days. When a forward doesn't arrive: an object under `inbound-mail/` with no Lambda log means the invoke permission; a `MessageRejected` log means an identity isn't verified."
+- `.claude/rules/infra.md`, new bullet: "**SES receiving is account-wide.** `email.tf` makes `site-inbound` the active receipt rule set in `us-east-1`; AWS allows one per region, so any other inbound mail setup in this account has to join this set. The apex MX record sends all mail for the domain to SES, and only `access@` has a rule. `mail_forwarder` (`lambda/src/mail_forwarder/`) deploys through Terraform as a zip (`hashicorp/archive`, built into the gitignored `infra/shared/.build/`) when CI applies `shared`, not through `deploy.yml`; a change there still makes `deploy.yml` rebuild the looper image, which is harmless. Stored messages expire from `inbound-mail/` after 30 days. When a forward doesn't arrive: an object under `inbound-mail/` with no Lambda log means the invoke permission; a `MessageRejected` log means an identity isn't verified."
 - `.claude/rules/infra.md`, second new bullet: "**The apex publishes `v=spf1 -all`** (`email.tf`, #301): nothing may send with the bare domain as its envelope sender. SES uses the custom MAIL FROM `mail.ashutosh-pandey.com`, whose own TXT record includes `amazonses.com`. A new mail service that sends as the domain (a newsletter's custom domain, a mailbox provider) has to be added to the apex SPF record first, or its mail fails SPF."
 - `ARCHITECTURE.md`: add to the cost/services section: "SES receiving for `access@` (S3 + a 128 MB Python Lambda) and SESv2 sending for access emails: about $0.10 per 1,000 messages each way."
 
@@ -881,10 +903,9 @@ Under `[Unreleased]` → `### Added`:
 cd /e/Personal/looper/lambda && .venv/Scripts/python -m pytest -q
 cd ../web && npm test && npm run lint && npx tsc --noEmit
 KEYSTATIC_GITHUB_CLIENT_ID=dummy KEYSTATIC_GITHUB_CLIENT_SECRET=dummy KEYSTATIC_SECRET=dummy npm run build && npm run test:e2e
-cd ../infra/main && terraform plan -var-file=terraform.tfvars
 ```
 
-Expected: all green; `No changes.`
+Expected: all green.
 
 - [ ] **Step 4: Commit, push, PR**
 
@@ -894,9 +915,9 @@ git add .claude/rules/infra.md ARCHITECTURE.md CHANGELOG.md
 git commit -m "docs: access email (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 git push -u origin feat/access-control-email
 gh pr create --base dev --title "feat: access@ email in and out (#300)" --body "$(cat <<'EOF'
-Part 3 of 3 of #300 (plan: docs/superpowers/plans/2026-09-29-access-control-email.md).
+Part 3b of #300 (plan: docs/superpowers/plans/2026-09-29-access-control-email.md).
 
-- Apex MX to SES; receipt rule for access@ stores the message in S3 and invokes mail_forwarder, which resends it to the owner with Reply-To set to the sender (applied from this branch; `terraform plan` shows `No changes.`)
+- Uses the receiving path and send permission applied by the infra PR (Tasks 1-2)
 - The Access page emails invitees on approve, grant, remove and revoke; a failed send is reported and doesn't undo the change
 - SES production access requested on <date>; status: <pending/granted>
 

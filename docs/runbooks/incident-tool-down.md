@@ -26,12 +26,17 @@ Each symptom below isolates one hop.
 
 ### Cannot sign in
 
-- **`/login?error=not-allowed`** — the account is not `OWNER_EMAIL`, or its
-  email is unverified.
+- **Signed in, but sent to `/access-requested`** — the account is in neither
+  Cognito group. The owner signing in with Google before
+  [link-owner-google.md](link-owner-google.md) has been run lands here too.
+- **`/access-denied?reason=authorization_unavailable`, or a `503` from an
+  API** — Verified Permissions gave no decision within 2 s; the Vercel runtime
+  log has `authz: no decision`.
 - **`/login?error=state`** — the sign-in took over 10 minutes or began in
   another tab. Retry from `/login`.
-- **`/login?error=failed`** — the code exchange failed; the Vercel runtime log
-  has `auth: code exchange failed`.
+- **`/login?error=failed`** — the code exchange failed, or its ID token failed
+  verification; the Vercel runtime log has `auth: code exchange failed` or
+  `auth: the ID token from the code exchange failed verification`.
 - **A Cognito error page before any redirect** — the host is not in the app
   client's callback URLs. Only the apex, `dev.`, `stage.` and `localhost:3000`
   are registered.

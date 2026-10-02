@@ -1,0 +1,33 @@
+{
+  "Site": {
+    "entityTypes": {
+      "Group": {},
+      "User": {
+        "memberOfTypes": ["Group"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "email": { "type": "String", "required": false }
+          }
+        }
+      },
+      "Tool": {}
+    },
+    "actions": {
+      "free": {},
+      "metered": {},
+      "ownerOnly": {},
+      "view": { "memberOf": [{ "id": "free" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "newsdesk:pin": { "memberOf": [{ "id": "free" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "looper:process": { "memberOf": [{ "id": "metered" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "newsdesk:refresh": { "memberOf": [{ "id": "metered" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "newsdesk:ask": { "memberOf": [{ "id": "metered" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "resume:draft": { "memberOf": [{ "id": "ownerOnly" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "resume:extract": { "memberOf": [{ "id": "ownerOnly" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "resume:publish": { "memberOf": [{ "id": "ownerOnly" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "newsletter:send": { "memberOf": [{ "id": "ownerOnly" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "keystatic:use": { "memberOf": [{ "id": "ownerOnly" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } },
+      "access:manage": { "memberOf": [{ "id": "ownerOnly" }], "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Tool"], "context": { "type": "Record", "attributes": { "now": { "type": "Long" }, "grant": { "type": "Record", "required": false, "attributes": { "remaining": { "type": "Long" }, "expiresAt": { "type": "Long" } } } } } } }
+    }
+  }
+}

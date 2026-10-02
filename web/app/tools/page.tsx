@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CommandBar } from "../../components/site/CommandBar";
-import { TOOLS } from "../../lib/route-gate";
+import { visibleTools } from "../../lib/authz/visible-tools";
 
 // Outside the `(site)` route group like the tool pages themselves, so it gets
 // the root layout and no SiteHeader — the header's nav belongs to the public
@@ -18,6 +18,7 @@ export default async function ToolsPage({
 }) {
   const { passkey } = await searchParams;
   const passkeyMessage = typeof passkey === "string" ? PASSKEY_MESSAGES[passkey] : undefined;
+  const tools = await visibleTools();
 
   return (
     <div className="flex min-h-screen flex-col font-ui">
@@ -42,8 +43,7 @@ export default async function ToolsPage({
         <div className="mt-5 border-b-2 border-rule-heavy" />
 
         <p className="mt-[18px] max-w-[46ch] text-base leading-relaxed text-muted">
-          Everything the one shared password opens. You are through the gate for
-          this session.
+          The tools this account can open.
         </p>
 
         {passkeyMessage ? (
@@ -53,7 +53,7 @@ export default async function ToolsPage({
         ) : null}
 
         <ul className="mt-10 flex flex-col">
-          {TOOLS.map((tool) => (
+          {tools.map((tool) => (
             <li key={tool.href} className="border-b border-line">
               <Link
                 href={tool.href}
