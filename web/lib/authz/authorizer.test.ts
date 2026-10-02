@@ -8,7 +8,7 @@ const req = { session: owner, tool: "hub" as const, action: "view" as const, con
 
 describe("getAuthorizer", () => {
   it("uses the local Cedar files under AUTHZ_MODE=local off Vercel", async () => {
-    const authz = getAuthorizer({ AUTHZ_MODE: "local", COGNITO_USER_POOL_ID: "us-east-1_e2e" } as NodeJS.ProcessEnv);
+    const authz = getAuthorizer({ AUTHZ_MODE: "local", COGNITO_USER_POOL_ID: "us-east-1_e2e" } as unknown as NodeJS.ProcessEnv);
     expect(await authz.isAuthorized(req)).toBe("allow");
   });
 
@@ -16,12 +16,12 @@ describe("getAuthorizer", () => {
   // it must never decide anything on a Vercel deployment.
   it("denies everything when AUTHZ_MODE=local is set on Vercel", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const authz = getAuthorizer({ AUTHZ_MODE: "local", VERCEL: "1", COGNITO_USER_POOL_ID: "p" } as NodeJS.ProcessEnv);
+    const authz = getAuthorizer({ AUTHZ_MODE: "local", VERCEL: "1", COGNITO_USER_POOL_ID: "p" } as unknown as NodeJS.ProcessEnv);
     expect(await authz.isAuthorized(req)).toBe("deny");
   });
 
   it("throws when the policy store ID is missing, so the proxy fails closed", async () => {
-    const authz = getAuthorizer({} as NodeJS.ProcessEnv);
+    const authz = getAuthorizer({} as unknown as NodeJS.ProcessEnv);
     await expect(authz.isAuthorized(req)).rejects.toThrow("AVP_POLICY_STORE_ID");
   });
 });
