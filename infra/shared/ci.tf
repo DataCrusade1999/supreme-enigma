@@ -206,10 +206,17 @@ data "aws_iam_policy_document" "tf_apply_prod" {
     resources = ["arn:aws:cloudtrail:${var.aws_region}:${local.account_id}:trail/${local.audit_trail_name}"]
   }
   statement {
-    # The detector's ID only exists after it is created, so this can't name one (#376).
-    sid       = "GuardDuty"
-    actions   = ["guardduty:*"]
+    # CreateDetector takes no resource ARN; the detector's ID only exists afterwards (#376).
+    # Reads come from ReadOnlyAccess. Every other ARN-less GuardDuty action (members,
+    # organization admin, IP and threat-intel sets) stays out.
+    sid       = "GuardDutyCreate"
+    actions   = ["guardduty:CreateDetector"]
     resources = ["*"]
+  }
+  statement {
+    sid       = "GuardDutyDetector"
+    actions   = ["guardduty:*"]
+    resources = ["arn:aws:guardduty:${var.aws_region}:${local.account_id}:detector/*"]
   }
   statement {
     # Creating the first detector creates GuardDuty's service-linked role.
