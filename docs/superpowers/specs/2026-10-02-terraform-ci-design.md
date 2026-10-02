@@ -167,7 +167,7 @@ About 15 billed minutes per infra change carried to production (three PR plans, 
 Applying `shared` only from `main` meant a change to an env stack that looks up a new `shared` resource failed its `dev` and `stage` applies until the `shared` change reached `main`. The owner chose to apply `shared` from `dev` instead.
 
 - **Only one branch applies `shared`.** Its state is single, so applies from several branches would each revert the others' unpromoted changes: in-place updates silently, deletes only stopped by the destroy guard. `dev` is that branch because it leads.
-- A push to `dev` applies `shared` with `tf-apply-prod`, which now also trusts `ref:refs/heads/dev`, then `envs/dev` with `tf-apply-nonprod`. Pushes to `stage` and `main` apply only their own env stack. The apply loop moved to `.github/scripts/tf-apply.sh` so the job can switch roles between the two.
+- A push to `dev` applies `shared` with `tf-apply-prod`, which now also trusts `ref:refs/heads/dev`, then `envs/dev` with `tf-apply-nonprod`. Pushes to `stage` and `main` apply only their own env stack. The apply loop moved to `.github/scripts/tf-apply.sh` so the job can switch roles between the two, and the stack routing to `.github/scripts/tf-stacks.sh`, tested by `tf-stacks.test.mjs`.
 - PR plans include `shared` only on PRs into `dev`; on a promotion, the target branch's older copy of `shared` would show `dev`'s applied changes as reverts. Drift plans `shared` from `dev`.
 - A manual `apply-destroys` run for `shared` is dispatched from `dev`.
 
