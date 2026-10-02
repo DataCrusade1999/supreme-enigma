@@ -5,6 +5,7 @@
 # `shared` is applied from dev only (#345): its state is single, so applying it from
 # several branches would revert each other's unpromoted changes.
 set -euo pipefail
+# stdout is $GITHUB_OUTPUT for `resolve`, so ::error:: lines go to stderr.
 
 case "${1:-}" in
   resolve)
@@ -13,13 +14,13 @@ case "${1:-}" in
       dev)   shared=shared; env=envs/dev; role=apply-nonprod ;;
       stage) env=envs/stage; role=apply-nonprod ;;
       main)  env=envs/main;  role=apply-prod ;;
-      *) echo "::error::Terraform applies only from dev, stage or main"; exit 1 ;;
+      *) echo "::error::Terraform applies only from dev, stage or main" >&2; exit 1 ;;
     esac
     if [ "$EVENT" = workflow_dispatch ]; then
       # -n: on stage and main $shared is empty, and an empty INPUT must not match it.
       if [ -n "$shared" ] && [ "$INPUT" = "$shared" ]; then env=""
       elif [ "$INPUT" = "$env" ]; then shared=""
-      else echo "::error::$INPUT is not applied from $BRANCH (this branch owns: $shared $env)"; exit 1
+      else echo "::error::$INPUT is not applied from $BRANCH (this branch owns: $shared $env)" >&2; exit 1
       fi
     fi
     printf 'shared=%s\nenv=%s\nrole=%s\n' "$shared" "$env" "$role"

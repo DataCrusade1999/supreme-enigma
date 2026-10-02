@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 const script = fileURLToPath(new URL("./tf-stacks.sh", import.meta.url));
 const run = (mode, env) => {
   const r = spawnSync("bash", [script, mode], { env: { ...process.env, ...env }, encoding: "utf8" });
-  return { rc: r.status, out: r.stdout.trim(), err: r.stderr + r.stdout };
+  // err is stderr only: stdout is $GITHUB_OUTPUT, where an ::error:: line is silently dropped.
+  return { rc: r.status, out: r.stdout.trim(), err: r.stderr };
 };
 const resolve = (EVENT, BRANCH, INPUT = "") => run("resolve", { EVENT, BRANCH, INPUT });
 
@@ -39,7 +40,9 @@ test("dispatch: a stack runs only from the branch that owns it", () => {
 
 test("dispatch with an empty stack fails on every branch", () => {
   for (const branch of ["dev", "stage", "main"]) {
-    assert.equal(resolve("workflow_dispatch", branch, "").rc, 1, branch);
+    const r = resolve("workflow_dispatch", branch, "");
+    assert.equal(r.rc, 1, branch);
+    assert.match(r.err, /::error::/, branch);
   }
 });
 
