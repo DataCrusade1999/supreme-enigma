@@ -207,7 +207,7 @@ import path from "node:path";
 // them from here (Vitest, `next start` under Playwright) runs with web/ as the
 // working directory. Vercel never does: its build has no infra/ directory, and
 // the local authorizer refuses to run there.
-export const CEDAR_DIR = path.resolve(process.cwd(), "..", "infra", "main", "cedar");
+export const CEDAR_DIR = path.resolve(process.cwd(), "..", "infra", "shared", "cedar");
 
 export type CedarFiles = {
   schema: Record<string, unknown>;
