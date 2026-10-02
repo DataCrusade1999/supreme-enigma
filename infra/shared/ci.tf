@@ -206,6 +206,29 @@ data "aws_iam_policy_document" "tf_apply_prod" {
     resources = ["arn:aws:cloudtrail:${var.aws_region}:${local.account_id}:trail/${local.audit_trail_name}"]
   }
   statement {
+    # The detector's ID only exists after it is created, so this can't name one (#376).
+    sid       = "GuardDuty"
+    actions   = ["guardduty:*"]
+    resources = ["*"]
+  }
+  statement {
+    # Creating the first detector creates GuardDuty's service-linked role.
+    sid       = "GuardDutyServiceLinkedRole"
+    actions   = ["iam:CreateServiceLinkedRole"]
+    resources = ["arn:aws:iam::${local.account_id}:role/aws-service-role/guardduty.amazonaws.com/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:AWSServiceName"
+      values   = ["guardduty.amazonaws.com"]
+    }
+  }
+  statement {
+    # Alert rules that publish to the alerts topic (#376, #378).
+    sid       = "EventRules"
+    actions   = ["events:*"]
+    resources = ["arn:aws:events:${var.aws_region}:${local.account_id}:rule/${var.project_name}-*"]
+  }
+  statement {
     sid     = "ProjectIam"
     actions = ["iam:*"]
     resources = [
