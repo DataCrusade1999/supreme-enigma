@@ -51,11 +51,12 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
   run generated UI/API tests — static analysis is faster and cheaper, and
   covers policy/IAM/dependency risk, which is most of what matters for a
   small single-account project.
-- **No open PR needed.** For a `dev`→`main` promotion review (this repo's
-  actual release flow — see root `CLAUDE.md`), pass
+- **No open PR needed.** Passing
   `githubPrContent: [{repository: "owner/repo", headBranch: "dev"}]` with no
-  `prNumber`. The agent diffs the branch directly; it doesn't require an
-  actual pull request to exist.
+  `prNumber` makes the agent diff the branch directly. The merge flow doesn't
+  use this (#392): promotions are reviewed on the promotion PR, so the
+  reviewed SHA is recorded in a PR comment for the `stage → main` skip check.
+  A branch review outside that flow is an extra billed review.
 - **Journal records can be huge.** `list_journal_records` with `order: ASC`
   and no limit on a multi-commit review can return 500k+ characters and blow
   past tool output limits. Poll with `order: DESC, limit: 3-5` to check
