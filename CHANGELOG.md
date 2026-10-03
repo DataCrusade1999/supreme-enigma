@@ -17,6 +17,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
   plans are turned off), with medium-and-above findings emailed through the
   alerts topic. Closes #376.
 
+### Changed
+
+- The `merging-a-pr` skill requests an AWS DevOps Agent release-readiness
+  review only on `dev → stage` promotions, PRs with a significant infra change,
+  and `stage → main` promotions carrying commits the earlier review did not
+  cover, instead of on every PR. Closes #392.
+
 ### Removed
 
 - The `OWNER_EMAIL` Vercel env var. Nothing has read it since the sign-in

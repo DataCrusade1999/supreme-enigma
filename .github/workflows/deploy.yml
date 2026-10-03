@@ -786,7 +786,7 @@ jobs:
             echo
             echo "**Merge this with \`gh pr merge --merge --delete-branch\`, never \`--squash\`.** The branch merges main into dev deliberately; squashing discards that ancestry and re-creates #168, where the next promotion duplicates the version heading and files new entries under it. Merge it promptly, too - until it lands, the promotion-guard job fails every PR into stage and main."
             echo
-            echo "It gets CI like any other PR into dev: wait for the test workflow and the release-readiness verdict first."
+            echo "It gets CI like any other PR into dev: wait for the test workflow and the Codex review first. It needs no release-readiness review (#392)."
           } > "$RUNNER_TEMP/pr-body.md"
           # No PR exists for this branch in any state, so if it is on the remote
           # at all, an earlier attempt pushed it and died before `gh pr create`.
