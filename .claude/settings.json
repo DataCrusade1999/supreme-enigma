@@ -24,6 +24,14 @@
       "PowerShell(gh pr view *)",
       "PowerShell(gh issue view *)",
       "PowerShell(gh run view *)"
+    ],
+    "deny": [
+      "Bash(*--profile admin*)",
+      "Bash(*--profile=admin*)",
+      "Bash(*AWS_PROFILE*admin*)",
+      "PowerShell(*--profile admin*)",
+      "PowerShell(*--profile=admin*)",
+      "PowerShell(*AWS_PROFILE*admin*)"
     ]
   }
 }
