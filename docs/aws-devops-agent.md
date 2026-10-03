@@ -34,7 +34,10 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
 
 - **Release readiness review** — analyze the diff between `dev` and `main`
   before promoting, or a specific PR, for policy compliance, IAM blast
-  radius, dependency breakage, cross-repo impact.
+  radius, dependency breakage, cross-repo impact. Reviews are billed, so
+  they run only on `dev → stage` promotions, PRs with a significant infra
+  change, and `stage → main` promotions carrying unreviewed commits (#392;
+  the `merging-a-pr` skill has the rules).
 - **Cost / recommendations / ad-hoc chat** — quick natural-language queries
   against the account without console-hopping.
 - **Incident investigation** — root-cause a Lambda/CI failure by correlating

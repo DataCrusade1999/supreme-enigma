@@ -36,20 +36,22 @@ Do **not** write `Closes #N` on a promotion PR. GitHub only honours the
 keyword on the default branch, which is `dev` — the issues were already
 closed when the work merged there.
 
-### 2. Wait for both reviewers
+### 2. Wait for CI and the review
 
 ```bash
 gh pr checks <N> --watch --interval 20
-gh api repos/DataCrusade1999/supreme-enigma/commits/<sha>/status \
-  --jq '.statuses[] | {context, state, description}'
 ```
 
 `changes`/`deploy`/`release` showing `SKIPPED` is normal — those are
-push-triggered. The release-readiness verdict is a **commit status, not a
-check-run**, so it will not appear in `gh pr checks`. Anything other than
-`Release readiness review: change approved` is a hard stop.
+push-triggered.
 
-Then read the inline comments from both bots — `gh pr view` does not show
+Request a devops agent release-readiness review: always on `dev → stage`; on
+`stage → main` only when `git log --no-merges <reviewed-sha>..origin/stage`
+shows commits other than `chore(changelog)` ones (#392). The steps are in the
+`merging-a-pr` skill. A `recommendedAction` other than `Standard Deployment`
+is a hard stop.
+
+Then read the Codex bot's inline comments — `gh pr view` does not show
 them:
 
 ```bash
@@ -119,7 +121,7 @@ same way, which is what happened to v1.5.1.
 It gets CI, but the run does not start on its own. Because the bot opens the
 PR, GitHub finishes the `pull_request` run as `completed/action_required`
 without running a job, so only Vercel reports and `gh pr checks` looks green
-while the test jobs and the readiness review are absent. Approve the run, then review
+while the test jobs are absent. Approve the run, then review
 it like any other PR:
 
 ```bash
