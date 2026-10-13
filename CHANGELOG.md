@@ -40,6 +40,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
   attribute, which Cognito writes when a Google sign-in is linked to the user.
   Applying that change would have undone the link. Refs #300.
 
+### Security
+
+- Web dependencies with HIGH advisories bumped: `prosemirror-view` 1.42.6
+  (with `prosemirror-model` 1.25.12), `sharp` 0.35.5 and `source-map-js`
+  1.2.2. Closes #406.
+
 ## [1.8.0] - 2026-10-02
 
 ### Added
