@@ -1,22 +1,19 @@
-# GuardDuty in us-east-1 (#376), foundational sources only: CloudTrail management
-# events, VPC flow logs and DNS logs. Like the trail, it watches the whole account.
-# Other regions are not covered.
-
-resource "aws_guardduty_detector" "this" {
-  enable = true
+# GuardDuty in us-east-1 (#376) is now run by the personal AWS organization: the audit
+# account is the delegated administrator and sets protection plans for every member
+# (DataCrusade1999/aws-org). These blocks drop the detector from this state without
+# deleting it.
+removed {
+  from = aws_guardduty_detector.this
+  lifecycle {
+    destroy = false
+  }
 }
 
-# CreateDetector turns every optional protection plan on unless told otherwise, so
-# leaving these out is not enough. Runtime Monitoring is the one plan that starts off.
-resource "aws_guardduty_detector_feature" "off" {
-  for_each = toset([
-    "S3_DATA_EVENTS", "EKS_AUDIT_LOGS", "EBS_MALWARE_PROTECTION",
-    "RDS_LOGIN_EVENTS", "LAMBDA_NETWORK_LOGS", "AI_PROTECTION",
-  ])
-
-  detector_id = aws_guardduty_detector.this.id
-  name        = each.value
-  status      = "DISABLED"
+removed {
+  from = aws_guardduty_detector_feature.off
+  lifecycle {
+    destroy = false
+  }
 }
 
 # Medium and above (severity 4+) to the alerts topic, whose policy admits EventBridge.
