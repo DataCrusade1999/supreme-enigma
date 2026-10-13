@@ -23,6 +23,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
   review only on `dev → stage` promotions, PRs with a significant infra change,
   and `stage → main` promotions carrying commits the earlier review did not
   cover, instead of on every PR. Closes #392.
+- GuardDuty is no longer managed by `infra/shared`; the personal AWS
+  organization's audit account runs it. The detector stays on. Closes #394.
 
 ### Removed
 
