@@ -575,7 +575,7 @@ resource "aws_sns_topic_policy" "budget_alerts" {
         }
       },
       {
-        # GuardDuty findings (guardduty.tf) and the #378 account-activity rules.
+        # EventBridge rules that alert here, such as the #378 account-activity rules.
         Sid       = "EventBridgePublish"
         Effect    = "Allow"
         Principal = { Service = "events.amazonaws.com" }

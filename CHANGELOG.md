@@ -28,6 +28,9 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Removed
 
+- The account CloudTrail trail and GuardDuty findings rule; the personal AWS
+  organization covers both. Closes #395.
+
 - The `OWNER_EMAIL` Vercel env var. Nothing has read it since the sign-in
   callback stopped checking the owner's email in v1.8.0. Refs #300.
 

@@ -1,8 +1,7 @@
-# --- CloudTrail (#375) ---
+# --- CloudTrail log bucket (#375) ---
 
-# The account's one trail. Management events are account-wide, so this records every
-# API call in 223376380711, not only bgm-looper's. It lives here until an organization
-# trail replaces it; then delete the trail and let the bucket's lifecycle empty it.
+# Trail removed (#395): the organization trail in DataCrusade1999/aws-org records this
+# account. The bucket stays until its 365-day expiry empties it.
 # Names are locals in ci.tf, where tf_apply_prod is granted them.
 
 resource "aws_s3_bucket" "audit" {
@@ -40,8 +39,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "audit" {
   }
 }
 
-# aws:SourceArn is built from the trail's name, not aws_cloudtrail.audit.arn: the trail
-# depends on this policy, so referencing it would be a cycle.
+# The two CloudTrail statements admitted the removed trail and now match nothing;
+# DenyInsecureTransport still guards the logs until they expire.
 data "aws_iam_policy_document" "audit_bucket" {
   statement {
     sid       = "CloudTrailAclCheck"
@@ -98,17 +97,4 @@ resource "aws_s3_bucket_policy" "audit" {
   policy = data.aws_iam_policy_document.audit_bucket.json
   # The public access block must exist first, or S3 can reject the policy mid-apply.
   depends_on = [aws_s3_bucket_public_access_block.audit]
-}
-
-# Management events only (read and write), every region, global services (IAM, STS)
-# included. No CloudWatch Logs delivery yet: #166 adds it when it needs a metric filter.
-resource "aws_cloudtrail" "audit" {
-  name                          = local.audit_trail_name
-  s3_bucket_name                = aws_s3_bucket.audit.id
-  is_multi_region_trail         = true
-  include_global_service_events = true
-  enable_log_file_validation    = true
-
-  # CloudTrail checks the bucket policy when the trail is created.
-  depends_on = [aws_s3_bucket_policy.audit]
 }
