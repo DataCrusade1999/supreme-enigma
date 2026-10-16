@@ -19,6 +19,9 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- Resources carry an `app = bgm-looper` tag for the organization's per-app
+  budget, and the docs describe the org SSO session. Closes #396.
+
 - The `merging-a-pr` skill requests an AWS DevOps Agent release-readiness
   review only on `dev → stage` promotions, PRs with a significant infra change,
   and `stage → main` promotions carrying commits the earlier review did not
