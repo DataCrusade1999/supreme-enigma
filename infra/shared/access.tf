@@ -36,6 +36,6 @@ resource "vercel_project_environment_variable" "avp_policy_store_id" {
   project_id = vercel_project.looper.id
   key        = "AVP_POLICY_STORE_ID"
   value      = module.auth.policy_store_id
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
 }

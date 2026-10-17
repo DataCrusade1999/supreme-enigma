@@ -82,7 +82,6 @@ updates:
     directories:
       - /infra/bootstrap
       - /infra/shared
-      - /infra/envs/dev
       - /infra/envs/stage
       - /infra/envs/main
     schedule:
