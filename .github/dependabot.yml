@@ -82,8 +82,11 @@ updates:
     directories:
       - /infra/bootstrap
       - /infra/shared
-      - /infra/envs/stage
       - /infra/envs/main
+      - /infra/nonprod/dev/account
+      - /infra/nonprod/dev/env
+      - /infra/nonprod/stage/account
+      - /infra/nonprod/stage/env
     schedule:
       interval: monthly
     commit-message:
