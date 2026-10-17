@@ -517,7 +517,7 @@ jobs:
           case "${{ github.ref_name }}" in
             main)  echo "function_name=bgm-looper-processor"       >> "$GITHUB_OUTPUT"; echo "tag_prefix=main"  >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::223376380711:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
             dev)   echo "function_name=bgm-looper-processor-dev"   >> "$GITHUB_OUTPUT"; echo "tag_prefix=dev"   >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::624586968135:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
-            stage) echo "function_name=bgm-looper-processor-stage" >> "$GITHUB_OUTPUT"; echo "tag_prefix=stage" >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::223376380711:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
+            stage) echo "function_name=bgm-looper-processor-stage" >> "$GITHUB_OUTPUT"; echo "tag_prefix=stage" >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::792682047320:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
           esac
 
       - name: Configure AWS credentials
