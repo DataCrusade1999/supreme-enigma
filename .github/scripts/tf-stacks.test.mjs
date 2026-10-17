@@ -15,9 +15,9 @@ const role = (stack, mode) => {
 };
 const resolve = (EVENT, BRANCH, INPUT = "") => run("resolve", { EVENT, BRANCH, INPUT });
 
-test("push: dev applies shared then envs/dev; stage and main only their own env", () => {
-  assert.equal(resolve("push", "dev").out, "stacks=shared envs/dev");
-  assert.equal(resolve("push", "stage").out, "stacks=envs/stage");
+test("push: dev applies shared, nonprod/dev/account, then nonprod/dev/env; stage envs/stage then nonprod/stage/account; main only its own env", () => {
+  assert.equal(resolve("push", "dev").out, "stacks=shared nonprod/dev/account nonprod/dev/env");
+  assert.equal(resolve("push", "stage").out, "stacks=envs/stage nonprod/stage/account");
   assert.equal(resolve("push", "main").out, "stacks=envs/main");
 });
 
@@ -29,12 +29,14 @@ test("push from any other branch fails", () => {
 
 test("dispatch: a stack runs only from the branch that owns it", () => {
   assert.equal(resolve("workflow_dispatch", "dev", "shared").out, "stacks=shared");
-  assert.equal(resolve("workflow_dispatch", "dev", "envs/dev").out, "stacks=envs/dev");
+  assert.equal(resolve("workflow_dispatch", "dev", "nonprod/dev/account").out, "stacks=nonprod/dev/account");
+  assert.equal(resolve("workflow_dispatch", "dev", "nonprod/dev/env").out, "stacks=nonprod/dev/env");
   assert.equal(resolve("workflow_dispatch", "stage", "envs/stage").out, "stacks=envs/stage");
+  assert.equal(resolve("workflow_dispatch", "stage", "nonprod/stage/account").out, "stacks=nonprod/stage/account");
   assert.equal(resolve("workflow_dispatch", "main", "envs/main").out, "stacks=envs/main");
   for (const [branch, input] of [
-    ["dev", "envs/main"], ["dev", "envs/stage"], ["stage", "shared"], ["stage", "envs/dev"],
-    ["main", "shared"], ["main", "envs/dev"],
+    ["dev", "envs/main"], ["dev", "envs/stage"], ["dev", "envs/dev"], ["stage", "shared"], ["stage", "envs/dev"],
+    ["main", "shared"], ["main", "envs/dev"], ["dev", "nonprod/stage/account"], ["main", "nonprod/stage/account"],
   ]) {
     const r = resolve("workflow_dispatch", branch, input);
     assert.equal(r.rc, 1, `${input} on ${branch}`);
@@ -51,8 +53,8 @@ test("dispatch with an empty stack fails on every branch", () => {
 });
 
 test("plan: shared only on PRs into dev", () => {
-  assert.equal(run("plan", { BASE: "dev" }).out, "shared envs/dev");
-  assert.equal(run("plan", { BASE: "stage" }).out, "envs/stage");
+  assert.equal(run("plan", { BASE: "dev" }).out, "shared nonprod/dev/account nonprod/dev/env");
+  assert.equal(run("plan", { BASE: "stage" }).out, "envs/stage nonprod/stage/account");
   assert.equal(run("plan", { BASE: "main" }).out, "envs/main");
 });
 
@@ -77,5 +79,5 @@ test("role: an unknown stack fails", () => {
 });
 
 test("drift: the branch:stack pairs", () => {
-  assert.equal(run("drift", {}).out, "dev:shared stage:envs/stage dev:envs/dev main:envs/main");
+  assert.equal(run("drift", {}).out, "dev:shared stage:envs/stage main:envs/main dev:nonprod/dev/account dev:nonprod/dev/env stage:nonprod/stage/account");
 });

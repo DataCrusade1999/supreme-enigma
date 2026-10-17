@@ -459,18 +459,6 @@ resource "vercel_project_environment_variable" "aws_role_arn" {
   sensitive  = false
 }
 
-# depends_on: the production value must be narrowed off `preview` before this one
-# exists, or Vercel holds two preview values for the same key.
-resource "vercel_project_environment_variable" "aws_role_arn_preview" {
-  project_id = vercel_project.looper.id
-  key        = "APP_AWS_ROLE_ARN"
-  value      = aws_iam_role.vercel_preview.arn
-  target     = ["preview"]
-  sensitive  = false
-
-  depends_on = [vercel_project_environment_variable.aws_role_arn]
-}
-
 resource "vercel_project_environment_variable" "aws_region" {
   project_id = vercel_project.looper.id
   key        = "APP_AWS_REGION"
@@ -479,13 +467,13 @@ resource "vercel_project_environment_variable" "aws_region" {
   sensitive  = false
 }
 
-# All three branches read and write the resume from main's bucket, so unlike
-# S3_BUCKET_NAME this is not overridden per branch. See the design spec §4.1.
+# Production only: dev and stage previews take their resume bucket from the nonprod
+# env stacks. See the design spec §4.1.
 resource "vercel_project_environment_variable" "resume_bucket_name" {
   project_id = vercel_project.looper.id
   key        = "RESUME_BUCKET_NAME"
   value      = local.data_bucket_names["main"]
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
 }
 

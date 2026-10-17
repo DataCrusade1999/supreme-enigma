@@ -29,5 +29,5 @@ module "env" {
   # Only read when the function is first created; see the module's variable comment.
   # A placeholder: Task 10 of the nonprod-accounts plan replaces it with a tag dev's
   # CI has actually pushed to this account's ECR, before the first apply.
-  bootstrap_image_tag = "set-in-task-10"
+  bootstrap_image_tag = "dev-36dcb5c5f4fad2a6839970f67e0e1c3ac09905f1"
 }
