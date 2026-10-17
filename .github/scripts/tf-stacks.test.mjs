@@ -15,8 +15,8 @@ const role = (stack, mode) => {
 };
 const resolve = (EVENT, BRANCH, INPUT = "") => run("resolve", { EVENT, BRANCH, INPUT });
 
-test("push: dev applies shared then envs/dev; stage and main only their own env", () => {
-  assert.equal(resolve("push", "dev").out, "stacks=shared envs/dev");
+test("push: dev applies shared, envs/dev, then nonprod/dev/account; stage and main only their own env", () => {
+  assert.equal(resolve("push", "dev").out, "stacks=shared envs/dev nonprod/dev/account");
   assert.equal(resolve("push", "stage").out, "stacks=envs/stage");
   assert.equal(resolve("push", "main").out, "stacks=envs/main");
 });
@@ -30,6 +30,7 @@ test("push from any other branch fails", () => {
 test("dispatch: a stack runs only from the branch that owns it", () => {
   assert.equal(resolve("workflow_dispatch", "dev", "shared").out, "stacks=shared");
   assert.equal(resolve("workflow_dispatch", "dev", "envs/dev").out, "stacks=envs/dev");
+  assert.equal(resolve("workflow_dispatch", "dev", "nonprod/dev/account").out, "stacks=nonprod/dev/account");
   assert.equal(resolve("workflow_dispatch", "stage", "envs/stage").out, "stacks=envs/stage");
   assert.equal(resolve("workflow_dispatch", "main", "envs/main").out, "stacks=envs/main");
   for (const [branch, input] of [
@@ -51,7 +52,7 @@ test("dispatch with an empty stack fails on every branch", () => {
 });
 
 test("plan: shared only on PRs into dev", () => {
-  assert.equal(run("plan", { BASE: "dev" }).out, "shared envs/dev");
+  assert.equal(run("plan", { BASE: "dev" }).out, "shared envs/dev nonprod/dev/account");
   assert.equal(run("plan", { BASE: "stage" }).out, "envs/stage");
   assert.equal(run("plan", { BASE: "main" }).out, "envs/main");
 });
@@ -77,5 +78,5 @@ test("role: an unknown stack fails", () => {
 });
 
 test("drift: the branch:stack pairs", () => {
-  assert.equal(run("drift", {}).out, "dev:shared stage:envs/stage dev:envs/dev main:envs/main");
+  assert.equal(run("drift", {}).out, "dev:shared stage:envs/stage dev:envs/dev main:envs/main dev:nonprod/dev/account");
 });

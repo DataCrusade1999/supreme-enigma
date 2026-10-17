@@ -13,7 +13,7 @@ set -euo pipefail
 # The stacks a branch applies, in order.
 branch_stacks() {
   case "$1" in
-    dev)   echo "shared envs/dev" ;;
+    dev)   echo "shared envs/dev nonprod/dev/account" ;;
     stage) echo "envs/stage" ;;
     main)  echo "envs/main" ;;
     *) echo "::error::Terraform applies only from dev, stage or main" >&2; return 1 ;;
@@ -50,10 +50,10 @@ case "${1:-}" in
   plan)
     # On a promotion, stage's or main's older copy of shared would show dev's applied
     # changes as reverts, so shared is planned only on PRs into dev.
-    if [ "$BASE" = dev ]; then echo "shared envs/dev"; else echo "envs/$BASE"; fi
+    if [ "$BASE" = dev ]; then echo "shared envs/dev nonprod/dev/account"; else echo "envs/$BASE"; fi
     ;;
   drift)
-    echo "dev:shared stage:envs/stage dev:envs/dev main:envs/main"
+    echo "dev:shared stage:envs/stage dev:envs/dev main:envs/main dev:nonprod/dev/account"
     ;;
   role) role "${2:?stack}" "${3:?mode}" ;;
   *) echo "usage: tf-stacks.sh resolve|plan|drift|role" >&2; exit 2 ;;
