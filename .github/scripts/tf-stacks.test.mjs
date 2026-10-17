@@ -9,12 +9,16 @@ const run = (mode, env) => {
   // err is stderr only: stdout is $GITHUB_OUTPUT, where an ::error:: line is silently dropped.
   return { rc: r.status, out: r.stdout.trim(), err: r.stderr };
 };
+const role = (stack, mode) => {
+  const r = spawnSync("bash", [script, "role", stack, mode], { env: process.env, encoding: "utf8" });
+  return { rc: r.status, out: r.stdout.trim(), err: r.stderr };
+};
 const resolve = (EVENT, BRANCH, INPUT = "") => run("resolve", { EVENT, BRANCH, INPUT });
 
 test("push: dev applies shared then envs/dev; stage and main only their own env", () => {
-  assert.equal(resolve("push", "dev").out, "shared=shared\nenv=envs/dev\nrole=apply-nonprod");
-  assert.equal(resolve("push", "stage").out, "shared=\nenv=envs/stage\nrole=apply-nonprod");
-  assert.equal(resolve("push", "main").out, "shared=\nenv=envs/main\nrole=apply-prod");
+  assert.equal(resolve("push", "dev").out, "stacks=shared envs/dev");
+  assert.equal(resolve("push", "stage").out, "stacks=envs/stage");
+  assert.equal(resolve("push", "main").out, "stacks=envs/main");
 });
 
 test("push from any other branch fails", () => {
@@ -24,10 +28,10 @@ test("push from any other branch fails", () => {
 });
 
 test("dispatch: a stack runs only from the branch that owns it", () => {
-  assert.equal(resolve("workflow_dispatch", "dev", "shared").out, "shared=shared\nenv=\nrole=apply-nonprod");
-  assert.equal(resolve("workflow_dispatch", "dev", "envs/dev").out, "shared=\nenv=envs/dev\nrole=apply-nonprod");
-  assert.equal(resolve("workflow_dispatch", "stage", "envs/stage").out, "shared=\nenv=envs/stage\nrole=apply-nonprod");
-  assert.equal(resolve("workflow_dispatch", "main", "envs/main").out, "shared=\nenv=envs/main\nrole=apply-prod");
+  assert.equal(resolve("workflow_dispatch", "dev", "shared").out, "stacks=shared");
+  assert.equal(resolve("workflow_dispatch", "dev", "envs/dev").out, "stacks=envs/dev");
+  assert.equal(resolve("workflow_dispatch", "stage", "envs/stage").out, "stacks=envs/stage");
+  assert.equal(resolve("workflow_dispatch", "main", "envs/main").out, "stacks=envs/main");
   for (const [branch, input] of [
     ["dev", "envs/main"], ["dev", "envs/stage"], ["stage", "shared"], ["stage", "envs/dev"],
     ["main", "shared"], ["main", "envs/dev"],
@@ -50,4 +54,28 @@ test("plan: shared only on PRs into dev", () => {
   assert.equal(run("plan", { BASE: "dev" }).out, "shared envs/dev");
   assert.equal(run("plan", { BASE: "stage" }).out, "envs/stage");
   assert.equal(run("plan", { BASE: "main" }).out, "envs/main");
+});
+
+test("role: each stack maps to its account's role", () => {
+  const prod = "arn:aws:iam::223376380711:role/bgm-looper-tf-apply-prod";
+  const nonprod = "arn:aws:iam::223376380711:role/bgm-looper-tf-apply-nonprod";
+  assert.equal(role("shared", "apply").out, prod);
+  assert.equal(role("envs/main", "apply").out, prod);
+  assert.equal(role("envs/dev", "apply").out, nonprod);
+  assert.equal(role("envs/stage", "apply").out, nonprod);
+  for (const s of ["shared", "envs/dev", "envs/stage", "envs/main"]) {
+    assert.equal(role(s, "plan").out, "arn:aws:iam::223376380711:role/bgm-looper-tf-plan", s);
+  }
+  assert.equal(role("nonprod/dev/env", "apply").out, "arn:aws:iam::624586968135:role/bgm-looper-tf-apply");
+  assert.equal(role("nonprod/stage/account", "plan").out, "arn:aws:iam::792682047320:role/bgm-looper-tf-plan");
+});
+
+test("role: an unknown stack fails", () => {
+  const r = role("bogus", "apply");
+  assert.equal(r.rc, 1);
+  assert.match(r.err, /::error::no role for bogus/);
+});
+
+test("drift: the branch:stack pairs", () => {
+  assert.equal(run("drift", {}).out, "dev:shared stage:envs/stage dev:envs/dev main:envs/main");
 });

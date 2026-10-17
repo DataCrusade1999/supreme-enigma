@@ -515,15 +515,15 @@ jobs:
         id: env
         run: |
           case "${{ github.ref_name }}" in
-            main)  echo "function_name=bgm-looper-processor"       >> "$GITHUB_OUTPUT"; echo "tag_prefix=main"  >> "$GITHUB_OUTPUT" ;;
-            dev)   echo "function_name=bgm-looper-processor-dev"   >> "$GITHUB_OUTPUT"; echo "tag_prefix=dev"   >> "$GITHUB_OUTPUT" ;;
-            stage) echo "function_name=bgm-looper-processor-stage" >> "$GITHUB_OUTPUT"; echo "tag_prefix=stage" >> "$GITHUB_OUTPUT" ;;
+            main)  echo "function_name=bgm-looper-processor"       >> "$GITHUB_OUTPUT"; echo "tag_prefix=main"  >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::223376380711:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
+            dev)   echo "function_name=bgm-looper-processor-dev"   >> "$GITHUB_OUTPUT"; echo "tag_prefix=dev"   >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::223376380711:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
+            stage) echo "function_name=bgm-looper-processor-stage" >> "$GITHUB_OUTPUT"; echo "tag_prefix=stage" >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::223376380711:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
           esac
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: arn:aws:iam::223376380711:role/bgm-looper-ci-deploy
+          role-to-assume: ${{ steps.env.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       # Pinned to v2.1.6 rather than floating on @v2, which is v2.1.7. Since
