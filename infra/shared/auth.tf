@@ -49,7 +49,7 @@ resource "vercel_project_environment_variable" "cognito_domain" {
   project_id = vercel_project.looper.id
   key        = "COGNITO_DOMAIN"
   value      = module.auth.domain_url
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
 }
 
@@ -57,7 +57,7 @@ resource "vercel_project_environment_variable" "cognito_client_id" {
   project_id = vercel_project.looper.id
   key        = "COGNITO_CLIENT_ID"
   value      = module.auth.client_id
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
 }
 
@@ -65,7 +65,7 @@ resource "vercel_project_environment_variable" "cognito_user_pool_id" {
   project_id = vercel_project.looper.id
   key        = "COGNITO_USER_POOL_ID"
   value      = module.auth.user_pool_id
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
 }
 
