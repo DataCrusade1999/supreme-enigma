@@ -11,13 +11,13 @@ import {
 } from "@/lib/resume-keys";
 
 export async function POST(request: Request) {
-  // Application-level rather than IAM-level: all branches share one IAM user,
-  // so the credentials retain the S3 permission everywhere. A second,
-  // production-only key pair was considered and rejected as more machinery
-  // than a single-user site behind a password gate justifies. See spec §7.3.
-  if (process.env.VERCEL_ENV !== "production") {
+  // Previews publish too: each environment's resume lives in its own account's
+  // bucket (nonprod-accounts spec §3), so a preview can't reach production's
+  // resume. Anything else has no bucket of its own to publish into.
+  const env = process.env.VERCEL_ENV;
+  if (env !== "production" && env !== "preview") {
     return NextResponse.json(
-      { error: "publishing is only available on production" },
+      { error: "publishing is only available on deployed environments" },
       { status: 403 },
     );
   }
