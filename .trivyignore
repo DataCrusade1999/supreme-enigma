@@ -26,3 +26,10 @@ AVD-AWS-0095
 # the container-escape scenario this check targets doesn't apply here.
 # Accepted 2026-09-18.
 AVD-DS-0002
+
+# AVD-AWS-0015: CloudTrail not encrypted with a customer-managed key.
+# infra/shared/audit.tf's trail writes to a bucket with SSE-S3, public access
+# blocked and a policy that admits only CloudTrail. A CMK would add ~$1/month
+# plus a key policy CloudTrail must be granted, for logs of the owner's own
+# API calls. Accepted 2026-10-03 (#375).
+AVD-AWS-0015

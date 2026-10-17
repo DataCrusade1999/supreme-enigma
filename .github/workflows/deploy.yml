@@ -25,6 +25,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read-only unless a job asks for more (`deploy` and `release` do). Stated
+# here rather than left to the repo's default token setting, which lives
+# outside the repo.
+permissions:
+  contents: read
+
 # Every `runs-on` below pins `ubuntu-24.04` rather than `ubuntu-latest`.
 # `ubuntu-latest` resolves to 24.04 today, so the pin is behaviour-neutral,
 # but the label migrates to Ubuntu 26.04 starting 2026-10-19
@@ -509,15 +515,15 @@ jobs:
         id: env
         run: |
           case "${{ github.ref_name }}" in
-            main)  echo "function_name=bgm-looper-processor"       >> "$GITHUB_OUTPUT"; echo "tag_prefix=main"  >> "$GITHUB_OUTPUT" ;;
-            dev)   echo "function_name=bgm-looper-processor-dev"   >> "$GITHUB_OUTPUT"; echo "tag_prefix=dev"   >> "$GITHUB_OUTPUT" ;;
-            stage) echo "function_name=bgm-looper-processor-stage" >> "$GITHUB_OUTPUT"; echo "tag_prefix=stage" >> "$GITHUB_OUTPUT" ;;
+            main)  echo "function_name=bgm-looper-processor"       >> "$GITHUB_OUTPUT"; echo "tag_prefix=main"  >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::223376380711:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
+            dev)   echo "function_name=bgm-looper-processor-dev"   >> "$GITHUB_OUTPUT"; echo "tag_prefix=dev"   >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::223376380711:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
+            stage) echo "function_name=bgm-looper-processor-stage" >> "$GITHUB_OUTPUT"; echo "tag_prefix=stage" >> "$GITHUB_OUTPUT"; echo "role_arn=arn:aws:iam::223376380711:role/bgm-looper-ci-deploy" >> "$GITHUB_OUTPUT" ;;
           esac
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: arn:aws:iam::223376380711:role/bgm-looper-ci-deploy
+          role-to-assume: ${{ steps.env.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       # Pinned to v2.1.6 rather than floating on @v2, which is v2.1.7. Since
@@ -780,7 +786,7 @@ jobs:
             echo
             echo "**Merge this with \`gh pr merge --merge --delete-branch\`, never \`--squash\`.** The branch merges main into dev deliberately; squashing discards that ancestry and re-creates #168, where the next promotion duplicates the version heading and files new entries under it. Merge it promptly, too - until it lands, the promotion-guard job fails every PR into stage and main."
             echo
-            echo "It gets CI like any other PR into dev: wait for the test workflow and the release-readiness verdict first."
+            echo "It gets CI like any other PR into dev: wait for the test workflow and the Codex review first. It needs no release-readiness review (#392)."
           } > "$RUNNER_TEMP/pr-body.md"
           # No PR exists for this branch in any state, so if it is on the remote
           # at all, an earlier attempt pushed it and died before `gh pr create`.

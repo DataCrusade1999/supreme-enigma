@@ -573,6 +573,17 @@ resource "aws_sns_topic_policy" "budget_alerts" {
         Condition = {
           StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
         }
+      },
+      {
+        # EventBridge rules that alert here, such as the #378 account-activity rules.
+        Sid       = "EventBridgePublish"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.budget_alerts.arn
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+        }
       }
     ]
   })
@@ -581,10 +592,9 @@ resource "aws_sns_topic_policy" "budget_alerts" {
 # Measured baseline for this project is $0.11-$0.28/month (design spec §9). A $5 cap is
 # roughly 20x headroom — high enough not to cry wolf, low enough to catch a runaway.
 #
-# Deliberately NOT filtered by tag: the magma-learning budget uses a user:project tag
-# filter, but this project's resources are not consistently tagged, so a tag filter
-# would silently match nothing. An unfiltered account-scoped budget is the honest
-# version; tagging every resource is separate work.
+# Deliberately NOT filtered by tag: it caps the whole account, untagged resources
+# included. Every resource here carries `app = bgm-looper` (default_tags, #396), and the
+# personal AWS organization's `app-bgm-looper` budget filters on that tag.
 resource "aws_budgets_budget" "project" {
   name         = "${var.project_name}-monthly-cap"
   budget_type  = "COST"

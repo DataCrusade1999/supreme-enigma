@@ -1,102 +1,37 @@
 # Owner-only sign-in for /tools, /keystatic and the gated API routes (spec
 # 2026-09-28-cognito-login-design.md). One pool for all three environments, like
 # COOKIE_SECRET: the app turns a verified Cognito ID token into its own session.
+# The pool and the Verified Permissions store are in infra/modules/auth; this file
+# keeps the apex CAA record and the Vercel vars that point the app at them.
 
 locals {
-  # Managed login on the site's own domain, so passkeys bind to a hostname we own.
-  cognito_custom_domain = "auth.${vercel_project_domain.custom.domain}"
-  cognito_domain_url    = "https://${local.cognito_custom_domain}"
   login_callback_urls = concat(
     [for h in values(local.site_hosts) : "https://${h}/api/auth/callback"],
     ["http://localhost:3000/api/auth/callback"],
   )
 }
 
-resource "aws_cognito_user_pool" "owner" {
-  name           = "${var.project_name}-owner"
-  user_pool_tier = "ESSENTIALS"
-  # No deletion_protection: infra/shared must stay destroyable by the kill-switch
-  # `terraform destroy`, and a protected pool fails that destroy partway.
+module "auth" {
+  source = "../modules/auth"
 
-  username_attributes      = ["email"]
-  auto_verified_attributes = ["email"]
+  project_name = var.project_name
+  # Managed login on the site's own domain, so passkeys bind to a hostname we own.
+  auth_domain          = "auth.${vercel_project_domain.custom.domain}"
+  dns_domain           = vercel_project_domain.custom.domain
+  vercel_team_id       = local.vercel_team_id
+  callback_urls        = local.login_callback_urls
+  ses_identity         = aws_sesv2_email_identity.domain.email_identity
+  ses_identity_arn     = aws_sesv2_email_identity.domain.arn
+  from_email_address   = "Sign-in <no-reply@${aws_sesv2_email_identity.domain.email_identity}>"
+  google_client_id     = var.google_client_id
+  google_client_secret = var.google_client_secret
+  owner_email          = var.alert_email
+  account_id           = data.aws_caller_identity.current.account_id
+  region               = var.aws_region
 
-  admin_create_user_config {
-    allow_admin_create_user_only = true
-  }
-
-  # PASSWORD is listed so the pool accepts the policy even if AWS requires it; the
-  # owner's password is random and never used.
-  sign_in_policy {
-    allowed_first_auth_factors = ["PASSWORD", "EMAIL_OTP", "WEB_AUTHN"]
-  }
-
-  # Cognito accepts this relying party only once the custom domain below exists, so
-  # a from-scratch apply fails here after creating the pool. Recovery:
-  # .claude/rules/infra.md ("Cognito WebAuthn on a from-scratch apply").
-  # Passkeys are bound to this hostname: they keep working with any login service
-  # served at auth.ashutosh-pandey.com, and stop working if that hostname changes.
-  web_authn_configuration {
-    relying_party_id  = local.cognito_custom_domain
-    user_verification = "preferred"
-  }
-
-  password_policy {
-    minimum_length    = 16
-    require_lowercase = true
-    require_uppercase = true
-    require_numbers   = true
-    require_symbols   = true
-  }
-
-  account_recovery_setting {
-    recovery_mechanism {
-      name     = "verified_email"
-      priority = 1
-    }
-  }
-
-  # Email codes need SES in DEVELOPER mode (Essentials plan).
-  email_configuration {
-    email_sending_account = "DEVELOPER"
-    source_arn            = aws_sesv2_email_identity.domain.arn
-    from_email_address    = "Sign-in <no-reply@${aws_sesv2_email_identity.domain.email_identity}>"
-  }
-
-  depends_on = [aws_sesv2_email_identity_policy.cognito]
-}
-
-# DEVELOPER mode sends as the domain identity, so the identity has to let Cognito
-# do that. The condition allows any user pool in this account (userpool/*), not
-# only this one: naming aws_cognito_user_pool.owner.arn would be a dependency
-# cycle, since the pool depends on this policy.
-resource "aws_sesv2_email_identity_policy" "cognito" {
-  email_identity = aws_sesv2_email_identity.domain.email_identity
-  policy_name    = "cognito-owner-pool"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "cognito-idp.amazonaws.com" }
-      Action    = ["ses:SendEmail", "ses:SendRawEmail"]
-      Resource  = aws_sesv2_email_identity.domain.arn
-      Condition = {
-        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
-        ArnLike      = { "aws:SourceArn" = "arn:aws:cognito-idp:${var.aws_region}:${data.aws_caller_identity.current.account_id}:userpool/*" }
-      }
-    }]
-  })
-}
-
-# Cognito serves a custom domain through CloudFront, so the certificate has to be in
-# us-east-1 (var.aws_region already is).
-resource "aws_acm_certificate" "auth" {
-  domain_name       = local.cognito_custom_domain
-  validation_method = "DNS"
-
-  lifecycle {
-    create_before_destroy = true
-  }
+  # The certificate validation needs the CAA record below. The module has no data
+  # sources, so this defers nothing to apply time.
+  depends_on = [vercel_dns_record.caa_amazon]
 }
 
 # Vercel's system CAA records allow only Sectigo, Let's Encrypt and Google, so ACM
@@ -110,168 +45,10 @@ resource "vercel_dns_record" "caa_amazon" {
   ttl     = 60
 }
 
-# Vercel wants the record name relative to the domain and no trailing dots.
-resource "vercel_dns_record" "auth_acm" {
-  for_each = {
-    for o in aws_acm_certificate.auth.domain_validation_options : o.domain_name => o
-  }
-  team_id = local.vercel_team_id
-  domain  = vercel_project_domain.custom.domain
-  name    = trimsuffix(trimsuffix(each.value.resource_record_name, "."), ".${vercel_project_domain.custom.domain}")
-  type    = each.value.resource_record_type
-  value   = trimsuffix(each.value.resource_record_value, ".")
-  ttl     = 60
-}
-
-resource "aws_acm_certificate_validation" "auth" {
-  certificate_arn         = aws_acm_certificate.auth.arn
-  validation_record_fqdns = [for o in aws_acm_certificate.auth.domain_validation_options : o.resource_record_name]
-  depends_on              = [vercel_dns_record.auth_acm, vercel_dns_record.caa_amazon]
-}
-
-resource "aws_cognito_user_pool_domain" "custom" {
-  domain                = local.cognito_custom_domain
-  certificate_arn       = aws_acm_certificate_validation.auth.certificate_arn
-  user_pool_id          = aws_cognito_user_pool.owner.id
-  managed_login_version = 2
-}
-
-# The explicit record overrides Vercel's wildcard ALIAS for auth.
-resource "vercel_dns_record" "auth" {
-  team_id = local.vercel_team_id
-  domain  = vercel_project_domain.custom.domain
-  name    = "auth"
-  type    = "CNAME"
-  value   = aws_cognito_user_pool_domain.custom.cloudfront_distribution
-  ttl     = 300
-}
-
-resource "aws_cognito_identity_provider" "google" {
-  user_pool_id  = aws_cognito_user_pool.owner.id
-  provider_name = "Google"
-  provider_type = "Google"
-
-  provider_details = {
-    client_id        = var.google_client_id
-    client_secret    = var.google_client_secret
-    authorize_scopes = "openid email profile"
-  }
-
-  attribute_mapping = {
-    email          = "email"
-    email_verified = "email_verified"
-    username       = "sub"
-  }
-
-  # Cognito fills in Google's endpoints itself; without this every plan strips them.
-  lifecycle {
-    ignore_changes = [
-      provider_details["attributes_url"],
-      provider_details["attributes_url_add_attributes"],
-      provider_details["authorize_url"],
-      provider_details["oidc_issuer"],
-      provider_details["token_request_method"],
-      provider_details["token_url"],
-    ]
-  }
-}
-
-resource "aws_cognito_user_pool_client" "web" {
-  name            = "web"
-  user_pool_id    = aws_cognito_user_pool.owner.id
-  generate_secret = false
-
-  allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_flows                  = ["code"]
-  allowed_oauth_scopes                 = ["openid", "email"]
-  callback_urls                        = local.login_callback_urls
-  supported_identity_providers         = ["COGNITO", aws_cognito_identity_provider.google.provider_name]
-  explicit_auth_flows                  = ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
-  prevent_user_existence_errors        = "ENABLED"
-
-  # The ID token is what Verified Permissions checks, so its lifetime is how long
-  # a removed member keeps access. The refresh token matches the old 7-day session.
-  id_token_validity       = 15
-  access_token_validity   = 15
-  refresh_token_validity  = 7
-  enable_token_revocation = true
-
-  token_validity_units {
-    id_token      = "minutes"
-    access_token  = "minutes"
-    refresh_token = "days"
-  }
-}
-
-locals {
-  branding_assets = {
-    "header-logo" = "PAGE_HEADER_LOGO"
-    "form-logo"   = "FORM_LOGO"
-    "background"  = "PAGE_BACKGROUND"
-  }
-}
-
-# Managed login v2 serves no pages for a client without a branding style.
-# branding.json is Cognito's full merged settings document with the site's
-# colours, square corners and left-aligned form written over the defaults.
-# Managed login has no font setting, so the site's type only appears in the
-# SVGs under branding/, where it is outlined to paths.
-resource "aws_cognito_managed_login_branding" "web" {
-  user_pool_id = aws_cognito_user_pool.owner.id
-  client_id    = aws_cognito_user_pool_client.web.id
-  settings     = jsonencode(jsondecode(file("${path.module}/branding.json")))
-
-  # One file per category and colour mode: branding/<file>-dark.svg and -light.svg.
-  dynamic "asset" {
-    for_each = {
-      for pair in setproduct(keys(local.branding_assets), ["dark", "light"]) :
-      "${pair[0]}-${pair[1]}" => { category = local.branding_assets[pair[0]], mode = upper(pair[1]) }
-    }
-    content {
-      category   = asset.value.category
-      color_mode = asset.value.mode
-      extension  = "SVG"
-      bytes      = filebase64("${path.module}/branding/${asset.key}.svg")
-    }
-  }
-
-  # The page asks for the favicon of its own colour mode and ignores a DYNAMIC
-  # one, so the same file goes in once per mode.
-  dynamic "asset" {
-    for_each = toset(["DARK", "LIGHT"])
-    content {
-      category   = "FAVICON_SVG"
-      color_mode = asset.value
-      extension  = "SVG"
-      bytes      = filebase64("${path.module}/branding/favicon.svg")
-    }
-  }
-}
-
-resource "random_password" "owner_cognito" {
-  length      = 32
-  min_upper   = 1
-  min_lower   = 1
-  min_numeric = 1
-  min_special = 1
-}
-
-resource "aws_cognito_user" "owner" {
-  user_pool_id   = aws_cognito_user_pool.owner.id
-  username       = var.alert_email
-  password       = random_password.owner_cognito.result
-  message_action = "SUPPRESS"
-
-  attributes = {
-    email          = var.alert_email
-    email_verified = "true"
-  }
-}
-
 resource "vercel_project_environment_variable" "cognito_domain" {
   project_id = vercel_project.looper.id
   key        = "COGNITO_DOMAIN"
-  value      = local.cognito_domain_url
+  value      = module.auth.domain_url
   target     = local.env_targets
   sensitive  = false
 }
@@ -279,7 +56,7 @@ resource "vercel_project_environment_variable" "cognito_domain" {
 resource "vercel_project_environment_variable" "cognito_client_id" {
   project_id = vercel_project.looper.id
   key        = "COGNITO_CLIENT_ID"
-  value      = aws_cognito_user_pool_client.web.id
+  value      = module.auth.client_id
   target     = local.env_targets
   sensitive  = false
 }
@@ -287,15 +64,104 @@ resource "vercel_project_environment_variable" "cognito_client_id" {
 resource "vercel_project_environment_variable" "cognito_user_pool_id" {
   project_id = vercel_project.looper.id
   key        = "COGNITO_USER_POOL_ID"
-  value      = aws_cognito_user_pool.owner.id
+  value      = module.auth.user_pool_id
   target     = local.env_targets
   sensitive  = false
 }
 
-resource "vercel_project_environment_variable" "owner_email" {
-  project_id = vercel_project.looper.id
-  key        = "OWNER_EMAIL"
-  value      = var.alert_email
-  target     = local.env_targets
-  sensitive  = true
+# --- Moved into infra/modules/auth. Production's resources keep their state. ---
+
+moved {
+  from = aws_cognito_user_pool.owner
+  to   = module.auth.aws_cognito_user_pool.owner
+}
+
+moved {
+  from = aws_sesv2_email_identity_policy.cognito
+  to   = module.auth.aws_sesv2_email_identity_policy.cognito
+}
+
+moved {
+  from = aws_acm_certificate.auth
+  to   = module.auth.aws_acm_certificate.auth
+}
+
+moved {
+  from = vercel_dns_record.auth_acm
+  to   = module.auth.vercel_dns_record.auth_acm
+}
+
+moved {
+  from = aws_acm_certificate_validation.auth
+  to   = module.auth.aws_acm_certificate_validation.auth
+}
+
+moved {
+  from = aws_cognito_user_pool_domain.custom
+  to   = module.auth.aws_cognito_user_pool_domain.custom
+}
+
+moved {
+  from = vercel_dns_record.auth
+  to   = module.auth.vercel_dns_record.auth
+}
+
+moved {
+  from = aws_cognito_identity_provider.google
+  to   = module.auth.aws_cognito_identity_provider.google
+}
+
+moved {
+  from = aws_cognito_user_pool_client.web
+  to   = module.auth.aws_cognito_user_pool_client.web
+}
+
+moved {
+  from = aws_cognito_managed_login_branding.web
+  to   = module.auth.aws_cognito_managed_login_branding.web
+}
+
+moved {
+  from = random_password.owner_cognito
+  to   = module.auth.random_password.owner_cognito
+}
+
+moved {
+  from = aws_cognito_user.owner
+  to   = module.auth.aws_cognito_user.owner
+}
+
+moved {
+  from = aws_verifiedpermissions_policy_store.site
+  to   = module.auth.aws_verifiedpermissions_policy_store.site
+}
+
+moved {
+  from = aws_verifiedpermissions_schema.site
+  to   = module.auth.aws_verifiedpermissions_schema.site
+}
+
+moved {
+  from = aws_verifiedpermissions_policy.site
+  to   = module.auth.aws_verifiedpermissions_policy.site
+}
+
+moved {
+  from = aws_verifiedpermissions_identity_source.cognito
+  to   = module.auth.aws_verifiedpermissions_identity_source.cognito
+}
+
+moved {
+  from = aws_cognito_user_group.owner
+  to   = module.auth.aws_cognito_user_group.owner
+}
+
+moved {
+  from = aws_cognito_user_group.friends
+  to   = module.auth.aws_cognito_user_group.friends
+}
+
+moved {
+  from = aws_cognito_user_in_group.owner
+  to   = module.auth.aws_cognito_user_in_group.owner
 }

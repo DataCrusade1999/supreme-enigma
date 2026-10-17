@@ -13,6 +13,9 @@ concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   # Refuses a promotion whose merge base predates the last release's changelog
   # heading. Merging in that state corrupts CHANGELOG.md: git sees the release
@@ -33,8 +36,9 @@ jobs:
   # every healthy run, because the merge commit a promotion creates lives only
   # on the target branch.
   #
-  # Branch protection is not enforced on this repo (private, no Pro), so this
-  # is a red X rather than a hard block. Do not merge past it.
+  # The `stage-promotion-prs` ruleset makes this a required check on `stage`.
+  # `main` has no such rule, so there it is a red X rather than a hard block.
+  # Do not merge past it on either.
   promotion-guard:
     runs-on: ubuntu-24.04
     steps:

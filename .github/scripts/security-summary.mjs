@@ -30,9 +30,10 @@ function severity(s) {
 }
 
 // Markdown tables have no escape for a cell separator, so a pipe anywhere in
-// a Trivy message would silently shift every column after it.
+// a Trivy message would silently shift every column after it. Backslashes are
+// escaped first, or a `\|` in the input would become `\\|` and split the cell.
 function cellText(s) {
-  return String(s ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
+  return String(s ?? "").replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
 }
 
 function collect(report) {

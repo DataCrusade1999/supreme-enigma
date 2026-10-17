@@ -34,7 +34,10 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
 
 - **Release readiness review** — analyze the diff between `dev` and `main`
   before promoting, or a specific PR, for policy compliance, IAM blast
-  radius, dependency breakage, cross-repo impact.
+  radius, dependency breakage, cross-repo impact. Reviews are billed, so
+  they run only on `dev → stage` promotions, PRs with a significant infra
+  change, and `stage → main` promotions carrying unreviewed commits (#392;
+  the `merging-a-pr` skill has the rules).
 - **Cost / recommendations / ad-hoc chat** — quick natural-language queries
   against the account without console-hopping.
 - **Incident investigation** — root-cause a Lambda/CI failure by correlating
@@ -42,16 +45,18 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
 
 ## Best practices / gotchas learned
 
+- **Automated PR reviews run only on private repositories.** AWS's docs: "DevOps Agent does not automatically review pull requests or merge requests on public repositories." This repo is public, and the last automatic review was #349 on 2026-10-02 (#361). `list_tasks` with `task_type: RELEASE_READINESS_REVIEW` shows whether one was ever created. Request reviews with `create_release_readiness_review`; the result is a report (`recommendedAction`, `risks`), with no commit status and no inline comments. Making the repo private again restores the automatic reviews, and brings back the 2,000-minute Actions cap with them.
 - **Static-only by default.** `skip_automated_testing: true` for a release
   readiness review unless you specifically want it to spin up a sandbox and
   run generated UI/API tests — static analysis is faster and cheaper, and
   covers policy/IAM/dependency risk, which is most of what matters for a
   small single-account project.
-- **No open PR needed.** For a `dev`→`main` promotion review (this repo's
-  actual release flow — see root `CLAUDE.md`), pass
+- **No open PR needed.** Passing
   `githubPrContent: [{repository: "owner/repo", headBranch: "dev"}]` with no
-  `prNumber`. The agent diffs the branch directly; it doesn't require an
-  actual pull request to exist.
+  `prNumber` makes the agent diff the branch directly. The merge flow doesn't
+  use this (#392): promotions are reviewed on the promotion PR, so the
+  reviewed SHA is recorded in a PR comment for the `stage → main` skip check.
+  A branch review outside that flow is an extra billed review.
 - **Journal records can be huge.** `list_journal_records` with `order: ASC`
   and no limit on a multi-commit review can return 500k+ characters and blow
   past tool output limits. Poll with `order: DESC, limit: 3-5` to check

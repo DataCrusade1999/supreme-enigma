@@ -17,6 +17,10 @@ locals {
     "s3:CreateBucket", "s3:PutBucket*", "s3:DeleteBucket*",
     "s3:PutLifecycleConfiguration", "s3:PutEncryptionConfiguration",
   ]
+
+  # The account's CloudTrail trail and its log bucket (#375), in audit.tf.
+  audit_trail_name  = "${var.project_name}-audit"
+  audit_bucket_name = "${var.project_name}-cloudtrail-${data.aws_caller_identity.current.account_id}"
 }
 
 data "aws_iam_policy_document" "tf_trust" {
@@ -58,6 +62,22 @@ resource "aws_iam_role" "tf_plan" {
 resource "aws_iam_role_policy_attachment" "tf_plan_readonly" {
   role       = aws_iam_role.tf_plan.name
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
+# ReadOnlyAccess has no verifiedpermissions:ListTagsForResource, which the provider
+# calls on every refresh of the policy store (#359).
+data "aws_iam_policy_document" "tf_plan" {
+  statement {
+    sid       = "VerifiedPermissionsReads"
+    actions   = ["verifiedpermissions:Get*", "verifiedpermissions:List*"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "tf_plan" {
+  name   = "${var.project_name}-tf-plan"
+  role   = aws_iam_role.tf_plan.id
+  policy = data.aws_iam_policy_document.tf_plan.json
 }
 
 # envs/dev and envs/stage on pushes to dev and stage. Writes are limited by name to
@@ -178,7 +198,42 @@ data "aws_iam_policy_document" "tf_apply_prod" {
   statement {
     sid       = "Bucket"
     actions   = local.tf_bucket_actions
-    resources = ["arn:aws:s3:::${local.data_bucket_names["main"]}"]
+    resources = ["arn:aws:s3:::${local.data_bucket_names["main"]}", "arn:aws:s3:::${local.audit_bucket_name}"]
+  }
+  statement {
+    sid       = "AuditTrail"
+    actions   = ["cloudtrail:*"]
+    resources = ["arn:aws:cloudtrail:${var.aws_region}:${local.account_id}:trail/${local.audit_trail_name}"]
+  }
+  statement {
+    # CreateDetector takes no resource ARN; the detector's ID only exists afterwards (#376).
+    # Reads come from ReadOnlyAccess. Every other ARN-less GuardDuty action (members,
+    # organization admin, IP and threat-intel sets) stays out.
+    sid       = "GuardDutyCreate"
+    actions   = ["guardduty:CreateDetector"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "GuardDutyDetector"
+    actions   = ["guardduty:*"]
+    resources = ["arn:aws:guardduty:${var.aws_region}:${local.account_id}:detector/*"]
+  }
+  statement {
+    # Creating the first detector creates GuardDuty's service-linked role.
+    sid       = "GuardDutyServiceLinkedRole"
+    actions   = ["iam:CreateServiceLinkedRole"]
+    resources = ["arn:aws:iam::${local.account_id}:role/aws-service-role/guardduty.amazonaws.com/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:AWSServiceName"
+      values   = ["guardduty.amazonaws.com"]
+    }
+  }
+  statement {
+    # Alert rules that publish to the alerts topic (#376, #378).
+    sid       = "EventRules"
+    actions   = ["events:*"]
+    resources = ["arn:aws:events:${var.aws_region}:${local.account_id}:rule/${var.project_name}-*"]
   }
   statement {
     sid     = "ProjectIam"
