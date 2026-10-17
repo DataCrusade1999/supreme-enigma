@@ -23,6 +23,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
   bucket, so production's resume is untouched. Local runs still refuse. Part
   of #397.
 
+- The production account no longer holds anything for dev or stage. The
+  `bgm-looper-tf-apply-nonprod` and `bgm-looper-vercel-preview` roles are gone,
+  `bgm-looper-ci-deploy` trusts only `main`, ECR keeps only `main-*` images, and
+  the production Cognito client accepts only the production callback. Local
+  `npm run dev` signs in against dev's pool. Part of #397.
+
 - Resources carry an `app = bgm-looper` tag for the organization's per-app
   budget, and the docs describe the org SSO session. Closes #396.
 

@@ -60,12 +60,9 @@ test("plan: shared only on PRs into dev", () => {
 
 test("role: each stack maps to its account's role", () => {
   const prod = "arn:aws:iam::223376380711:role/bgm-looper-tf-apply-prod";
-  const nonprod = "arn:aws:iam::223376380711:role/bgm-looper-tf-apply-nonprod";
   assert.equal(role("shared", "apply").out, prod);
   assert.equal(role("envs/main", "apply").out, prod);
-  assert.equal(role("envs/dev", "apply").out, nonprod);
-  assert.equal(role("envs/stage", "apply").out, nonprod);
-  for (const s of ["shared", "envs/dev", "envs/stage", "envs/main"]) {
+  for (const s of ["shared", "envs/main"]) {
     assert.equal(role(s, "plan").out, "arn:aws:iam::223376380711:role/bgm-looper-tf-plan", s);
   }
   assert.equal(role("nonprod/dev/env", "apply").out, "arn:aws:iam::624586968135:role/bgm-looper-tf-apply");
@@ -76,6 +73,16 @@ test("role: an unknown stack fails", () => {
   const r = role("bogus", "apply");
   assert.equal(r.rc, 1);
   assert.match(r.err, /::error::no role for bogus/);
+});
+
+test("role: the legacy envs/dev and envs/stage stacks have no role", () => {
+  for (const s of ["envs/dev", "envs/stage"]) {
+    for (const mode of ["plan", "apply"]) {
+      const r = role(s, mode);
+      assert.equal(r.rc, 1, `${s} ${mode}`);
+      assert.match(r.err, new RegExp(`::error::no role for ${s}`));
+    }
+  }
 });
 
 test("drift: the branch:stack pairs", () => {

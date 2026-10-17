@@ -1,5 +1,6 @@
-# Terraform in CI (#339): one read-only plan role and two apply roles, assumed by
-# .github/workflows/terraform.yml through the GitHub OIDC provider in shared.tf. Every
+# Terraform in CI (#339): a read-only plan role and an apply role, assumed by
+# .github/workflows/terraform.yml through the GitHub OIDC provider in shared.tf. Dev's
+# and stage's stacks use their own accounts' roles (infra/modules/nonprod-account). Every
 # trust policy uses StringEquals on explicit subjects, never a wildcard — see the
 # ci_deploy role's comment for why. The workstation's `personal` credentials stay the
 # break-glass path if CI ever locks itself out.
@@ -7,8 +8,6 @@
 locals {
   tf_state_bucket_arn = "arn:aws:s3:::bgm-looper-tf-state-${data.aws_caller_identity.current.account_id}"
   account_id          = data.aws_caller_identity.current.account_id
-
-  nonprod_envs = ["dev", "stage"]
 
   # Bucket configuration only, never objects: Terraform manages no object, and `s3:*`
   # trips Trivy's AWS-0345 in deploy.yml's test job. Removing CORS, lifecycle or the public access
@@ -25,8 +24,7 @@ locals {
 
 data "aws_iam_policy_document" "tf_trust" {
   for_each = {
-    plan    = ["${local.github_sub_prefix}:pull_request", "${local.github_sub_prefix}:ref:refs/heads/dev"]
-    nonprod = ["${local.github_sub_prefix}:ref:refs/heads/dev", "${local.github_sub_prefix}:ref:refs/heads/stage"]
+    plan = ["${local.github_sub_prefix}:pull_request", "${local.github_sub_prefix}:ref:refs/heads/dev"]
     # dev applies `shared` (#345); main applies `envs/main`.
     prod = ["${local.github_sub_prefix}:ref:refs/heads/dev", "${local.github_sub_prefix}:ref:refs/heads/main"]
   }
@@ -78,90 +76,6 @@ resource "aws_iam_role_policy" "tf_plan" {
   name   = "${var.project_name}-tf-plan"
   role   = aws_iam_role.tf_plan.id
   policy = data.aws_iam_policy_document.tf_plan.json
-}
-
-# envs/dev and envs/stage on pushes to dev and stage. Writes are limited by name to
-# dev's and stage's resources and state (`shared` on a dev push uses the prod role). Two
-# gaps, both in the spec §9: iam:PutRolePolicy has no policy-name condition, so this
-# role can write any inline policy on the preview Vercel role; and the Vercel token is
-# account-wide. Deleting a bucket or a function is excluded on purpose: that needs a
-# local apply even when the destroy guard is overridden.
-resource "aws_iam_role" "tf_apply_nonprod" {
-  name               = "${var.project_name}-tf-apply-nonprod"
-  assume_role_policy = data.aws_iam_policy_document.tf_trust["nonprod"].json
-}
-
-resource "aws_iam_role_policy_attachment" "tf_apply_nonprod_readonly" {
-  role       = aws_iam_role.tf_apply_nonprod.name
-  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
-}
-
-data "aws_iam_policy_document" "tf_apply_nonprod" {
-  statement {
-    sid       = "State"
-    actions   = ["s3:PutObject", "s3:DeleteObject"]
-    resources = [for e in local.nonprod_envs : "${local.tf_state_bucket_arn}/envs/${e}/*"]
-  }
-  statement {
-    sid       = "Buckets"
-    actions   = local.tf_bucket_actions
-    resources = [for e in local.nonprod_envs : "arn:aws:s3:::${local.data_bucket_names[e]}"]
-  }
-  statement {
-    sid       = "NoBucketDelete"
-    effect    = "Deny"
-    actions   = ["s3:DeleteBucket"]
-    resources = [for e in local.nonprod_envs : "arn:aws:s3:::${local.data_bucket_names[e]}"]
-  }
-  statement {
-    sid       = "Functions"
-    actions   = ["lambda:*"]
-    resources = [for e in local.nonprod_envs : "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.lambda_function_names[e]}"]
-  }
-  statement {
-    sid       = "NoFunctionDelete"
-    effect    = "Deny"
-    actions   = ["lambda:DeleteFunction"]
-    resources = [for e in local.nonprod_envs : "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.lambda_function_names[e]}"]
-  }
-  statement {
-    sid     = "Alarms"
-    actions = ["cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:TagResource", "cloudwatch:UntagResource"]
-    # `-*`, not the exact name, so a rename (the guard test in the rollout) can create
-    # the new alarm. Still disjoint: main's alarm is `bgm-looper-processor-invocation-rate`.
-    resources = [for e in local.nonprod_envs : "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:alarm:${local.lambda_function_names[e]}-*"]
-  }
-  statement {
-    sid = "ExecRoles"
-    actions = [
-      "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
-      "iam:TagRole", "iam:UntagRole",
-      "iam:AttachRolePolicy", "iam:DetachRolePolicy",
-      "iam:PutRolePolicy", "iam:DeleteRolePolicy",
-    ]
-    resources = [for e in local.nonprod_envs : "arn:aws:iam::${local.account_id}:role/${var.project_name}-lambda-exec-${e}"]
-  }
-  statement {
-    sid       = "PassExecRoles"
-    actions   = ["iam:PassRole"]
-    resources = [for e in local.nonprod_envs : "arn:aws:iam::${local.account_id}:role/${var.project_name}-lambda-exec-${e}"]
-    condition {
-      test     = "StringEquals"
-      variable = "iam:PassedToService"
-      values   = ["lambda.amazonaws.com"]
-    }
-  }
-  statement {
-    sid       = "PreviewRolePolicies"
-    actions   = ["iam:PutRolePolicy", "iam:DeleteRolePolicy"]
-    resources = [aws_iam_role.vercel_preview.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "tf_apply_nonprod" {
-  name   = "${var.project_name}-tf-apply-nonprod"
-  role   = aws_iam_role.tf_apply_nonprod.id
-  policy = data.aws_iam_policy_document.tf_apply_nonprod.json
 }
 
 # `shared` on pushes to dev and `envs/main` on pushes to main (#345), plus manual runs
