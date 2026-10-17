@@ -9,7 +9,7 @@ export type ToolId =
   | "access-admin";
 
 // The actions Verified Permissions decides on. The Cedar schema in
-// infra/shared/cedar/ declares the same twelve; the policy tests fail if they drift.
+// infra/modules/auth/cedar/ declares the same twelve; the policy tests fail if they drift.
 export const METERED_ACTIONS = ["looper:process", "newsdesk:refresh", "newsdesk:ask"] as const;
 export type MeteredAction = (typeof METERED_ACTIONS)[number];
 export type ActionId =

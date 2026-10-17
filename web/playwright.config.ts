@@ -15,7 +15,7 @@ export default defineConfig({
       COGNITO_DOMAIN: "https://login.invalid",
       COGNITO_CLIENT_ID: "e2e",
       COGNITO_USER_POOL_ID: "us-east-1_e2e",
-      // Decisions come from the Cedar files in infra/shared/cedar, evaluated
+      // Decisions come from the Cedar files in infra/modules/auth/cedar, evaluated
       // in-process; there is no Verified Permissions or Cognito under e2e.
       AUTHZ_MODE: "local",
       COOKIE_SECRET: "devsecret",

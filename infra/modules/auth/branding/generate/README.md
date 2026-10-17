@@ -1,16 +1,16 @@
 # Cognito sign-in branding
 
-These scripts write the files `aws_cognito_managed_login_branding.web` in `infra/shared/auth.tf` reads:
+These scripts write the files `aws_cognito_managed_login_branding.web` in `infra/modules/auth/main.tf` reads:
 
-- `settings.js` writes the site's colours, corner radius and layout into `infra/shared/branding.json`, in place.
-- `assets.js` writes the header logo, form logo and page background SVGs, dark and light, into `infra/shared/branding/`. Managed login has no font setting, so it outlines IBM Plex Sans and Instrument Serif to paths.
+- `settings.js` writes the site's colours, corner radius and layout into `infra/modules/auth/branding.json`, in place.
+- `assets.js` writes the header logo, form logo and page background SVGs, dark and light, into `infra/modules/auth/branding/`. Managed login has no font setting, so it outlines IBM Plex Sans and Instrument Serif to paths.
 
 `favicon.svg` is a copy of `web/app/icon.svg` and isn't generated.
 
 ## Rebuild
 
 ```bash
-cd infra/shared/branding/generate
+cd infra/modules/auth/branding/generate
 npm ci
 npm run build
 ```
