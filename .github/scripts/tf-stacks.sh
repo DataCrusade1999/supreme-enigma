@@ -14,7 +14,7 @@ set -euo pipefail
 branch_stacks() {
   case "$1" in
     dev)   echo "shared nonprod/dev/account nonprod/dev/env" ;;
-    stage) echo "envs/stage" ;;
+    stage) echo "envs/stage nonprod/stage/account" ;;
     main)  echo "envs/main" ;;
     *) echo "::error::Terraform applies only from dev, stage or main" >&2; return 1 ;;
   esac
@@ -50,10 +50,14 @@ case "${1:-}" in
   plan)
     # On a promotion, stage's or main's older copy of shared would show dev's applied
     # changes as reverts, so shared is planned only on PRs into dev.
-    if [ "$BASE" = dev ]; then echo "shared nonprod/dev/account nonprod/dev/env"; else echo "envs/$BASE"; fi
+    case "$BASE" in
+      dev)   echo "shared nonprod/dev/account nonprod/dev/env" ;;
+      stage) echo "envs/stage nonprod/stage/account" ;;
+      *)     echo "envs/$BASE" ;;
+    esac
     ;;
   drift)
-    echo "dev:shared stage:envs/stage main:envs/main dev:nonprod/dev/account dev:nonprod/dev/env"
+    echo "dev:shared stage:envs/stage main:envs/main dev:nonprod/dev/account dev:nonprod/dev/env stage:nonprod/stage/account"
     ;;
   role) role "${2:?stack}" "${3:?mode}" ;;
   *) echo "usage: tf-stacks.sh resolve|plan|drift|role" >&2; exit 2 ;;
