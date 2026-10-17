@@ -143,11 +143,7 @@ export default function ResumeAdminPage() {
     }
     if (!res.ok) {
       const { error: message } = await res.json().catch(() => ({ error: null }));
-      setError(
-        res.status === 403
-          ? "Publishing only works on the production deployment. Open this page there with the same draft."
-          : (message ?? "Publishing failed."),
-      );
+      setError(message ?? "Publishing failed.");
       setStatus("error");
       return;
     }

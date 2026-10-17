@@ -40,15 +40,36 @@ describe("POST /api/resume/publish", () => {
     process.env.VERCEL_ENV = originalEnv;
   });
 
-  it("refuses to publish outside production", async () => {
-    // Drafts stay writable everywhere so a draft reviewed on dev can be
-    // published from production — only publishing is production-only.
-    // See the design spec §7.3.
+  it("publishes on preview, into the preview's own bucket", async () => {
+    // Each environment's RESUME_BUCKET_NAME is its own account's bucket, so a
+    // preview publish can't reach production's resume. See the nonprod-accounts
+    // spec §3.
     process.env.VERCEL_ENV = "preview";
+
     const res = await POST(post({ draftId: "abc" }));
-    expect(res.status).toBe(403);
-    expect(copyObject).not.toHaveBeenCalled();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, archived: true });
+    const buckets = vi.mocked(copyObject).mock.calls.map(([bucket]) => bucket);
+    expect(buckets.length).toBeGreaterThan(0);
+    expect(new Set(buckets)).toEqual(new Set(["resume-bucket"]));
   });
+
+  it.each(["development", undefined])(
+    "refuses to publish outside production and preview (VERCEL_ENV=%s)",
+    async (env) => {
+      if (env === undefined) delete process.env.VERCEL_ENV;
+      else process.env.VERCEL_ENV = env;
+
+      const res = await POST(post({ draftId: "abc" }));
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: "publishing is only available on deployed environments",
+      });
+      expect(copyObject).not.toHaveBeenCalled();
+    },
+  );
 
   it("archives the existing pair, then promotes the draft", async () => {
     const res = await POST(post({ draftId: "abc" }));

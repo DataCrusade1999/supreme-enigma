@@ -328,11 +328,11 @@ resource "vercel_project" "looper" {
   # reverts a markdown heading instead of the release.
   ignore_command = "git diff --quiet HEAD^ HEAD -- ':(top)web' ':(top)content'"
 
-  # The resume publish route refuses to run unless VERCEL_ENV is "production"
-  # (spec §7.3), and VERCEL_ENV is a Vercel system variable. The provider
+  # The resume publish route refuses to run unless VERCEL_ENV is "production" or
+  # "preview", and VERCEL_ENV is a Vercel system variable. The provider
   # defaults this to false, which leaves system variables unexposed at runtime —
-  # the gate would then read undefined and refuse on production too, so the
-  # resume could never be published. Explicit here rather than left to the
+  # the gate would then read undefined and refuse everywhere, so the resume
+  # could never be published. Explicit here rather than left to the
   # default, because the route's behaviour depends on it.
   automatically_expose_system_environment_variables = true
 
