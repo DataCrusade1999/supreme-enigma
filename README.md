@@ -75,27 +75,32 @@ crossfade → ffmpeg transcode) runs as a containerized Python 3.12 Lambda,
 1024MB / 60s. Audio moves browser↔S3 directly via presigned URLs; the Vercel
 API routes only orchestrate. S3 objects expire after 1 day.
 
-**Infrastructure.** The whole stack (S3, ECR, Lambda, IAM, the Vercel
-project itself) is Terraform. `terraform destroy` across `infra/envs/*` and then
-`infra/shared` is the kill switch: it removes everything that can incur AWS cost.
+**Infrastructure.** The whole stack (S3, ECR, Lambda, IAM, Cognito, the
+Vercel project itself) is Terraform, with each branch in its own AWS account.
+`terraform destroy` across `infra/nonprod/*/{env,account}`, `infra/envs/main`
+and then `infra/shared` is the kill switch: it removes everything that can
+incur AWS cost.
 
 Full rationale and trade-offs live in `docs/superpowers/specs/` — one design
 spec and implementation plan per phase of this project.
 
 ## Environments
 
-Three permanent branches, each with its own Vercel deployment and its own
-isolated AWS backend (separate Lambda + S3 bucket, shared ECR repo with
-per-branch tag prefixes). See "Branching & releases" in `CLAUDE.md` for how
-promotion works.
+Three permanent branches, each with its own Vercel deployment and its own AWS
+account (Lambda, S3 bucket, ECR repo, sign-in and authorization, all separate).
+See "Branching & releases" in `CLAUDE.md` for how promotion works.
 
-| Branch  | URL | Purpose |
-|---------|-----|---------|
-| `main`  | https://ashutosh-pandey.com | Production |
-| `stage` | https://stage.ashutosh-pandey.com | Pre-prod QA |
-| `dev`   | https://dev.ashutosh-pandey.com | Default branch, integration |
+| Branch  | URL | AWS account | Purpose |
+|---------|-----|-------------|---------|
+| `main`  | https://ashutosh-pandey.com | 223376380711 | Production |
+| `stage` | https://stage.ashutosh-pandey.com | 792682047320 | Pre-prod QA |
+| `dev`   | https://dev.ashutosh-pandey.com | 624586968135 | Default branch, integration |
 
 Promote by PR: `dev` → `stage` → `main`.
+
+How the repo, Vercel, the external services and the three accounts connect is
+drawn in [ARCHITECTURE.md](ARCHITECTURE.md#architecture-diagram)
+(`docs/architecture.svg`).
 
 ## Repo layout
 
@@ -157,23 +162,31 @@ needs them.
 
 ## Infrastructure setup
 
-Requires Terraform ≥1.10, an AWS account, a Vercel account + API token, and
-a gitignored `terraform.tfvars` in each of `infra/shared` and
-`infra/envs/{dev,stage,main}`. Copy each directory's `terraform.tfvars.example`
-across and fill it in — `infra/shared` needs all seven inputs
-(`vercel_api_token`, `app_password`, `github_repo`, `alert_email`,
-`openrouter_api_key`, `google_client_id`, `google_client_secret`), each env
-stack only `vercel_api_token`, and `terraform plan` fails with `No value for
-required variable` until each is set. Run `export AWS_PROFILE=personal` first;
-no backend block names a profile. The Lambda container image is built and
-pushed by GitHub Actions, never locally, so bootstrap order matters:
+Requires Terraform ≥1.10, three AWS accounts (production, dev, stage), a
+Vercel account + API token, and a gitignored `terraform.tfvars` in each of
+`infra/shared`, `infra/envs/main` and `infra/nonprod/{dev,stage}/{account,env}`.
+Copy each directory's `terraform.tfvars.example` across and fill it in —
+`infra/shared` needs all seven inputs (`vercel_api_token`, `app_password`,
+`github_repo`, `alert_email`, `openrouter_api_key`, `google_client_id`,
+`google_client_secret`), each nonprod `account` stack `vercel_api_token`,
+`alert_email`, `google_client_id` and `google_client_secret`, and the env
+stacks only `vercel_api_token`. `terraform plan` fails with `No value for
+required variable` until each is set. Export the stack's profile first
+(`AWS_PROFILE=personal` for production's stacks, `personal-dev` or
+`personal-stage` for the nonprod ones); no backend block names a profile. The
+Lambda container image is built and pushed by GitHub Actions, never locally,
+so bootstrap order matters. Below is production; dev and stage follow the same
+order in their own accounts, with the steps in
+[docs/runbooks/infra-apply-teardown.md](docs/runbooks/infra-apply-teardown.md#recovery-applying-from-scratch-afterwards).
 
-1. **State bucket** (one-time, manual):
+1. **State bucket** (one-time per account, manual; workspace `default` for
+   production, `dev` or `stage` with `-var aws_profile=personal-<env>` for the
+   others):
    ```bash
    cd infra/bootstrap
    terraform init && terraform apply
    ```
-   The `state_bucket_name` output is hardcoded into every stack's `backend.tf`.
+   The bucket name is hardcoded into each stack's `backend.tf`.
 
 2. **ECR repo only** — the Lambda resource can't be created before an image
    exists:
@@ -192,37 +205,41 @@ pushed by GitHub Actions, never locally, so bootstrap order matters:
    role through OIDC, so there is no access key to distribute and no GitHub
    secret to set.
 
-4. **Push to `main`/`dev`/`stage`** — CI tests, then builds and pushes each
-   branch's Lambda image to ECR.
+4. **Push to `main`** — CI tests, then builds and pushes the Lambda image to
+   production's ECR.
 
-5. **Apply the environment stacks** — each env's Lambda function, bucket and
-   env vars, now that the images exist:
+5. **Apply the environment stack** — main's Lambda function, bucket and env
+   vars, now that the image exists:
    ```bash
-   for e in dev stage main; do
-     (cd ../envs/$e && terraform init && terraform apply -var-file=terraform.tfvars)
-   done
+   cd ../envs/main && terraform init && terraform apply -var-file=terraform.tfvars
    ```
    Vercel's git integration (created in step 3) deploys the app on every
    push from then on, independently of GitHub Actions.
 
-Before a from-scratch recreate, update `bootstrap_image_tag` in each
-`infra/envs/<env>/main.tf` to a tag that branch's CI has actually pushed — see
-`.claude/rules/infra.md`.
+Before a from-scratch recreate, update `bootstrap_image_tag` in
+`infra/envs/main/main.tf` and `infra/nonprod/<env>/env/main.tf` to a tag that
+branch's CI has actually pushed — see `.claude/rules/infra.md`.
 
 ## Tearing everything down (kill switch)
 
+In each account, the env stack and then its base stack, with production's
+`shared` last (it owns the Vercel project):
+
 ```bash
-for d in infra/envs/dev infra/envs/stage infra/envs/main infra/shared; do
-  (cd $d && terraform destroy -var-file=terraform.tfvars)
+for s in nonprod/dev/env:personal-dev nonprod/dev/account:personal-dev \
+         nonprod/stage/env:personal-stage nonprod/stage/account:personal-stage \
+         envs/main:personal shared:personal; do
+  d=${s%%:*}; p=${s##*:}
+  (cd infra/$d && AWS_PROFILE=$p terraform destroy -var-file=terraform.tfvars)
 done
 ```
 
-Removes the Vercel project, all three Lambdas, the ECR repo, the S3 audio
-buckets, and the IAM resources — including both OIDC providers and their
-roles. Re-applying recreates them with the same names and ARNs, so CI and the
-app work again with nothing to copy by hand. The Terraform state bucket in
-`infra/bootstrap` is left alone: it holds no app data and costs nothing
-meaningful.
+Removes the Vercel project, all three Lambdas, ECR repos, S3 buckets and
+Cognito pools, and the IAM resources in each account — including the OIDC
+providers and their roles. Re-applying recreates them with the same names and
+ARNs, so CI and the app work again with nothing to copy by hand. Each
+account's Terraform state bucket in `infra/bootstrap` is left alone: it holds
+no app data and costs nothing meaningful.
 
 The destroy will not run as written — no bucket sets `force_destroy`, and
 main's bucket holds the published resume indefinitely. Back it up and empty

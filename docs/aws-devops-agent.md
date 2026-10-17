@@ -16,7 +16,7 @@ else; a wider scope defeats the point of a project-scoped agent.
 
 | Association | Detail |
 |---|---|
-| AWS account | `223376380711` (personal), role `DevOpsAgentRole-AgentSpace-y365argo`, `accountType: monitor` (read-oriented, full-account visibility) |
+| AWS account | `223376380711` (production), role `DevOpsAgentRole-AgentSpace-y365argo`, `accountType: monitor` (read-oriented, full-account visibility). Dev (`624586968135`) and stage (`792682047320`) are outside the Agent Space, so it can't see their resources: an investigation or cost question about dev or stage gets answered from code only. |
 | GitHub repo | `DataCrusade1999/supreme-enigma`, `READ_WRITE`, capabilities: `RELEASE_READINESS_REVIEW`, `RELEASE_READINESS_REVIEW_AUTOMATED_TESTING` |
 
 Creating the Agent Space itself and attaching the AWS account/GitHub repo
@@ -172,8 +172,8 @@ Gotchas:
   the check attaches to a `dev` commit. Promote through `dev → stage → main` as
   usual and this resolves itself.
 - **The agent performs real writes** (POST/PUT/DELETE) while exploring. Against
-  stage that means real uploads to `portfolio-data-stage-*` and real
-  `bgm-looper-processor-stage` invocations. Objects expire after 1 day, so the
+  stage that means real uploads to `portfolio-data-stage-792682047320` and real
+  `bgm-looper-processor-stage` invocations, in stage's account. Objects expire after 1 day, so the
   cost is bounded but not zero.
 - **`/tools/bgm-looper` is not reachable by the agent.** The Vercel bypass gets
   it past Vercel Authentication, but `web/lib/route-gate.ts` gates the tool,

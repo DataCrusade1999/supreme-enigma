@@ -70,10 +70,11 @@ MSYS_NO_PATHCONV=1 aws logs tail "/aws/lambda/bgm-looper-processor" \
   --since 30m --profile personal --region us-east-1
 ```
 
-(`-dev` / `-stage` for the other environments. `MSYS_NO_PATHCONV=1` is
+(`bgm-looper-processor-dev` with `--profile personal-dev`, or
+`bgm-looper-processor-stage` with `--profile personal-stage`, for the other
+environments, which run in their own accounts. `MSYS_NO_PATHCONV=1` is
 required in Git Bash — see [README.md](README.md#shared-prerequisites). A log
-group that does not exist at all means the function has never been invoked;
-`bgm-looper-processor-stage` was in that state as of 2026-09-15.)
+group that does not exist at all means the function has never been invoked.)
 
 What to look for:
 
@@ -91,11 +92,13 @@ What to look for:
   invoked. Otherwise the role, the policy attachment, or the bucket itself is
   wrong. The **Vercel roles** are the prefix-scoped ones: `uploads/*`,
   `outputs/*` and `news-desk/*` on the environment's own bucket (policy
-  `bgm-looper-vercel-<env>`), plus `resume/*` on main's bucket from
-  `infra/shared`. Production assumes `bgm-looper-vercel`, dev and stage
-  `bgm-looper-vercel-preview`, so a preview deployment pointed at production's
-  role ARN fails too. An `AccessDenied` from the app side on a key outside
-  those prefixes is the expected shape.
+  `bgm-looper-vercel-<env>`), plus `resume/*` on that same bucket (from
+  `infra/shared` for main, `infra/modules/nonprod-env` for dev and stage).
+  Production assumes `bgm-looper-vercel` in 223376380711; dev and stage
+  assume `bgm-looper-vercel-preview` in their own accounts, so a deployment
+  whose `APP_AWS_ROLE_ARN` names another account's role fails to assume it.
+  An `AccessDenied` from the app side on a key outside those prefixes is the
+  expected shape.
 - **A Python traceback from the DSP code** — a real pipeline bug. Reproduce
   locally against the same input (`cd lambda && .venv/Scripts/python -m pytest -q`,
   then a targeted test) and fix it through the normal PR flow.
@@ -117,21 +120,19 @@ it was too slow.** They have different fixes.
 
 ### Download link 403s
 
-Two different causes look the same from the browser, and on `dev`/`stage`
-they are genuinely indistinguishable:
+Two different causes look the same from the browser:
 
 - The **URL** expired. Presigned GETs last 300 seconds.
 - The **object** expired. The `outputs/` lifecycle rule deletes after 1 day.
 
-On `main` a missing key returns `NoSuchKey`, because the Vercel user holds
-`s3:ListBucket` on that bucket (granted for `objectExists()`'s sake — see the
-`ResumeHeadObjectNotFound` statement in `shared.tf`). On `dev` and `stage`
-there is no `ListBucket`, so S3 returns 403 for a missing key and it reads
-exactly like an expired signature. Discriminate server-side rather than
-guessing:
+A missing key returns `NoSuchKey` rather than 403 in every environment,
+because each Vercel role holds `s3:ListBucket` on its own bucket (granted for
+`objectExists()`'s sake — see the `ResumeHeadObjectNotFound` statement in
+`infra/shared/shared.tf` and `infra/modules/nonprod-env/main.tf`). An expired
+signature still returns 403. Discriminate server-side rather than guessing:
 
 ```bash
-aws s3api head-object --bucket portfolio-data-dev-223376380711   --key outputs/<uuid>.<ext> --profile personal --region us-east-1
+aws s3api head-object --bucket portfolio-data-dev-624586968135 --key outputs/<uuid>.<ext> --profile personal-dev --region us-east-1
 ```
 
 Either way the fix is to reprocess; this only tells you whether to also
@@ -150,6 +151,9 @@ aws lambda get-function --function-name bgm-looper-processor \
 aws s3api head-bucket --bucket portfolio-data-223376380711 \
   --profile personal --region us-east-1
 ```
+
+That is production. For dev or stage, use `bgm-looper-processor-<env>`,
+`portfolio-data-<env>-<account id>` and that account's profile.
 
 ## Rollback
 
@@ -172,7 +176,10 @@ Remove it with `delete-function-concurrency` once resolved.
 capped at "unreserved account concurrency minus 100", and this account's
 Lambda concurrency quota (`L-B99A9384`) is 10, not the default 1,000. Zero
 takes nothing out of the pool and is accepted; anything higher is rejected.
-Exercised against `bgm-looper-processor-dev` on 2026-09-16:
+Exercised on 2026-09-16 against `bgm-looper-processor-dev`, which then ran in
+223376380711. The quota is per account, so check dev's and stage's with
+`aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384`
+under their profile before relying on the same limit there:
 
 ```
 put-function-concurrency 0  → {"ReservedConcurrentExecutions": 0}

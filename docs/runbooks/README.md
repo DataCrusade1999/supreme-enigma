@@ -19,10 +19,14 @@ sequence), `.claude/rules/infra.md` (Terraform per-file detail),
 Every runbook assumes:
 
 - `gh` authenticated against `DataCrusade1999/supreme-enigma`.
-- AWS CLI with the `personal` profile configured (account `223376380711`).
-  **Pass `--profile personal --region us-east-1` on every command** — the
-  profile's own default region is `ap-south-1`, and omitting `--region`
-  returns a `ResourceNotFoundException` that reads like a deleted resource.
+- AWS CLI with the three IAM Identity Center profiles on the `personal-org`
+  SSO session: `personal` (production, account `223376380711`),
+  `personal-dev` (dev, `624586968135`) and `personal-stage` (stage,
+  `792682047320`). Each environment's resources live only in its own account.
+  **Pass the environment's `--profile` and `--region us-east-1` on every
+  command** — `personal`'s default region is `ap-south-1`, and omitting
+  `--region` returns a `ResourceNotFoundException` that reads like a deleted
+  resource. Querying the wrong account fails the same way.
 - Vercel dashboard access for the `bgm-looper` project (the Terraform
   resource is `vercel_project.looper`; the project itself is named from
   `var.project_name`, which is `bgm-looper`).
