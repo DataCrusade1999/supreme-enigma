@@ -13,6 +13,17 @@ as an approved design spec and implementation plan
 application code, Lambda, or Terraform resources for it have been built yet.
 The IAM policies were already extended to make room for it.
 
+## Architecture diagram
+
+Everything the project runs and how it connects, drawn with AWS icons: the
+GitHub repo and Actions, the Vercel project with one deployment per branch,
+the external services, and the three AWS accounts with what each one holds.
+The source is `docs/architecture.drawio`; open it in draw.io
+(app.diagrams.net or the desktop app) to edit, then re-export
+`docs/architecture.svg`.
+
+![Architecture of bgm-looper and ashutosh-pandey.com](docs/architecture.svg)
+
 ## High-level flow
 
 ```

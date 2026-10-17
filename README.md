@@ -98,6 +98,10 @@ See "Branching & releases" in `CLAUDE.md` for how promotion works.
 
 Promote by PR: `dev` → `stage` → `main`.
 
+How the repo, Vercel, the external services and the three accounts connect is
+drawn in [ARCHITECTURE.md](ARCHITECTURE.md#architecture-diagram)
+(`docs/architecture.svg`).
+
 ## Repo layout
 
 ```
