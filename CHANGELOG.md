@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-17
+
 ### Added
 
 - A CloudTrail trail, `bgm-looper-audit`, recording management events in every
