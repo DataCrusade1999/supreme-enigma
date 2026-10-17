@@ -27,9 +27,10 @@ matters is whether any *pipeline* change is missing from it.
 ```bash
 FN=bgm-looper-processor        # -dev / -stage for the other environments
 BRANCH=main                    # dev / stage
+PROFILE=personal               # personal-dev / personal-stage: dev and stage run in their own accounts
 
 IMG=$(aws lambda get-function --function-name "$FN" \
-  --query 'Code.ImageUri' --output text --profile personal --region us-east-1)
+  --query 'Code.ImageUri' --output text --profile "$PROFILE" --region us-east-1)
 echo "$IMG"
 DEPLOYED_SHA=${IMG##*:}; DEPLOYED_SHA=${DEPLOYED_SHA#*-}
 
@@ -65,12 +66,13 @@ Cross-check what ECR actually holds:
 ```bash
 aws ecr describe-images --repository-name bgm-looper-lambda \
   --query 'sort_by(imageDetails,&imagePushedAt)[].{tag:imageTags[0],pushed:imagePushedAt}' \
-  --output table --profile personal --region us-east-1
+  --output table --profile "$PROFILE" --region us-east-1
 ```
 
-One tag per branch prefix is expected — the lifecycle policy keeps the last 1
-each. A missing `stage-*` or `dev-*` tag means that branch has never had a
-successful `deploy`.
+Each account has its own `bgm-looper-lambda` repo holding only its branch's
+tags (`main-*` in production, `dev-*` in dev, `stage-*` in stage), and each
+lifecycle policy keeps the last one. An empty repo means that branch has never
+had a successful `deploy`.
 
 Find the failed run, if there is one:
 

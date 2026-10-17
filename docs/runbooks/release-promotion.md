@@ -17,11 +17,15 @@ Not for merging a feature branch into `dev` — that is the review sequence in
 
 ## Environments
 
-| Branch | URL | Lambda | Bucket |
-|---|---|---|---|
-| `main` | https://ashutosh-pandey.com | `bgm-looper-processor` | `portfolio-data-223376380711` |
-| `stage` | https://stage.ashutosh-pandey.com | `bgm-looper-processor-stage` | `portfolio-data-stage-223376380711` |
-| `dev` | https://dev.ashutosh-pandey.com | `bgm-looper-processor-dev` | `portfolio-data-dev-223376380711` |
+| Branch | URL | AWS account (profile) | Lambda | Bucket |
+|---|---|---|---|---|
+| `main` | https://ashutosh-pandey.com | 223376380711 (`personal`) | `bgm-looper-processor` | `portfolio-data-223376380711` |
+| `stage` | https://stage.ashutosh-pandey.com | 792682047320 (`personal-stage`) | `bgm-looper-processor-stage` | `portfolio-data-stage-792682047320` |
+| `dev` | https://dev.ashutosh-pandey.com | 624586968135 (`personal-dev`) | `bgm-looper-processor-dev` | `portfolio-data-dev-624586968135` |
+
+Each environment also has its own sign-in (`auth.ashutosh-pandey.com`,
+`auth.stage.ashutosh-pandey.com`, `auth.dev.ashutosh-pandey.com`), with its own
+Cognito users, so an account added on one doesn't exist on the others.
 
 ## Procedure
 

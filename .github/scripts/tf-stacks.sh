@@ -30,8 +30,6 @@ role() {
     nonprod/stage/*) echo "arn:aws:iam::792682047320:role/bgm-looper-tf-$mode" ;;
     shared|envs/main)
       if [ "$mode" = apply ]; then echo "$prod-apply-prod"; else echo "$prod-plan"; fi ;;
-    envs/dev|envs/stage)
-      if [ "$mode" = apply ]; then echo "$prod-apply-nonprod"; else echo "$prod-plan"; fi ;;
     *) echo "::error::no role for $stack" >&2; return 1 ;;
   esac
 }
