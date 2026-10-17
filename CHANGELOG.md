@@ -7,6 +7,61 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- A CloudTrail trail, `bgm-looper-audit`, recording management events in every
+  region to the `bgm-looper-cloudtrail-<account>` bucket, kept for 365 days.
+  Closes #375.
+
+- GuardDuty in us-east-1, foundational sources only (the optional protection
+  plans are turned off), with medium-and-above findings emailed through the
+  alerts topic. Closes #376.
+
+### Changed
+
+- The resume admin can publish on dev and stage, into that environment's own
+  bucket, so production's resume is untouched. Local runs still refuse. Part
+  of #397.
+
+- The production account no longer holds anything for dev or stage. The
+  `bgm-looper-tf-apply-nonprod` and `bgm-looper-vercel-preview` roles are gone,
+  `bgm-looper-ci-deploy` trusts only `main`, ECR keeps only `main-*` images, and
+  the production Cognito client accepts only the production callback. Local
+  `npm run dev` signs in against dev's pool. Part of #397.
+
+- Resources carry an `app = bgm-looper` tag for the organization's per-app
+  budget, and the docs describe the org SSO session. Closes #396.
+
+- The `merging-a-pr` skill requests an AWS DevOps Agent release-readiness
+  review only on `dev → stage` promotions, PRs with a significant infra change,
+  and `stage → main` promotions carrying commits the earlier review did not
+  cover, instead of on every PR. Closes #392.
+- GuardDuty is no longer managed by `infra/shared`; the personal AWS
+  organization's audit account runs it. The detector stays on. Closes #394.
+
+### Removed
+
+- The account CloudTrail trail and GuardDuty findings rule; the personal AWS
+  organization covers both. Closes #395.
+
+- The `OWNER_EMAIL` Vercel env var. Nothing has read it since the sign-in
+  callback stopped checking the owner's email in v1.8.0. Refs #300.
+
+### Fixed
+
+- CI's Terraform plans of `infra/shared` failed since the Verified Permissions
+  policy store was added: the read-only plan role couldn't list its tags. The
+  plan role now has the Verified Permissions read actions. Closes #359.
+- Terraform no longer tries to remove the owner Cognito user's `identities`
+  attribute, which Cognito writes when a Google sign-in is linked to the user.
+  Applying that change would have undone the link. Refs #300.
+
+### Security
+
+- Web dependencies with HIGH advisories bumped: `prosemirror-view` 1.42.6
+  (with `prosemirror-model` 1.25.12), `sharp` 0.35.5 and `source-map-js`
+  1.2.2. Closes #406.
+
 ## [1.8.0] - 2026-10-02
 
 ### Added

@@ -17,11 +17,15 @@ Not for merging a feature branch into `dev` — that is the review sequence in
 
 ## Environments
 
-| Branch | URL | Lambda | Bucket |
-|---|---|---|---|
-| `main` | https://ashutosh-pandey.com | `bgm-looper-processor` | `portfolio-data-223376380711` |
-| `stage` | https://stage.ashutosh-pandey.com | `bgm-looper-processor-stage` | `portfolio-data-stage-223376380711` |
-| `dev` | https://dev.ashutosh-pandey.com | `bgm-looper-processor-dev` | `portfolio-data-dev-223376380711` |
+| Branch | URL | AWS account (profile) | Lambda | Bucket |
+|---|---|---|---|---|
+| `main` | https://ashutosh-pandey.com | 223376380711 (`personal`) | `bgm-looper-processor` | `portfolio-data-223376380711` |
+| `stage` | https://stage.ashutosh-pandey.com | 792682047320 (`personal-stage`) | `bgm-looper-processor-stage` | `portfolio-data-stage-792682047320` |
+| `dev` | https://dev.ashutosh-pandey.com | 624586968135 (`personal-dev`) | `bgm-looper-processor-dev` | `portfolio-data-dev-624586968135` |
+
+Each environment also has its own sign-in (`auth.ashutosh-pandey.com`,
+`auth.stage.ashutosh-pandey.com`, `auth.dev.ashutosh-pandey.com`), with its own
+Cognito users, so an account added on one doesn't exist on the others.
 
 ## Procedure
 
@@ -36,20 +40,22 @@ Do **not** write `Closes #N` on a promotion PR. GitHub only honours the
 keyword on the default branch, which is `dev` — the issues were already
 closed when the work merged there.
 
-### 2. Wait for both reviewers
+### 2. Wait for CI and the review
 
 ```bash
 gh pr checks <N> --watch --interval 20
-gh api repos/DataCrusade1999/supreme-enigma/commits/<sha>/status \
-  --jq '.statuses[] | {context, state, description}'
 ```
 
 `changes`/`deploy`/`release` showing `SKIPPED` is normal — those are
-push-triggered. The release-readiness verdict is a **commit status, not a
-check-run**, so it will not appear in `gh pr checks`. Anything other than
-`Release readiness review: change approved` is a hard stop.
+push-triggered.
 
-Then read the inline comments from both bots — `gh pr view` does not show
+Request a devops agent release-readiness review: always on `dev → stage`; on
+`stage → main` only when `git log --no-merges <reviewed-sha>..origin/stage`
+shows commits other than `chore(changelog)` ones (#392). The steps are in the
+`merging-a-pr` skill. A `recommendedAction` other than `Standard Deployment`
+is a hard stop.
+
+Then read the Codex bot's inline comments — `gh pr view` does not show
 them:
 
 ```bash
@@ -119,7 +125,7 @@ same way, which is what happened to v1.5.1.
 It gets CI, but the run does not start on its own. Because the bot opens the
 PR, GitHub finishes the `pull_request` run as `completed/action_required`
 without running a job, so only Vercel reports and `gh pr checks` looks green
-while the test jobs and the readiness review are absent. Approve the run, then review
+while the test jobs are absent. Approve the run, then review
 it like any other PR:
 
 ```bash
@@ -159,9 +165,9 @@ There is no one-command rollback. In order of preference:
    no previous image to point at. Recovery is a rebuild from git history:
    revert on `dev`, promote, and let CI build a new image.
 
-Never reset or force-push `stage` or `main` to roll back. Branch protection
-is not enforced on this repo (GitHub blocks it on private repos without Pro),
-so nothing will stop you, and it desynchronises every branch.
+Never reset or force-push `stage` or `main` to roll back. The
+`permanent-branches` ruleset blocks force-pushes, but the repository admin
+can bypass it, and doing so desynchronises every branch.
 
 ## Escalation
 

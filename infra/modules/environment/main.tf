@@ -44,21 +44,29 @@ locals {
   # not an authorization hole (the signature grants access, not CORS) but there is no
   # reason for any other site's JS to be able to read these responses.
   #
-  # This list is exhaustive and deliberately has no wildcard: these seven origins are the
+  # Each list is exhaustive and deliberately has no wildcard: these origins are the
   # only places a browser upload works. A one-off feature-branch preview
   # (bgm-looper-git-<branch>-….vercel.app), a team alias, or a dev server on a port other
   # than 3000 will fail the PUT with an opaque browser CORS error — that is accepted, not
   # an oversight. S3 permits one `*` per entry, so `https://bgm-looper-*.vercel.app` is
   # the one-line change if branch previews ever need to upload.
-  app_origins = [
-    "https://ashutosh-pandey.com",
-    "https://stage.ashutosh-pandey.com",
-    "https://dev.ashutosh-pandey.com",
-    "https://bgm-looper.vercel.app",
-    "https://bgm-looper-git-stage-ashutosh-pandeys-projects-77cb3a00.vercel.app",
-    "https://bgm-looper-git-dev-ashutosh-pandeys-projects-77cb3a00.vercel.app",
-    "http://localhost:3000",
-  ]
+  app_origins = {
+    main = [
+      "https://ashutosh-pandey.com",
+      "https://bgm-looper.vercel.app",
+      "http://localhost:3000",
+    ]
+    dev = [
+      "https://dev.ashutosh-pandey.com",
+      "https://bgm-looper-git-dev-ashutosh-pandeys-projects-77cb3a00.vercel.app",
+      "http://localhost:3000",
+    ]
+    stage = [
+      "https://stage.ashutosh-pandey.com",
+      "https://bgm-looper-git-stage-ashutosh-pandeys-projects-77cb3a00.vercel.app",
+      "http://localhost:3000",
+    ]
+  }
 }
 
 # --- S3 ---
@@ -82,7 +90,7 @@ resource "aws_s3_bucket_cors_configuration" "data" {
 
   cors_rule {
     allowed_methods = ["PUT", "GET"]
-    allowed_origins = local.app_origins
+    allowed_origins = local.app_origins[var.env]
     allowed_headers = ["*"]
   }
 }

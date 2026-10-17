@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Plans and applies one stack for the `terraform` workflow's apply job, with the
 # destroy guard: a plan that deletes, replaces or forgets anything stops unless
-# CONFIRM=apply-destroys. Run from the repo root with the stack's role already assumed.
-# Usage: tf-apply.sh <stack>   (shared, envs/dev, envs/stage, envs/main)
+# CONFIRM=apply-destroys. Run from the repo root under the stack's role (tf-as.sh <stack> apply).
+# Usage: tf-apply.sh <stack>   (shared, envs/main, nonprod/<env>/account, nonprod/<env>/env)
 set -euo pipefail
 stack=$1
 mkdir -p "$TF_PLUGIN_CACHE_DIR"

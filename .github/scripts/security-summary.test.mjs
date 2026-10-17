@@ -283,6 +283,15 @@ test("a pipe in a Trivy message does not break the table columns", () => {
   assert.match(stdout, /a\\\|b/);
 });
 
+// Without escaping the backslash, `a\|b` becomes `a\\|b`: an escaped
+// backslash followed by a bare pipe, which splits the cell.
+test("a backslash before a pipe in a Trivy message does not break the table columns", () => {
+  const piped = structuredClone(MISCONF);
+  piped.Results[0].Misconfigurations[0].Message = "value is a\\|b which is wrong";
+  const { stdout } = run([tmpReport(piped), "failure"]);
+  assert.match(stdout, /a\\\\\\\|b/);
+});
+
 // GitHub exposes no API for reading a step summary back, so "the artifact is
 // what the step summary says" is otherwise an untestable claim about the
 // script's internals. This asserts it on the bytes.

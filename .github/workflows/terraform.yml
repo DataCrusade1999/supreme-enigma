@@ -9,10 +9,10 @@ name: Terraform
 on:
   pull_request:
     branches: [dev, stage, main]
-    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs", ".github/scripts/tf-apply.sh", ".github/scripts/tf-stacks.sh"]
+    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs", ".github/scripts/tf-apply.sh", ".github/scripts/tf-stacks.sh", ".github/scripts/tf-as.sh"]
   push:
     branches: [dev, stage, main]
-    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs", ".github/scripts/tf-apply.sh", ".github/scripts/tf-stacks.sh"]
+    paths: ["infra/**", ".github/workflows/terraform.yml", ".github/scripts/tf-summary.mjs", ".github/scripts/tf-apply.sh", ".github/scripts/tf-stacks.sh", ".github/scripts/tf-as.sh"]
   schedule:
     - cron: "30 3 * * 1"
   workflow_dispatch:
@@ -21,7 +21,7 @@ on:
         description: "Stack to apply from this branch, or drift"
         required: true
         type: choice
-        options: [envs/dev, envs/stage, envs/main, shared, drift]
+        options: [envs/main, shared, nonprod/dev/account, nonprod/dev/env, nonprod/stage/account, nonprod/stage/env, drift]
       confirm:
         description: "Type apply-destroys to apply a plan that deletes or replaces resources"
         required: false
@@ -33,7 +33,6 @@ env:
   TF_IN_AUTOMATION: "1"
   TF_INPUT: "0"
   TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugin-cache
-  ROLE_PREFIX: arn:aws:iam::223376380711:role/bgm-looper-tf
   TF_VAR_vercel_api_token: ${{ secrets.TF_VAR_VERCEL_API_TOKEN }}
   TF_VAR_app_password: ${{ secrets.TF_VAR_APP_PASSWORD }}
   TF_VAR_openrouter_api_key: ${{ secrets.TF_VAR_OPENROUTER_API_KEY }}
@@ -69,10 +68,6 @@ jobs:
       - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
         with:
           tflint_version: v0.64.0
-      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ env.ROLE_PREFIX }}-plan
-          aws-region: us-east-1
       - name: Lint
         run: |
           mkdir -p "$TF_PLUGIN_CACHE_DIR"
@@ -88,13 +83,15 @@ jobs:
           for stack in $(bash .github/scripts/tf-stacks.sh plan); do
             mkdir -p "plans/$stack"
             echo "::group::$stack"
-            terraform -chdir="infra/$stack" init -lockfile=readonly
-            terraform -chdir="infra/$stack" validate
+            # Each stack plans under its own role (tf-stacks.sh role).
+            tf="bash .github/scripts/tf-as.sh $stack plan terraform -chdir=infra/$stack"
+            $tf init -lockfile=readonly
+            $tf validate
             # One retry: Vercel's framework-list endpoint times out now and then.
-            terraform -chdir="infra/$stack" plan -lock=false -out=tfplan \
-              || { sleep 15; terraform -chdir="infra/$stack" plan -lock=false -out=tfplan; }
-            terraform -chdir="infra/$stack" show -json tfplan > "plans/$stack/plan.json"
-            terraform -chdir="infra/$stack" show -no-color tfplan > "plans/$stack/plan.txt"
+            $tf plan -lock=false -out=tfplan \
+              || { sleep 15; $tf plan -lock=false -out=tfplan; }
+            $tf show -json tfplan > "plans/$stack/plan.json"
+            $tf show -no-color tfplan > "plans/$stack/plan.txt"
             echo "::endgroup::"
           done
       # No Trivy step here: the `test` job in deploy.yml scans infra/*.tf on every PR.
@@ -140,8 +137,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # `shared` runs first, with the prod role, on dev only; the branch's env stack
-      # follows with its own role. Routing and its tests: .github/scripts/tf-stacks.*
+      # Stacks run in the order tf-stacks.sh gives (`shared` first, on dev only), each
+      # under its own role via tf-as.sh. Routing and its tests: .github/scripts/tf-stacks.*
       - name: Resolve stacks
         id: stacks
         env:
@@ -157,29 +154,14 @@ jobs:
         with:
           path: ${{ env.TF_PLUGIN_CACHE_DIR }}
           key: tf-plugins-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
-      - name: Assume the prod role for shared
-        if: steps.stacks.outputs.shared != ''
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ env.ROLE_PREFIX }}-apply-prod
-          aws-region: us-east-1
-      - name: Apply shared
-        if: steps.stacks.outputs.shared != ''
+      - name: Apply ${{ steps.stacks.outputs.stacks }}
         env:
           CONFIRM: ${{ inputs.confirm }}
-        run: bash .github/scripts/tf-apply.sh shared
-      - name: Assume the env stack's role
-        if: steps.stacks.outputs.env != ''
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ env.ROLE_PREFIX }}-${{ steps.stacks.outputs.role }}
-          aws-region: us-east-1
-      - name: Apply ${{ steps.stacks.outputs.env }}
-        if: steps.stacks.outputs.env != ''
-        env:
-          CONFIRM: ${{ inputs.confirm }}
-          STACK: ${{ steps.stacks.outputs.env }}
-        run: bash .github/scripts/tf-apply.sh "$STACK"
+          STACKS: ${{ steps.stacks.outputs.stacks }}
+        run: |
+          for s in $STACKS; do
+            bash .github/scripts/tf-as.sh "$s" apply bash .github/scripts/tf-apply.sh "$s"
+          done
 
   drift:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.stack == 'drift')
@@ -193,7 +175,7 @@ jobs:
       group: terraform-drift
       cancel-in-progress: false
     steps:
-      # The plan role trusts only PRs and dev (where the schedule runs). The job checks
+      # The plan roles trust only PRs and dev (where the schedule runs). The job checks
       # out each branch itself, so the ref it was dispatched from does not matter.
       - name: Require dev
         if: github.ref_name != 'dev'
@@ -214,28 +196,25 @@ jobs:
         with:
           path: ${{ env.TF_PLUGIN_CACHE_DIR }}
           key: tf-plugins-${{ hashFiles('main/infra/**/.terraform.lock.hcl') }}
-      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ env.ROLE_PREFIX }}-plan
-          aws-region: us-east-1
       - name: Plan every stack from the branch that applies it
         run: |
           mkdir -p "$TF_PLUGIN_CACHE_DIR" plans
           drift=0
-          for pair in dev:shared stage:envs/stage dev:envs/dev main:envs/main; do
+          for pair in $(bash dev/.github/scripts/tf-stacks.sh drift); do
             branch=${pair%%:*}; stack=${pair#*:}
             mkdir -p "plans/$stack"
             echo "::group::$stack ($branch)"
-            terraform -chdir="$branch/infra/$stack" init -lockfile=readonly
+            tf="bash dev/.github/scripts/tf-as.sh $stack plan terraform -chdir=$branch/infra/$stack"
+            $tf init -lockfile=readonly
             set +e
-            terraform -chdir="$branch/infra/$stack" plan -lock=false -detailed-exitcode -out=tfplan
+            $tf plan -lock=false -detailed-exitcode -out=tfplan
             rc=$?
             set -e
             echo "::endgroup::"
             [ $rc -eq 1 ] && { echo "::error::plan failed for $stack"; exit 1; }
             [ $rc -eq 2 ] && drift=1
-            terraform -chdir="$branch/infra/$stack" show -json tfplan > "plans/$stack/plan.json"
-            terraform -chdir="$branch/infra/$stack" show -no-color tfplan > "plans/$stack/plan.txt"
+            $tf show -json tfplan > "plans/$stack/plan.json"
+            $tf show -no-color tfplan > "plans/$stack/plan.txt"
           done
           echo "drift=$drift" >> "$GITHUB_ENV"
       - name: File or close the drift issue

@@ -13,6 +13,17 @@ as an approved design spec and implementation plan
 application code, Lambda, or Terraform resources for it have been built yet.
 The IAM policies were already extended to make room for it.
 
+## Architecture diagram
+
+Everything the project runs and how it connects, drawn with AWS icons: the
+GitHub repo and Actions, the Vercel project with one deployment per branch,
+the external services, and the three AWS accounts with what each one holds.
+The source is `docs/architecture.drawio`; open it in draw.io
+(app.diagrams.net or the desktop app) to edit, then re-export
+`docs/architecture.svg`.
+
+![Architecture of bgm-looper and ashutosh-pandey.com](docs/architecture.svg)
+
 ## High-level flow
 
 ```
@@ -29,54 +40,65 @@ Vercel (Next.js 15 + React 19, root_directory="web")
   └─ returns presigned S3 GET URL  → <audio loop> preview + download
   │
   ▼
-AWS (personal account 223376380711, us-east-1, Terraform-managed)
+AWS (one account per branch, us-east-1, Terraform-managed)
 ```
 
-## AWS resources, per branch (`main`/`dev`/`stage` — 3 fully independent backends)
+## AWS resources, per branch (`main`/`dev`/`stage` — 3 accounts)
+
+Each branch runs in its own account of the personal AWS organization, with no
+trust or resource policy between them:
 
 | Resource | main | dev | stage |
 |---|---|---|---|
-| Lambda function | `bgm-looper-processor` | `-dev` | `-stage` |
-| S3 bucket | `portfolio-data-<acct>` | `-dev-<acct>` | `-stage-<acct>` |
+| AWS account (profile) | 223376380711 (`personal`) | 624586968135 (`personal-dev`) | 792682047320 (`personal-stage`) |
+| Lambda function | `bgm-looper-processor` | `bgm-looper-processor-dev` | `bgm-looper-processor-stage` |
+| S3 bucket | `portfolio-data-223376380711` | `portfolio-data-dev-624586968135` | `portfolio-data-stage-792682047320` |
+| Sign-in | `auth.ashutosh-pandey.com` | `auth.dev.ashutosh-pandey.com` | `auth.stage.ashutosh-pandey.com` |
 | Vercel deploy | `ashutosh-pandey.com` | `dev.ashutosh-pandey.com` | `stage.ashutosh-pandey.com` |
 
 Each Lambda: container image (`librosa`, `numpy`, `soundfile`,
 `pyloudnorm`, static `ffmpeg`), 1024MB, 60s timeout. Each S3 bucket: public
-access blocked, CORS (PUT/GET, `*` origin), 1-day object lifecycle.
+access blocked, CORS (PUT/GET, that environment's own origins), 1-day object
+lifecycle on uploads and outputs. Each bucket also holds that environment's
+own resume.
 
-**Shared across all 3 branches** (not duplicated per-branch):
-- One ECR repo `bgm-looper-lambda` — per-branch tag prefixes
-  (`main-<sha>`, `dev-<sha>`, `stage-<sha>`), tag mutability `IMMUTABLE`
-  (no `:latest`, dropped 2026-08-06), lifecycle **keep-1 per prefix**
-  (tightened 2026-08-05, was keep-5)
-- One exec role per function (`bgm-looper-lambda-exec-<env>`), each scoped
-  to its own bucket
+**In each account:**
+- An ECR repo `bgm-looper-lambda` holding that branch's images
+  (`main-<sha>`, `dev-<sha>` or `stage-<sha>`), tag mutability `IMMUTABLE`
+  (no `:latest`, dropped 2026-08-06), lifecycle **keep-1**
+- An exec role for the function (`bgm-looper-lambda-exec-<env>`), scoped to
+  its own bucket
+- A Cognito user pool and a Verified Permissions policy store
 - Two OIDC identity providers (`token.actions.githubusercontent.com` and
-  `oidc.vercel.com/<team slug>`) and one federated role each. **No IAM users
+  `oidc.vercel.com/<team slug>`) and federated roles. **No IAM users
   and no long-lived access keys anywhere** — both replaced permanent key
   pairs in #155, 2026-09-16.
-  - `bgm-looper-vercel`, assumed by the app at runtime (S3 put/get + Lambda
-    invoke, scoped to all 6 current functions/buckets — already includes the
-    not-yet-created Demucs ones, per the IAM policy extension already
-    applied). Trusts the `production` and `preview` Vercel environments.
+  - The app's runtime role: `bgm-looper-vercel` in production (trusts the
+    `production` Vercel environment), `bgm-looper-vercel-preview` in dev and
+    stage (trusts `preview`). Each is scoped to its own account's bucket,
+    Lambda and policy store.
   - `bgm-looper-ci-deploy`, assumed by `deploy.yml` (ECR push + Lambda
-    update-function-code). Trusts only `refs/heads/{main,dev,stage}`, pinned
-    with `StringEquals` on GitHub's immutable ID-qualified subject, so a fork
-    PR cannot assume it.
-- One Vercel project, env vars overridden per branch via
-  `git_branch`-scoped Terraform resources
+    update-function-code). Each account's role trusts only its own branch's
+    ref, pinned with `StringEquals` on GitHub's immutable ID-qualified
+    subject, so a fork PR cannot assume it.
+  - The Terraform plan and apply roles used by `terraform.yml`.
+
+**Shared:** one Vercel project in production's `infra/shared`, with each
+environment's env vars scoped by target and `git_branch`.
 
 ## Auth
 
 Sign-in through Cognito managed login (`/api/auth/login` → Cognito at
-`auth.ashutosh-pandey.com` → `/api/auth/callback`, authorization code with
+`auth.ashutosh-pandey.com`, or the environment's own `auth.<env>.` domain →
+`/api/auth/callback`, authorization code with
 PKCE), then the user's ID and refresh tokens in two HttpOnly cookies,
 AES-256-GCM-encrypted with a key derived from `COOKIE_SECRET`.
 `web/lib/route-gate.ts`'s `isGatedPath()` is the single source of truth
 for what's protected.
 
-Authorization: Amazon Verified Permissions, one policy store shared by all
-branches, with the Cognito pool as identity source. The proxy calls
+Authorization: Amazon Verified Permissions, one policy store per environment
+(all three from the same Cedar files), each with its own Cognito pool as
+identity source. The proxy calls
 `IsAuthorizedWithToken` for every gated request ($0.000005 each). Groups
 `owner` and `friends`; see
 `docs/superpowers/specs/2026-09-29-access-control-design.md`.
@@ -97,14 +119,22 @@ Actions.
 
 ## Infra-as-code
 
-`infra/bootstrap` (one-time, just the TF state S3 bucket, never destroyed),
-then four stacks with one state each: `infra/shared` (ECR, IAM, the Vercel
-project and the other one-of-each resources, applied from `dev` only) and
-`infra/envs/{dev,stage,main}` (each environment's bucket, Lambda, alarm and
-Vercel env vars, through `infra/modules/environment`). Destroying the env
-stacks and then `shared` is the kill switch. Credentials come from the
-environment (`AWS_PROFILE=personal` locally); no backend or provider block
-names a profile.
+`infra/bootstrap` (one-time per account, just the TF state S3 bucket, never
+destroyed), then six stacks with one state each:
+- production: `infra/shared` (ECR, IAM, Cognito, the Vercel project and the
+  other one-of-each resources, applied from `dev` only) and `infra/envs/main`
+  (main's bucket, Lambda, alarm and Vercel env vars, through
+  `infra/modules/environment`)
+- dev and stage: `infra/nonprod/<env>/account` (through
+  `infra/modules/nonprod-account` and `infra/modules/auth`) and
+  `infra/nonprod/<env>/env` (through `infra/modules/nonprod-env`, which wraps
+  `infra/modules/environment`)
+
+Destroying each account's env stack, then its base stack, with production's
+`shared` last, is the kill switch. Credentials come from the environment
+(`AWS_PROFILE=personal`, `personal-dev` or `personal-stage` locally); no
+backend or provider block names a profile, and each provider's
+`allowed_account_ids` refuses the wrong account.
 
 ---
 

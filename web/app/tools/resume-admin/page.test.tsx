@@ -136,4 +136,37 @@ describe("Resume admin page", () => {
     expect(screen.queryByText(/publishing…/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^publish$/i })).toBeEnabled();
   });
+
+  it("shows the server's reason for a refused publish", async () => {
+    // Previews publish to their own bucket now, so pointing the owner at
+    // production would send them to a deployment that can't see this draft.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ draftId: "A", uploadUrl: "https://s3/A" }),
+      })
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ draftId: "A", resume: VALID }) })
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({ error: "publishing is only available on deployed environments" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ResumeAdminPage />);
+
+    choosePdf("a.pdf");
+    const publish = await screen.findByRole("button", { name: /^publish$/i });
+    await waitFor(() => expect(publish).toBeEnabled());
+
+    fireEvent.click(publish);
+
+    await waitFor(() =>
+      expect(screen.getByText(/only available on deployed environments/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/production deployment/i)).not.toBeInTheDocument();
+  });
 });

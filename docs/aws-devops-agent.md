@@ -16,7 +16,7 @@ else; a wider scope defeats the point of a project-scoped agent.
 
 | Association | Detail |
 |---|---|
-| AWS account | `223376380711` (personal), role `DevOpsAgentRole-AgentSpace-y365argo`, `accountType: monitor` (read-oriented, full-account visibility) |
+| AWS account | `223376380711` (production), role `DevOpsAgentRole-AgentSpace-y365argo`, `accountType: monitor` (read-oriented, full-account visibility). Dev (`624586968135`) and stage (`792682047320`) are outside the Agent Space, so it can't see their resources: an investigation or cost question about dev or stage gets answered from code only. |
 | GitHub repo | `DataCrusade1999/supreme-enigma`, `READ_WRITE`, capabilities: `RELEASE_READINESS_REVIEW`, `RELEASE_READINESS_REVIEW_AUTOMATED_TESTING` |
 
 Creating the Agent Space itself and attaching the AWS account/GitHub repo
@@ -34,7 +34,10 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
 
 - **Release readiness review** — analyze the diff between `dev` and `main`
   before promoting, or a specific PR, for policy compliance, IAM blast
-  radius, dependency breakage, cross-repo impact.
+  radius, dependency breakage, cross-repo impact. Reviews are billed, so
+  they run only on `dev → stage` promotions, PRs with a significant infra
+  change, and `stage → main` promotions carrying unreviewed commits (#392;
+  the `merging-a-pr` skill has the rules).
 - **Cost / recommendations / ad-hoc chat** — quick natural-language queries
   against the account without console-hopping.
 - **Incident investigation** — root-cause a Lambda/CI failure by correlating
@@ -42,16 +45,18 @@ day-to-day; the MCP tools here are for driving it from Claude Code instead.
 
 ## Best practices / gotchas learned
 
+- **Automated PR reviews run only on private repositories.** AWS's docs: "DevOps Agent does not automatically review pull requests or merge requests on public repositories." This repo is public, and the last automatic review was #349 on 2026-10-02 (#361). `list_tasks` with `task_type: RELEASE_READINESS_REVIEW` shows whether one was ever created. Request reviews with `create_release_readiness_review`; the result is a report (`recommendedAction`, `risks`), with no commit status and no inline comments. Making the repo private again restores the automatic reviews, and brings back the 2,000-minute Actions cap with them.
 - **Static-only by default.** `skip_automated_testing: true` for a release
   readiness review unless you specifically want it to spin up a sandbox and
   run generated UI/API tests — static analysis is faster and cheaper, and
   covers policy/IAM/dependency risk, which is most of what matters for a
   small single-account project.
-- **No open PR needed.** For a `dev`→`main` promotion review (this repo's
-  actual release flow — see root `CLAUDE.md`), pass
+- **No open PR needed.** Passing
   `githubPrContent: [{repository: "owner/repo", headBranch: "dev"}]` with no
-  `prNumber`. The agent diffs the branch directly; it doesn't require an
-  actual pull request to exist.
+  `prNumber` makes the agent diff the branch directly. The merge flow doesn't
+  use this (#392): promotions are reviewed on the promotion PR, so the
+  reviewed SHA is recorded in a PR comment for the `stage → main` skip check.
+  A branch review outside that flow is an extra billed review.
 - **Journal records can be huge.** `list_journal_records` with `order: ASC`
   and no limit on a multi-commit review can return 500k+ characters and blow
   past tool output limits. Poll with `order: DESC, limit: 3-5` to check
@@ -167,8 +172,8 @@ Gotchas:
   the check attaches to a `dev` commit. Promote through `dev → stage → main` as
   usual and this resolves itself.
 - **The agent performs real writes** (POST/PUT/DELETE) while exploring. Against
-  stage that means real uploads to `portfolio-data-stage-*` and real
-  `bgm-looper-processor-stage` invocations. Objects expire after 1 day, so the
+  stage that means real uploads to `portfolio-data-stage-792682047320` and real
+  `bgm-looper-processor-stage` invocations, in stage's account. Objects expire after 1 day, so the
   cost is bounded but not zero.
 - **`/tools/bgm-looper` is not reachable by the agent.** The Vercel bypass gets
   it past Vercel Authentication, but `web/lib/route-gate.ts` gates the tool,
