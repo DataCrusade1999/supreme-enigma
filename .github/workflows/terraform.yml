@@ -21,7 +21,7 @@ on:
         description: "Stack to apply from this branch, or drift"
         required: true
         type: choice
-        options: [envs/dev, envs/stage, envs/main, shared, drift]
+        options: [envs/dev, envs/stage, envs/main, shared, nonprod/dev/account, drift]
       confirm:
         description: "Type apply-destroys to apply a plan that deletes or replaces resources"
         required: false
