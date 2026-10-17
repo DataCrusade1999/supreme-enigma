@@ -19,6 +19,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
+- The resume admin can publish on dev and stage, into that environment's own
+  bucket, so production's resume is untouched. Local runs still refuse. Part
+  of #397.
+
 - Resources carry an `app = bgm-looper` tag for the organization's per-app
   budget, and the docs describe the org SSO session. Closes #396.
 
