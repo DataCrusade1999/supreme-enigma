@@ -1,14 +1,14 @@
 # Owner-only sign-in for /tools, /keystatic and the gated API routes (spec
-# 2026-09-28-cognito-login-design.md). One pool for all three environments, like
-# COOKIE_SECRET: the app turns a verified Cognito ID token into its own session.
+# 2026-09-28-cognito-login-design.md). Production's pool; dev and stage have their
+# own, in their own accounts. The app turns a verified Cognito ID token into its own
+# session.
 # The pool and the Verified Permissions store are in infra/modules/auth; this file
 # keeps the apex CAA record and the Vercel vars that point the app at them.
 
 locals {
-  login_callback_urls = concat(
-    [for h in values(local.site_hosts) : "https://${h}/api/auth/callback"],
-    ["http://localhost:3000/api/auth/callback"],
-  )
+  # Production only. Dev and stage sign in against their own accounts' pools, and so
+  # does localhost (npm run dev), against dev's.
+  login_callback_urls = ["https://${vercel_project_domain.custom.domain}/api/auth/callback"]
 }
 
 module "auth" {

@@ -31,10 +31,6 @@ output "avp_policy_store_id" {
   value = module.auth.policy_store_id
 }
 
-output "vercel_preview_role_arn" {
-  value = aws_iam_role.vercel_preview.arn
-}
-
 output "resume_bucket_name" {
   value = local.data_bucket_names["main"]
 }

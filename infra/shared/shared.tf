@@ -26,21 +26,21 @@ locals {
   vercel_team_id = "team_bSWug4zpM7jfChbYKg7G4PMI"
 
   # Per-environment names, built from the same rule as infra/modules/environment so
-  # this stack never reads an env stack's state. The Lambda list order matches what
-  # ci_deploy's policy used before the split (main/dev/stage).
-  env_suffix = { main = "", dev = "-dev", stage = "-stage" }
+  # this stack never reads an env stack's state. Only main is in this account: dev
+  # and stage live in their own (nonprod-accounts spec).
+  env_suffix = { main = "" }
 
   lambda_function_names = { for e, s in local.env_suffix : e => "${var.project_name}-processor${s}" }
   data_bucket_names     = { for e, s in local.env_suffix : e => "portfolio-data${s}-${data.aws_caller_identity.current.account_id}" }
 
   all_lambda_function_arns = [
-    for e in ["main", "dev", "stage"] :
+    for e in keys(local.env_suffix) :
     "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.lambda_function_names[e]}"
   ]
 }
 
-# --- ECR (one repo, per-branch tag prefixes — see infra/modules/environment's Lambda functions
-#     and .github/workflows/deploy.yml for how each branch tags/deploys its own image) ---
+# --- ECR (main's images, tagged main-<sha> — see infra/modules/environment's Lambda function
+#     and .github/workflows/deploy.yml. Dev and stage push to their own accounts' repos) ---
 
 resource "aws_ecr_repository" "looper" {
   name                 = "${var.project_name}-lambda"
@@ -78,28 +78,6 @@ resource "aws_ecr_lifecycle_policy" "looper" {
           countNumber   = 1
         }
         action = { type = "expire" }
-      },
-      {
-        rulePriority = 3
-        description  = "Keep only the 1 most recent dev image"
-        selection = {
-          tagStatus     = "tagged"
-          tagPrefixList = ["dev"]
-          countType     = "imageCountMoreThan"
-          countNumber   = 1
-        }
-        action = { type = "expire" }
-      },
-      {
-        rulePriority = 4
-        description  = "Keep only the 1 most recent stage image"
-        selection = {
-          tagStatus     = "tagged"
-          tagPrefixList = ["stage"]
-          countType     = "imageCountMoreThan"
-          countNumber   = 1
-        }
-        action = { type = "expire" }
       }
     ]
   })
@@ -111,8 +89,8 @@ resource "aws_ecr_lifecycle_policy" "looper" {
 #     this project ---
 
 locals {
-  # Only main's bucket holds resume data — dev/stage read and write it too, via the
-  # env-agnostic RESUME_BUCKET_NAME. See the design spec §4.1.
+  # Production's resume, in main's bucket. Dev and stage keep theirs in their own
+  # accounts' buckets (nonprod-accounts spec §3).
   resume_bucket_arn = "arn:aws:s3:::${local.data_bucket_names["main"]}"
 }
 
@@ -138,17 +116,15 @@ resource "aws_iam_role" "ci_deploy" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
       Condition = {
-        # StringEquals on an explicit list of the three permanent branches, NOT
-        # StringLike with a wildcard. A wildcard `sub` would also match a
-        # pull_request context, which is what a fork PR runs as — that is the
-        # documented way this trust policy gets abused. deploy.yml declares no
-        # `environment:`, so the ref: form is the sub GitHub actually issues.
+        # StringEquals on main's ref, NOT StringLike with a wildcard. A wildcard
+        # `sub` would also match a pull_request context, which is what a fork PR
+        # runs as — that is the documented way this trust policy gets abused.
+        # deploy.yml declares no `environment:`, so the ref: form is the sub GitHub
+        # actually issues. Dev and stage deploy through their own accounts' roles.
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           "token.actions.githubusercontent.com:sub" = [
             "${local.github_sub_prefix}:ref:refs/heads/main",
-            "${local.github_sub_prefix}:ref:refs/heads/dev",
-            "${local.github_sub_prefix}:ref:refs/heads/stage",
           ]
         }
       }
@@ -216,30 +192,9 @@ resource "aws_iam_role" "vercel" {
       Condition = {
         StringEquals = {
           "oidc.vercel.com/${local.vercel_team_slug}:aud" = "https://vercel.com/${local.vercel_team_slug}"
-          # Production only. Preview deployments assume aws_iam_role.vercel_preview.
+          # Production only. Preview deployments assume bgm-looper-vercel-preview in
+          # their own account.
           "oidc.vercel.com/${local.vercel_team_slug}:sub" = "owner:${local.vercel_team_slug}:project:${var.project_name}:environment:production"
-        }
-      }
-    }]
-  })
-}
-
-# Preview deployments (dev and stage) assume this role; production assumes
-# aws_iam_role.vercel. Vercel's subject has no per-branch environment, so dev and
-# stage share it and each holds the other's grants — per-env IAM spec §6.
-resource "aws_iam_role" "vercel_preview" {
-  name = "${var.project_name}-vercel-preview"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Principal = { Federated = aws_iam_openid_connect_provider.vercel.arn }
-      Condition = {
-        StringEquals = {
-          "oidc.vercel.com/${local.vercel_team_slug}:aud" = "https://vercel.com/${local.vercel_team_slug}"
-          "oidc.vercel.com/${local.vercel_team_slug}:sub" = "owner:${local.vercel_team_slug}:project:${var.project_name}:environment:preview"
         }
       }
     }]
@@ -251,44 +206,34 @@ resource "aws_iam_role" "vercel_preview" {
 # its comment explains why. The s3:DeleteObject grant that came across with it is gone:
 # nothing under web/ issues a DeleteObjectCommand, and deleting drafts is the job of the
 # resume/drafts/ lifecycle rule in infra/modules/environment, not the app's.
-#
-# The resume lives in main's bucket and all three environments read and write it,
-# so these grants stay here rather than in the env stacks, on both Vercel roles.
-locals {
-  vercel_resume_statements = [
-    {
-      Sid      = "ResumeObjects"
-      Effect   = "Allow"
-      Action   = ["s3:PutObject", "s3:GetObject"]
-      Resource = ["${local.resume_bucket_arn}/resume/*"]
-    },
-    {
-      # HeadObject on a key that does not exist returns 403, not 404, unless the
-      # caller holds s3:ListBucket on the bucket — so without this the app's
-      # objectExists() rethrows on every absent key and the first extraction and
-      # the first publish both 500. Deliberately unconditioned: S3 evaluates this
-      # for its 404-vs-403 decision with no s3:prefix in context, so an
-      # s3:prefix-scoped grant does not restore the 404. Bucket ARN only, so this
-      # grants listing key names in main's bucket and nothing else — GetObject
-      # stays scoped to uploads/, outputs/ and resume/ above.
-      Sid      = "ResumeHeadObjectNotFound"
-      Effect   = "Allow"
-      Action   = ["s3:ListBucket"]
-      Resource = [local.resume_bucket_arn]
-    },
-  ]
-}
-
 resource "aws_iam_role_policy" "vercel_resume" {
-  name   = "${var.project_name}-vercel-resume"
-  role   = aws_iam_role.vercel.id
-  policy = jsonencode({ Version = "2012-10-17", Statement = local.vercel_resume_statements })
-}
-
-resource "aws_iam_role_policy" "vercel_preview_resume" {
-  name   = "${var.project_name}-vercel-preview-resume"
-  role   = aws_iam_role.vercel_preview.id
-  policy = jsonencode({ Version = "2012-10-17", Statement = local.vercel_resume_statements })
+  name = "${var.project_name}-vercel-resume"
+  role = aws_iam_role.vercel.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ResumeObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = ["${local.resume_bucket_arn}/resume/*"]
+      },
+      {
+        # HeadObject on a key that does not exist returns 403, not 404, unless the
+        # caller holds s3:ListBucket on the bucket — so without this the app's
+        # objectExists() rethrows on every absent key and the first extraction and
+        # the first publish both 500. Deliberately unconditioned: S3 evaluates this
+        # for its 404-vs-403 decision with no s3:prefix in context, so an
+        # s3:prefix-scoped grant does not restore the 404. Bucket ARN only, so this
+        # grants listing key names in main's bucket and nothing else — GetObject
+        # stays scoped to uploads/, outputs/ and resume/ above.
+        Sid      = "ResumeHeadObjectNotFound"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [local.resume_bucket_arn]
+      },
+    ]
+  })
 }
 
 # --- Vercel project + the config/secrets that are identical across production and preview ---
@@ -383,16 +328,6 @@ resource "vercel_project_domain" "custom_branch" {
   project_id = vercel_project.looper.id
   domain     = "${each.key}.${vercel_project_domain.custom.domain}"
   git_branch = each.key
-}
-
-# The host each branch is served at: Cognito's callback URLs and, later, the
-# digest's API destinations.
-locals {
-  site_hosts = {
-    main  = vercel_project_domain.custom.domain
-    dev   = "dev.${vercel_project_domain.custom.domain}"
-    stage = "stage.${vercel_project_domain.custom.domain}"
-  }
 }
 
 # --- Firewall ---
