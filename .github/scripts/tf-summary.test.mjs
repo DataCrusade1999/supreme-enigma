@@ -133,3 +133,17 @@ test("comment: truncated under GitHub's limit with a pointer to the job summary"
   assert.ok(md.length <= MAX_COMMENT, `length ${md.length}`);
   assert.match(md, /truncated — the full plan is in the job summary/);
 });
+
+test("comment: a large first plan leaves a later small plan whole", () => {
+  const md = renderComment(
+    [
+      { name: "envs/dev", plan: plan(rc("a", ["update"])), text: "z".repeat(200000) },
+      { name: "shared", plan: plan(rc("b", ["update"])), text: "small plan" },
+    ],
+    "t",
+  );
+  assert.ok(md.length <= MAX_COMMENT, `length ${md.length}`);
+  assert.match(md, /small plan/);
+  assert.ok(md.indexOf("envs/dev") < md.indexOf("shared"), "stacks keep their order");
+  assert.match(md, /truncated — the full plan is in the job summary/);
+});

@@ -57,8 +57,9 @@ function section({ name, plan, text }) {
 }
 
 // Every stack's heading and ⚠ line are reserved first, so a long plan can only
-// shorten plan text, never push a later stack out. Text is cut inside a section,
-// so the fence and </details> that section() writes always close.
+// shorten plan text, never push a later stack out. Plan text is budgeted smallest
+// first, so short plans stay whole and the largest takes what is left. Text is cut
+// inside a section, so the fence and </details> that section() writes always close.
 export function renderComment(stacks, title) {
   const note = "\n_…truncated — the full plan is in the job summary._\n";
   const head = `${MARKER}\n## ${title}\n\n`;
@@ -67,16 +68,18 @@ export function renderComment(stacks, title) {
   // A cut text can need a longer fence than the empty one; 16 per stack covers that.
   let room = MAX_COMMENT - head.length - note.length - stacks.reduce((n, s, i) => n + sep(i).length + bare(s) + 16, 0);
   let truncated = false;
-  const parts = stacks.map((stack, i) => {
-    let text = stack.text;
+  const texts = [];
+  const bySize = stacks.map((_, i) => i).sort((a, b) => stacks[a].text.length - stacks[b].text.length);
+  for (const i of bySize) {
+    let text = stacks[i].text;
     if (text.length > room) {
       text = text.slice(0, Math.max(room, 0));
       truncated = true;
     }
-    const md = section({ ...stack, text });
-    room -= md.length - bare(stack);
-    return sep(i) + md;
-  });
+    texts[i] = text;
+    room -= section({ ...stacks[i], text }).length - bare(stacks[i]);
+  }
+  const parts = stacks.map((stack, i) => sep(i) + section({ ...stack, text: texts[i] }));
   return head + parts.join("") + (truncated ? note : "");
 }
 
