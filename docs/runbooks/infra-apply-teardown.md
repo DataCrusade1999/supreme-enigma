@@ -41,7 +41,7 @@ as one PR comment (`.github/scripts/tf-stacks.sh plan`): `shared` and
 `nonprod/dev/*` on a PR into `dev`, `nonprod/stage/*` into `stage`,
 `envs/main` into `main`. Read it before merging: `No changes`
 for a refactor, or exactly the intended diff, and no `⚠ destroys or replaces`
-line you did not intend.
+or `⚠ forgets` line you did not intend.
 
 When the workflow cannot run, plan the stacks locally against real state, each
 under its own account's profile:
@@ -74,7 +74,7 @@ Merging applies. A push to `dev` applies `shared`, then `nonprod/dev/account`,
 then `nonprod/dev/env`; a push to `stage` applies `nonprod/stage/account` then
 `nonprod/stage/env`; a push to `main` applies `envs/main`. `shared` is applied
 from `dev` only, so a `shared` change reaches production when it merges to
-`dev`. A plan that deletes or replaces anything stops before applying; once
+`dev`. A plan that deletes, replaces or forgets anything stops before applying; once
 you have read it, apply it from the branch that owns the stack:
 
 ```bash
