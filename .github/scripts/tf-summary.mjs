@@ -57,26 +57,33 @@ function section({ name, plan, text }) {
 }
 
 // Every stack's heading and ⚠ line are reserved first, so a long plan can only
-// shorten plan text, never push a later stack out. Text is cut inside a section,
-// so the fence and </details> that section() writes always close.
+// shorten plan text, never push a later stack out. Plan text is budgeted smallest
+// first, so short plans stay whole and the largest takes what is left. Text is cut
+// inside a section, so the fence and </details> that section() writes always close.
 export function renderComment(stacks, title) {
   const note = "\n_…truncated — the full plan is in the job summary._\n";
   const head = `${MARKER}\n## ${title}\n\n`;
   const sep = (i) => (i ? "\n" : "");
   const bare = (stack) => section({ ...stack, text: "" }).length;
-  // A cut text can need a longer fence than the empty one; 16 per stack covers that.
-  let room = MAX_COMMENT - head.length - note.length - stacks.reduce((n, s, i) => n + sep(i).length + bare(s) + 16, 0);
+  // What a text adds to its section, fences included: a run of backticks in the
+  // text lengthens both fences, so the text's length alone undercounts.
+  const cost = (stack, text) => section({ ...stack, text }).length - bare(stack);
+  let room = MAX_COMMENT - head.length - note.length - stacks.reduce((n, s, i) => n + sep(i).length + bare(s), 0);
   let truncated = false;
-  const parts = stacks.map((stack, i) => {
-    let text = stack.text;
-    if (text.length > room) {
-      text = text.slice(0, Math.max(room, 0));
+  const texts = [];
+  const bySize = stacks.map((_, i) => i).sort((a, b) => cost(stacks[a], stacks[a].text) - cost(stacks[b], stacks[b].text));
+  for (const i of bySize) {
+    let text = stacks[i].text;
+    // Cutting can shorten the fence, so cut again until the section fits.
+    while (text && cost(stacks[i], text) > room) {
+      const overhead = cost(stacks[i], text) - text.length;
+      text = text.slice(0, Math.max(0, Math.min(text.length - 1, room - overhead)));
       truncated = true;
     }
-    const md = section({ ...stack, text });
-    room -= md.length - bare(stack);
-    return sep(i) + md;
-  });
+    texts[i] = text;
+    room -= cost(stacks[i], text);
+  }
+  const parts = stacks.map((stack, i) => sep(i) + section({ ...stack, text: texts[i] }));
   return head + parts.join("") + (truncated ? note : "");
 }
 
