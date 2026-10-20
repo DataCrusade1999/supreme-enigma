@@ -1,5 +1,5 @@
 # Terraform in CI (#339, docs/superpowers/specs/2026-10-02-terraform-ci-design.md).
-# PRs plan, pushes apply, a plan that deletes or replaces anything stops for a
+# PRs plan, pushes apply, a plan that deletes, replaces or forgets anything stops for a
 # manual `apply-destroys` run, and a weekly plan files drift as an issue. Each branch
 # applies its own env stack; dev also applies `shared`, first (#345).
 # One job per event: GitHub bills each job rounded up to a minute (#320).
@@ -23,7 +23,7 @@ on:
         type: choice
         options: [envs/main, shared, nonprod/dev/account, nonprod/dev/env, nonprod/stage/account, nonprod/stage/env, drift]
       confirm:
-        description: "Type apply-destroys to apply a plan that deletes or replaces resources"
+        description: "Type apply-destroys to apply a plan that deletes, replaces or forgets resources"
         required: false
         default: ""
 

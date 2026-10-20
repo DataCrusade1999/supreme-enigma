@@ -54,7 +54,7 @@ Three independent sibling projects, no monorepo tooling (no workspaces/Turborepo
 - **A review that does not approve is a hard stop.** Gate on the report's `recommendedAction`: only `Standard Deployment` counts, and anything else, `Deploy with Caution` included, means report it and wait for a human decision.
 - **Merge method by PR kind:** feature/fix → `dev`: `gh pr merge <N> --squash --delete-branch`. `chore/changelog-sync-*` → `dev`: `--merge --delete-branch`, **never `--squash`**. Promotion `dev → stage` / `stage → main`: `--merge`, **never `--squash` and never `--delete-branch`**.
 - **Absent test jobs on a sync PR mean gated, not skipped** — approve the run and wait; never merge on a green Vercel check alone. The exception: a PR whose diff is only docs/`*.md` (including a `CHANGELOG.md`-only sync PR) gets no CI run by design — check `gh pr diff <N> --name-only` before treating a missing run as gated.
-- **For any PR touching `infra/`, read the plan the `Terraform` workflow posted on the PR:** each stack must say `No changes` or exactly the intended diff, with no `⚠ destroys or replaces` line you did not intend. A local plan is the fallback when the workflow cannot run.
+- **For any PR touching `infra/`, read the plan the `Terraform` workflow posted on the PR:** each stack must say `No changes` or exactly the intended diff, with no `⚠ destroys or replaces` or `⚠ forgets` line you did not intend. A local plan is the fallback when the workflow cannot run.
 - **Merge `lambda/`-touching PRs one at a time** — concurrent `deploy` jobs fail with `ResourceConflictException`.
 
 ## Project management

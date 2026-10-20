@@ -13,7 +13,7 @@ export const MARKER = "<!-- terraform-plan -->";
 export const MAX_COMMENT = 65000;
 
 export function summarize(plan) {
-  const s = { add: 0, change: 0, destroy: 0, forget: 0, replace: [], deletes: [] };
+  const s = { add: 0, change: 0, destroy: 0, forget: 0, replace: [], deletes: [], forgets: [] };
   for (const { address, change } of plan.resource_changes ?? []) {
     const a = change.actions;
     const del = a.includes("delete");
@@ -23,11 +23,23 @@ export function summarize(plan) {
     if (a.includes("update")) s.change++;
     if (del) s.destroy++;
     // A `removed` block drops the resource from state without destroying it. That
-    // still loses it from Terraform's control, so the destroy guard counts it.
-    if (a.includes("forget")) s.forget++;
+    // still loses it from Terraform's control, so the destroy guard counts it, but
+    // the messages name it as a forget.
+    if (a.includes("forget")) {
+      s.forget++;
+      s.forgets.push(address);
+    }
     if (del || a.includes("forget")) s.deletes.push(address);
   }
   return s;
+}
+
+const FORGET_NOTE = "drops from state, does not destroy";
+const code = (list) => list.map((d) => `\`${d}\``).join(", ");
+
+// The apply job's list of what stopped the guard, one markdown bullet per address.
+export function guardLines(s) {
+  return s.deletes.map((d) => (s.forgets.includes(d) ? `- \`${d}\` (forget: ${FORGET_NOTE})` : `- \`${d}\``));
 }
 
 function section({ name, plan, text }) {
@@ -36,7 +48,9 @@ function section({ name, plan, text }) {
   let counts = `${s.add} to add, ${s.change} to change, ${s.destroy} to destroy`;
   if (s.forget) counts += `, ${s.forget} to forget`;
   const lines = [`### \`${name}\` — ${counts}`];
-  if (s.deletes.length) lines.push("", `⚠ destroys or replaces: ${s.deletes.map((d) => `\`${d}\``).join(", ")}`);
+  const destroys = s.deletes.filter((d) => !s.forgets.includes(d));
+  if (destroys.length) lines.push("", `⚠ destroys or replaces: ${code(destroys)}`);
+  if (s.forgets.length) lines.push("", `⚠ forgets (${FORGET_NOTE}): ${code(s.forgets)}`);
   const f = fence(text);
   lines.push("", "<details><summary>Plan</summary>", "", `${f}\n${text}\n${f}`, "", "</details>");
   return lines.join("\n") + "\n";
@@ -86,7 +100,7 @@ export function readStacks(dir) {
 function main([cmd, ...args]) {
   if (cmd === "deletes") {
     const s = summarize(JSON.parse(readFileSync(args[0], "utf8")));
-    for (const d of s.deletes) console.error(d);
+    for (const line of guardLines(s)) console.error(line);
     console.log(s.deletes.length);
     return;
   }

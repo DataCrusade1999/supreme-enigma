@@ -26,8 +26,8 @@ deletes=$(node .github/scripts/tf-summary.mjs deletes /tmp/plan.json 2>/tmp/dele
 rm /tmp/plan.json
 { echo "### \`$stack\`"; echo '```'; terraform -chdir="infra/$stack" show -no-color tfplan; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 if [ "$deletes" -gt 0 ] && [ "${CONFIRM:-}" != apply-destroys ]; then
-  { echo "**Stopped: this plan deletes or replaces $deletes resources:**"; sed 's/^/- `/; s/$/`/' /tmp/deletes.txt; } >> "$GITHUB_STEP_SUMMARY"
-  echo "::error::$stack deletes or replaces $deletes resources. Apply with workflow_dispatch stack=$stack confirm=apply-destroys on ${GITHUB_REF_NAME}."
+  { echo "**Stopped: this plan deletes, replaces or forgets $deletes resources:**"; cat /tmp/deletes.txt; } >> "$GITHUB_STEP_SUMMARY"
+  echo "::error::$stack deletes, replaces or forgets $deletes resources. Apply with workflow_dispatch stack=$stack confirm=apply-destroys on ${GITHUB_REF_NAME}."
   exit 1
 fi
 terraform -chdir="infra/$stack" apply tfplan
