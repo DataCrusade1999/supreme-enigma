@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Theme explorations</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=Fraunces:opsz,wght@9..144,500;9..144,600&amp;family=Space+Grotesk:wght@500;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1480px; box-sizing: border-box; padding: 80px; background: #FFFFFF; color: #16181D; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column; gap: 48px">
+<header style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #16181D; padding-bottom: 24px">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A">Theme explorations · 5 directions</div>
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 80px; line-height: 0.95; letter-spacing: -0.03em">One layout, five moods</h1>
+</div>
+<p style="margin: 0; max-width: 440px; font-size: 17px; line-height: 1.55; color: #3A3E47">Same components and spacing; only colour and the display face change. Body text is IBM Plex Sans and data is IBM Plex Mono in every theme.</p>
+</header>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; flex-grow: 1">
+<sc-for list="{{themes}}" as="th" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; background: {{th.bg}}; color: {{th.ink}}; border: 1px solid #D9D4C8">
+<div style="padding: 28px 24px; display: flex; flex-direction: column; gap: 14px; flex-grow: 1">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: {{th.accent}}">{{th.n}} — {{th.name}}</div>
+<div style="font-family: {{th.display}}; font-weight: {{th.dw}}; font-size: 64px; line-height: 0.95; letter-spacing: -0.03em">Aa</div>
+<div style="font-family: {{th.display}}; font-weight: {{th.dw}}; font-size: 26px; line-height: 1.1">I build software end to end.</div>
+<div style="font-size: 14px; line-height: 1.55; color: {{th.muted}}">{{th.mood}}</div>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: {{th.muted}}">{{th.face}}</div>
+<div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px">
+<span style="display: inline-flex; align-items: center; justify-content: center; height: 44px; background: {{th.ink}}; color: {{th.bg}}; font-weight: 500; font-size: 14px">Primary</span>
+<span style="display: inline-flex; align-items: center; justify-content: center; height: 44px; border: 1.5px solid {{th.ink}}; font-weight: 500; font-size: 14px">Secondary</span>
+<span style="font-weight: 500; font-size: 14px; color: {{th.link}}; text-decoration: underline; text-underline-offset: 4px">Inline link</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; border-top: 1px solid {{th.line}}">
+<sc-for list="{{th.swatches}}" as="s" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 12px; padding: 10px 24px; border-bottom: 1px solid {{th.line}}">
+<span style="width: 28px; height: 28px; background: {{s.hex}}; border: 1px solid {{th.line}}"></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 600">{{s.role}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: {{th.muted}}">{{s.hex}}</span></span>
+</div>
+</sc-for>
+</div>
+<div style="padding: 16px 24px; background: {{th.invBg}}; color: {{th.invFg}}; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.6">{{th.contrast}}</div>
+</div>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1480}}'>
+class Component extends DCLogic {
+renderVals() {
+const mk = (n, name, mood, face, display, dw, c, contrast) => ({
+n, name, mood, face, display, dw, contrast, ...c,
+swatches: [
+{ role: 'Ground', hex: c.bg },
+{ role: 'Surface', hex: c.surface },
+{ role: 'Ink', hex: c.ink },
+{ role: 'Muted', hex: c.muted },
+{ role: 'Accent', hex: c.accent }
+]
+});
+return {
+themes: [
+mk('01', 'Paper', 'Warm off-white, ink type, a signal orange. Editorial and calm.', 'Bricolage Grotesque 700', "'Bricolage Grotesque', sans-serif", 700,
+{ bg: '#F4F1EA', surface: '#FBFAF6', ink: '#16181D', muted: '#5A5F6A', line: '#D9D4C8', accent: '#D2451E', link: '#B53A17', invBg: '#16181D', invFg: '#F4F1EA' },
+'Ink/ground 15.7:1 · muted 5.7:1 · link 5.2:1'),
+mk('02', 'Midnight', 'Near-black with a mint accent. Feels like a good terminal.', 'Space Grotesk 700', "'Space Grotesk', sans-serif", 700,
+{ bg: '#0F1115', surface: '#171A21', ink: '#E9EAEE', muted: '#9AA0AC', line: '#272B34', accent: '#7CE0B5', link: '#7CE0B5', invBg: '#7CE0B5', invFg: '#0F1115' },
+'Ink/ground 15.7:1 · muted 7.2:1 · link 11.9:1'),
+mk('03', 'Forest', 'Sage paper and deep green, with a serif display. Quiet and literary.', 'Fraunces 600', "'Fraunces', serif", 600,
+{ bg: '#EEF0E8', surface: '#F7F8F3', ink: '#14231B', muted: '#4F5E55', line: '#CDD4C6', accent: '#2F6B45', link: '#2F6B45', invBg: '#14231B', invFg: '#EEF0E8' },
+'Ink/ground 14.2:1 · muted 6.0:1 · link 5.5:1'),
+mk('04', 'Cobalt', 'Cool white and a strong blue. Crisp, technical, confident.', 'Space Grotesk 700', "'Space Grotesk', sans-serif", 700,
+{ bg: '#F2F5FA', surface: '#FFFFFF', ink: '#0E1A33', muted: '#4B5873', line: '#D3DBE8', accent: '#1F4FD8', link: '#1F4FD8', invBg: '#1F4FD8', invFg: '#FFFFFF' },
+'Ink/ground 15.8:1 · muted 6.5:1 · link 6.1:1'),
+mk('05', 'Clay', 'Dark warm brown and terracotta, with a serif. Evening, personal.', 'Fraunces 600', "'Fraunces', serif", 600,
+{ bg: '#1C1714', surface: '#26201C', ink: '#F2E8DC', muted: '#B3A596', line: '#3A302A', accent: '#E8895B', link: '#F0A07A', invBg: '#E8895B', invFg: '#1C1714' },
+'Ink/ground 14.7:1 · muted 7.4:1 · link 8.5:1')
+]
+};
+}
+}
+</script>
+</body>
+</html>
