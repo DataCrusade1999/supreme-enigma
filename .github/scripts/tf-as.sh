@@ -13,7 +13,7 @@ arn=$(bash "$(dirname "$0")/tf-stacks.sh" role "$stack" "$mode")
 token=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
   "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
 echo "::add-mask::$token" >&2
-creds=$(aws sts assume-role-with-web-identity --role-arn "$arn" \
+creds=$(aws sts assume-role-with-web-identity --region us-east-1 --role-arn "$arn" \
   --role-session-name "gha-${GITHUB_RUN_ID}-${stack//\//-}" \
   --web-identity-token "$token" --duration-seconds 3600 \
   --query Credentials --output json)
