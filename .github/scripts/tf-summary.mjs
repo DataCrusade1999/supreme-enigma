@@ -65,19 +65,23 @@ export function renderComment(stacks, title) {
   const head = `${MARKER}\n## ${title}\n\n`;
   const sep = (i) => (i ? "\n" : "");
   const bare = (stack) => section({ ...stack, text: "" }).length;
-  // A cut text can need a longer fence than the empty one; 16 per stack covers that.
-  let room = MAX_COMMENT - head.length - note.length - stacks.reduce((n, s, i) => n + sep(i).length + bare(s) + 16, 0);
+  // What a text adds to its section, fences included: a run of backticks in the
+  // text lengthens both fences, so the text's length alone undercounts.
+  const cost = (stack, text) => section({ ...stack, text }).length - bare(stack);
+  let room = MAX_COMMENT - head.length - note.length - stacks.reduce((n, s, i) => n + sep(i).length + bare(s), 0);
   let truncated = false;
   const texts = [];
-  const bySize = stacks.map((_, i) => i).sort((a, b) => stacks[a].text.length - stacks[b].text.length);
+  const bySize = stacks.map((_, i) => i).sort((a, b) => cost(stacks[a], stacks[a].text) - cost(stacks[b], stacks[b].text));
   for (const i of bySize) {
     let text = stacks[i].text;
-    if (text.length > room) {
-      text = text.slice(0, Math.max(room, 0));
+    // Cutting can shorten the fence, so cut again until the section fits.
+    while (text && cost(stacks[i], text) > room) {
+      const overhead = cost(stacks[i], text) - text.length;
+      text = text.slice(0, Math.max(0, Math.min(text.length - 1, room - overhead)));
       truncated = true;
     }
     texts[i] = text;
-    room -= section({ ...stacks[i], text }).length - bare(stacks[i]);
+    room -= cost(stacks[i], text);
   }
   const parts = stacks.map((stack, i) => sep(i) + section({ ...stack, text: texts[i] }));
   return head + parts.join("") + (truncated ? note : "");

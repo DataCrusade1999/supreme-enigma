@@ -147,3 +147,20 @@ test("comment: a large first plan leaves a later small plan whole", () => {
   assert.ok(md.indexOf("envs/dev") < md.indexOf("shared"), "stacks keep their order");
   assert.match(md, /truncated — the full plan is in the job summary/);
 });
+
+test("comment: a plan with a long backtick run is budgeted by its rendered size, fences included", () => {
+  const md = renderComment(
+    [
+      { name: "envs/dev", plan: plan(rc("a", ["update"])), text: "z".repeat(200000) },
+      { name: "shared", plan: plan(rc("b", ["update"])), text: "`".repeat(30000) },
+    ],
+    "t",
+  );
+  assert.ok(md.length <= MAX_COMMENT, `length ${md.length}`);
+  assert.equal((md.match(/<details>/g) ?? []).length, (md.match(/<\/details>/g) ?? []).length);
+});
+
+test("comment: one plan of backticks alone stays under GitHub's limit", () => {
+  const md = renderComment([{ name: "shared", plan: plan(rc("a", ["update"])), text: "`".repeat(40000) }], "t");
+  assert.ok(md.length <= MAX_COMMENT, `length ${md.length}`);
+});
