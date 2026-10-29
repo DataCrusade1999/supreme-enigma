@@ -62,7 +62,9 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 
   `ImageNotFoundException` means the image is gone: follow
   [stale-lambda-recovery.md](stale-lambda-recovery.md#fallback--workflow_dispatch)
-  to rebuild it.
+  to rebuild it. If `get-function` itself fails with
+  `ResourceNotFoundException`, the function is gone too, and the drift plan
+  shows it as `will be created`; see the Fix section.
 
 - **The alert email subscription.** A plan reports `No changes` for an
   unconfirmed or deleted subscription
@@ -104,6 +106,20 @@ Read the plan first. If it deletes, replaces or forgets anything, the apply
 stops at the destroy guard; rerun with `-f confirm=apply-destroys` only if the
 plan is what you expect. When CI cannot run, apply locally with
 [infra-apply-teardown.md](infra-apply-teardown.md).
+
+**If the Lambda function is gone**, the env stack recreates it from the fixed
+`bootstrap_image_tag` in `infra/envs/main/main.tf` or
+`infra/nonprod/<env>/env/main.tf`. ECR keeps only the latest image per
+branch, so that tag is usually gone too, and the apply fails. In that order:
+
+1. Push an image. `gh workflow run deploy.yml --ref <branch>` builds and pushes
+   it, then skips `update-function-code` because the function does not exist
+   (on `main` the dispatch also cuts a release; see
+   [stale-lambda-recovery.md](stale-lambda-recovery.md#fallback--workflow_dispatch)).
+2. Set `bootstrap_image_tag` to the tag it pushed (`aws ecr describe-images
+   --repository-name bgm-looper-lambda`). Land the change on the branch,
+   through the usual promotion for `stage` and `main`; the push applies the
+   env stack.
 
 Recreating the identity source needs no Vercel redeploy: the policy store ID in
 `AVP_POLICY_STORE_ID` stays the same. A recreated policy store, Cognito pool or
