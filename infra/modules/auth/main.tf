@@ -1,8 +1,8 @@
 # Sign-in and access control for one AWS account: the Cognito pool behind managed
 # login on auth_domain, and the Verified Permissions store that decides every gated
-# request. Production's `infra/shared` calls it, and so does each nonprod account.
+# request. Production's `infra/prod/account` calls it, and so does each nonprod account.
 #
-# No data sources, on purpose: shared's call depends_on the apex CAA record, and a
+# No data sources, on purpose: prod/account's call depends_on the apex CAA record, and a
 # module-level depends_on defers every data source inside to apply time. The
 # account ID and region come in as inputs instead.
 
@@ -12,7 +12,7 @@
 resource "aws_cognito_user_pool" "owner" {
   name           = "${var.project_name}-owner"
   user_pool_tier = "ESSENTIALS"
-  # No deletion_protection: infra/shared must stay destroyable by the kill-switch
+  # No deletion_protection: infra/prod/account must stay destroyable by the kill-switch
   # `terraform destroy`, and a protected pool fails that destroy partway.
 
   username_attributes      = ["email"]
@@ -114,7 +114,7 @@ resource "vercel_dns_record" "auth_acm" {
 }
 
 # ACM also needs the apex CAA record that allows amazon.com. It lives outside this
-# module, in infra/shared, whose call depends_on it; the nonprod accounts use the
+# module, in infra/prod/account, whose call depends_on it; the nonprod accounts use the
 # same live record.
 resource "aws_acm_certificate_validation" "auth" {
   certificate_arn         = aws_acm_certificate.auth.arn
@@ -346,7 +346,7 @@ resource "aws_cognito_user_in_group" "owner" {
 
 # One row per (user, metered action) grant, keyed by the pool's sub, so it lives in
 # the same account as the pool. TTL removes a row 30 days after it expires.
-# infra/modules/nonprod-env sets ACCESS_GRANTS_TABLE to this name as a literal.
+# infra/modules/nonprod-app sets ACCESS_GRANTS_TABLE to this name as a literal.
 resource "aws_dynamodb_table" "access_grants" {
   name         = "site-access-grants"
   billing_mode = "PAY_PER_REQUEST"

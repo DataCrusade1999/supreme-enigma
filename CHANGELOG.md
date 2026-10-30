@@ -15,6 +15,16 @@ git tags / GitHub Releases cut automatically by the `release` job in
   expiry. The hub shows each friend their remaining uses. Grants live in a
   `site-access-grants` DynamoDB table in each account (#300).
 
+### Changed
+
+- Terraform stacks are laid out by account: `infra/shared` is now
+  `infra/prod/account`, `infra/envs/main` is `infra/prod/app`, and
+  `infra/nonprod/<env>/{account,env}` is `infra/<env>/{account,app}`. The
+  modules `environment` and `nonprod-env` are now `app` and `nonprod-app`, and
+  `shared.tf` is split into `ecr.tf`, `oidc-roles.tf`, `vercel-project.tf`,
+  `budget.tf` and `locals.tf`. No resource changes; state keys keep their old
+  names (#477).
+
 ## [1.9.0] - 2026-10-17
 
 ### Added

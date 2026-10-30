@@ -77,8 +77,8 @@ API routes only orchestrate. S3 objects expire after 1 day.
 
 **Infrastructure.** The whole stack (S3, ECR, Lambda, IAM, Cognito, the
 Vercel project itself) is Terraform, with each branch in its own AWS account.
-`terraform destroy` across `infra/nonprod/*/{env,account}`, `infra/envs/main`
-and then `infra/shared` is the kill switch: it removes everything that can
+`terraform destroy` across `infra/*/{env,account}`, `infra/prod/app`
+and then `infra/prod/account` is the kill switch: it removes everything that can
 incur AWS cost.
 
 Full rationale and trade-offs live in `docs/superpowers/specs/` — one design
@@ -164,9 +164,9 @@ needs them.
 
 Requires Terraform ≥1.10, three AWS accounts (production, dev, stage), a
 Vercel account + API token, and a gitignored `terraform.tfvars` in each of
-`infra/shared`, `infra/envs/main` and `infra/nonprod/{dev,stage}/{account,env}`.
+`infra/prod/account`, `infra/prod/app` and `infra/{dev,stage}/{account,app}`.
 Copy each directory's `terraform.tfvars.example` across and fill it in —
-`infra/shared` needs all seven inputs (`vercel_api_token`, `app_password`,
+`infra/prod/account` needs all seven inputs (`vercel_api_token`, `app_password`,
 `github_repo`, `alert_email`, `openrouter_api_key`, `google_client_id`,
 `google_client_secret`), each nonprod `account` stack `vercel_api_token`,
 `alert_email`, `google_client_id` and `google_client_secret`, and the env
@@ -191,12 +191,12 @@ order in their own accounts, with the steps in
 2. **ECR repo only** — the Lambda resource can't be created before an image
    exists:
    ```bash
-   cd infra/shared
+   cd infra/prod/account
    terraform init
    terraform apply -target=aws_ecr_repository.looper -var-file=terraform.tfvars
    ```
 
-3. **The rest of `infra/shared`** — the Lambda execution role, the two OIDC
+3. **The rest of `infra/prod/account`** — the Lambda execution role, the two OIDC
    providers and their roles, and the Vercel project:
    ```bash
    terraform apply -var-file=terraform.tfvars
@@ -211,24 +211,24 @@ order in their own accounts, with the steps in
 5. **Apply the environment stack** — main's Lambda function, bucket and env
    vars, now that the image exists:
    ```bash
-   cd ../envs/main && terraform init && terraform apply -var-file=terraform.tfvars
+   cd ../prod/app && terraform init && terraform apply -var-file=terraform.tfvars
    ```
    Vercel's git integration (created in step 3) deploys the app on every
    push from then on, independently of GitHub Actions.
 
 Before a from-scratch recreate, update `bootstrap_image_tag` in
-`infra/envs/main/main.tf` and `infra/nonprod/<env>/env/main.tf` to a tag that
+`infra/prod/app/main.tf` and `infra/<env>/app/main.tf` to a tag that
 branch's CI has actually pushed — see `.claude/rules/infra.md`.
 
 ## Tearing everything down (kill switch)
 
-In each account, the env stack and then its base stack, with production's
-`shared` last (it owns the Vercel project):
+In each account, the app stack and then its base stack, with production's
+`prod/account` last (it owns the Vercel project):
 
 ```bash
-for s in nonprod/dev/env:personal-dev nonprod/dev/account:personal-dev \
-         nonprod/stage/env:personal-stage nonprod/stage/account:personal-stage \
-         envs/main:personal shared:personal; do
+for s in dev/app:personal-dev dev/account:personal-dev \
+         stage/app:personal-stage stage/account:personal-stage \
+         prod/app:personal prod/account:personal; do
   d=${s%%:*}; p=${s##*:}
   (cd infra/$d && AWS_PROFILE=$p terraform destroy -var-file=terraform.tfvars)
 done

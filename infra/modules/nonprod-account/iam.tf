@@ -14,7 +14,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 resource "aws_iam_openid_connect_provider" "vercel" {
-  # Team issuer mode, set on vercel_project.looper in infra/shared — the issuer carries
+  # Team issuer mode, set on vercel_project.looper in infra/prod/account — the issuer carries
   # the account slug, so the global-mode URL (no slug) would not match the iss claim.
   url            = "https://oidc.vercel.com/${var.vercel_team_slug}"
   client_id_list = ["https://vercel.com/${var.vercel_team_slug}"]
@@ -120,7 +120,7 @@ resource "aws_iam_role" "ci_deploy" {
   })
 }
 
-# The same shape as production's ci_deploy policy in infra/shared, scoped to this
+# The same shape as production's ci_deploy policy in infra/prod/account, scoped to this
 # account's repo and this environment's function.
 resource "aws_iam_role_policy" "ci_deploy" {
   name = "${var.project_name}-ci-deploy-policy"
@@ -162,7 +162,7 @@ resource "aws_iam_role_policy" "ci_deploy" {
 # Vercel's subject has only production and preview, so dev's and stage's roles both
 # trust the preview subject; they are kept apart only by which role ARN each branch's
 # APP_AWS_ROLE_ARN names (per-env IAM spec §6, accepted in the nonprod-accounts spec §2).
-# Its bucket, resume, News Desk and Lambda grants belong to the env stack beside this
+# Its bucket, resume, News Desk and Lambda grants belong to the app stack beside this
 # one, which looks the role up by name: keep the name.
 resource "aws_iam_role" "vercel_preview" {
   name = "${var.project_name}-vercel-preview"

@@ -55,7 +55,7 @@ show a successful `/api/looper/upload-url` and nothing else.
   not match what was signed. `MAX_AUDIO_UPLOAD_BYTES` is 50 MB and is signed
   into the URL, so an oversized file is refused by S3 rather than by the app.
 - **CORS error in the browser console** — the bucket's CORS configuration.
-  It is Terraform-managed per bucket in `infra/modules/environment/main.tf`; check a
+  It is Terraform-managed per bucket in `infra/modules/app/main.tf`; check a
   recent apply did not drop it.
 
 ### `processing failed` (500 from `/api/looper/process`)
@@ -79,12 +79,12 @@ group that does not exist at all means the function has never been invoked.)
 What to look for:
 
 - **`Task timed out after 60.00 seconds`** — the function's timeout. A long
-  or pathological input. Raising `timeout` in `infra/modules/environment/main.tf` is a
+  or pathological input. Raising `timeout` in `infra/modules/app/main.tf` is a
   deliberate cost decision, not a quick fix.
 - **`Runtime exited: signal: killed` / OOM** — `memory_size` is 1024 MB.
   Same consideration.
 - **`AccessDenied` on S3** — note which side threw it, because the two
-  principals are scoped differently, both in `infra/modules/environment/main.tf`.
+  principals are scoped differently, both in `infra/modules/app/main.tf`.
   Each environment's **Lambda exec role** (`bgm-looper-lambda-exec-<env>`) has
   bucket-wide `GetObject`/`PutObject` on **its own bucket only**, so a prefix
   is never its problem, but a payload naming another environment's bucket is:
@@ -93,7 +93,7 @@ What to look for:
   wrong. The **Vercel roles** are the prefix-scoped ones: `uploads/*`,
   `outputs/*` and `news-desk/*` on the environment's own bucket (policy
   `bgm-looper-vercel-<env>`), plus `resume/*` on that same bucket (from
-  `infra/shared` for main, `infra/modules/nonprod-env` for dev and stage).
+  `infra/prod/account` for main, `infra/modules/nonprod-app` for dev and stage).
   Production assumes `bgm-looper-vercel` in 223376380711; dev and stage
   assume `bgm-looper-vercel-preview` in their own accounts, so a deployment
   whose `APP_AWS_ROLE_ARN` names another account's role fails to assume it.
@@ -128,7 +128,7 @@ Two different causes look the same from the browser:
 A missing key returns `NoSuchKey` rather than 403 in every environment,
 because each Vercel role holds `s3:ListBucket` on its own bucket (granted for
 `objectExists()`'s sake — see the `ResumeHeadObjectNotFound` statement in
-`infra/shared/shared.tf` and `infra/modules/nonprod-env/main.tf`). An expired
+`infra/prod/account/oidc-roles.tf` and `infra/modules/nonprod-app/main.tf`). An expired
 signature still returns 403. Discriminate server-side rather than guessing:
 
 ```bash

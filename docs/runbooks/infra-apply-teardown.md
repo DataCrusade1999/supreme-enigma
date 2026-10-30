@@ -2,7 +2,7 @@
 
 ## When to use this
 
-Changing anything under `infra/shared/`, `infra/envs/`, `infra/nonprod/` or `infra/modules/`, verifying that real infrastructure
+Changing anything under `infra/prod/`, `infra/dev/`, `infra/stage/` or `infra/modules/`, verifying that real infrastructure
 matches the config, or tearing the project down.
 
 Per-resource detail and the reasoning behind each quirk is in
@@ -13,21 +13,21 @@ Per-resource detail and the reasoning behind each quirk is in
 - Shared prerequisites in [README.md](README.md#shared-prerequisites).
 - Six stacks in three accounts, each with its own state and its own gitignored
   `terraform.tfvars` (copy that directory's `terraform.tfvars.example`):
-  - Production, 223376380711, profile `personal`: `infra/shared` (the
+  - Production, 223376380711, profile `personal`: `infra/prod/account` (the
     one-of-each resources, applied from `dev` only; seven required variables)
-    and `infra/envs/main` (main's bucket, Lambda, alarm and Vercel env vars;
+    and `infra/prod/app` (main's bucket, Lambda, alarm and Vercel env vars;
     only `vercel_api_token`).
   - Dev, 624586968135, profile `personal-dev`, and stage, 792682047320,
-    profile `personal-stage`: `infra/nonprod/<env>/account` (OIDC, CI roles,
+    profile `personal-stage`: `infra/<env>/account` (OIDC, CI roles,
     ECR, SNS, SES, Cognito and Verified Permissions; `vercel_api_token`,
     `alert_email`, `google_client_id`, `google_client_secret`) and
-    `infra/nonprod/<env>/env` (the bucket, Lambda, alarm, resume grant and
+    `infra/<env>/app` (the bucket, Lambda, alarm, resume grant and
     preview Vercel vars; only `vercel_api_token`). Each nonprod account keeps
     its state in its own `bgm-looper-tf-state-<account id>`.
 
   A fresh clone fails with `No value for required variable` until they are set.
-- Export the stack's profile first: `AWS_PROFILE=personal` for `shared` and
-  `envs/main`, `personal-dev` or `personal-stage` for a nonprod stack. No
+- Export the stack's profile first: `AWS_PROFILE=personal` for `prod/account` and
+  `prod/app`, `personal-dev` or `personal-stage` for a nonprod stack. No
   backend block names a profile and `var.aws_profile` defaults to null, so
   Terraform uses whatever the environment provides. Every provider sets
   `allowed_account_ids`, so the wrong profile fails with
@@ -37,9 +37,9 @@ Per-resource detail and the reasoning behind each quirk is in
 
 The `Terraform` workflow (`.github/workflows/terraform.yml`) lints and plans
 every PR that touches `infra/`, and posts the plans of the base branch's stacks
-as one PR comment (`.github/scripts/tf-stacks.sh plan`): `shared` and
-`nonprod/dev/*` on a PR into `dev`, `nonprod/stage/*` into `stage`,
-`envs/main` into `main`. Read it before merging: `No changes`
+as one PR comment (`.github/scripts/tf-stacks.sh plan`): `prod/account` and
+`dev/*` on a PR into `dev`, `stage/*` into `stage`,
+`prod/app` into `main`. Read it before merging: `No changes`
 for a refactor, or exactly the intended diff, and no `⚠ destroys or replaces`
 or `⚠ forgets` line you did not intend.
 
@@ -47,9 +47,9 @@ When the workflow cannot run, plan the stacks locally against real state, each
 under its own account's profile:
 
 ```bash
-for s in shared:personal envs/main:personal \
-         nonprod/dev/account:personal-dev nonprod/dev/env:personal-dev \
-         nonprod/stage/account:personal-stage nonprod/stage/env:personal-stage; do
+for s in prod/account:personal prod/app:personal \
+         dev/account:personal-dev dev/app:personal-dev \
+         stage/account:personal-stage stage/app:personal-stage; do
   d=${s%%:*}; p=${s##*:}
   (cd infra/$d && AWS_PROFILE=$p terraform init -input=false && AWS_PROFILE=$p terraform plan -var-file=terraform.tfvars)
 done
@@ -70,20 +70,20 @@ Two things `plan` will never tell you:
 
 ## Apply
 
-Merging applies. A push to `dev` applies `shared`, then `nonprod/dev/account`,
-then `nonprod/dev/env`; a push to `stage` applies `nonprod/stage/account` then
-`nonprod/stage/env`; a push to `main` applies `envs/main`. `shared` is applied
-from `dev` only, so a `shared` change reaches production when it merges to
+Merging applies. A push to `dev` applies `prod/account`, then `dev/account`,
+then `dev/app`; a push to `stage` applies `stage/account` then
+`stage/app`; a push to `main` applies `prod/app`. `prod/account` is applied
+from `dev` only, so a `prod/account` change reaches production when it merges to
 `dev`. A plan that deletes, replaces or forgets anything stops before applying; once
 you have read it, apply it from the branch that owns the stack:
 
 ```bash
-gh workflow run terraform.yml --ref dev -f stack=nonprod/dev/env -f confirm=apply-destroys
+gh workflow run terraform.yml --ref dev -f stack=dev/app -f confirm=apply-destroys
 ```
 
 A nonprod stack applies as its own account's `bgm-looper-tf-apply`
-(`AdministratorAccess`, scoped by the account boundary), `shared` and
-`envs/main` as `bgm-looper-tf-apply-prod`. Any fix to a broken role or
+(`AdministratorAccess`, scoped by the account boundary), `prod/account` and
+`prod/app` as `bgm-looper-tf-apply-prod`. Any fix to a broken role or
 workflow is a local apply.
 
 ### Local apply (break-glass)
@@ -91,14 +91,14 @@ workflow is a local apply.
 From the directory of the stack that changed, under that stack's profile:
 
 ```bash
-cd infra/nonprod/dev/env   # or infra/shared, infra/envs/main, infra/nonprod/<env>/account
+cd infra/dev/app   # or infra/prod/account, infra/prod/app, infra/<env>/account
 AWS_PROFILE=personal-dev terraform apply -var-file=terraform.tfvars
 ```
 
 When a change touches both stacks of one account, apply the base first:
-`infra/shared` before `infra/envs/main` (the env stack looks up the Vercel
+`infra/prod/account` before `infra/prod/app` (the app stack looks up the Vercel
 role, ECR repo, SNS topic and Vercel project by name), and
-`infra/nonprod/<env>/account` before `infra/nonprod/<env>/env` (which reads
+`infra/<env>/account` before `infra/<env>/app` (which reads
 the account stack's outputs from the same account's state).
 
 Re-read the plan output in the confirmation prompt rather than typing `yes`
@@ -143,21 +143,21 @@ Check those topics the same way, with that account's ARN
 
 If `confirmed` is `"0"`, click **Resubscribe** in the deactivated notification
 email — that revives the same subscription ARN and leaves Terraform state
-truthful. Only if that is impossible, from `infra/shared`:
+truthful. Only if that is impossible, from `infra/prod/account`:
 `terraform apply -replace=aws_sns_topic_subscription.budget_alerts_email`.
 To prove delivery end to end rather than infer it, `aws sns publish` one
 message; it costs nothing.
 
 ## Kill switch: full teardown
 
-In each account, the env stack first, then its base stack. Production's
-`shared` goes last, because it owns the Vercel project that the nonprod env
+In each account, the app stack first, then its base stack. Production's
+`prod/account` goes last, because it owns the Vercel project that the nonprod env
 stacks' Vercel variables belong to:
 
 ```bash
-for s in nonprod/dev/env:personal-dev nonprod/dev/account:personal-dev \
-         nonprod/stage/env:personal-stage nonprod/stage/account:personal-stage \
-         envs/main:personal shared:personal; do
+for s in dev/app:personal-dev dev/account:personal-dev \
+         stage/app:personal-stage stage/account:personal-stage \
+         prod/app:personal prod/account:personal; do
   d=${s%%:*}; p=${s##*:}
   (cd infra/$d && AWS_PROFILE=$p terraform destroy -var-file=terraform.tfvars)
 done
@@ -217,23 +217,23 @@ Dev's and stage's buckets also hold their own `resume/current.*`, published
 from those previews; back them up the same way if they matter.
 
 *(The `BucketNotEmpty` failure is read from the absence of `force_destroy` in
-`infra/modules/environment/main.tf` and S3's documented behaviour; the destroy has
+`infra/modules/app/main.tf` and S3's documented behaviour; the destroy has
 not been run to confirm it. The empty-first commands are standard but
 likewise unexercised here.)*
 
 ### Recovery: applying from scratch afterwards
 
 A bare `terraform apply` will not work. The order:
-1. Production: `infra/shared` with `-target=aws_ecr_repository.looper`, then
-   the rest of `infra/shared`.
-2. Dev and stage: `infra/nonprod/<env>/account`, locally, in two passes:
+1. Production: `infra/prod/account` with `-target=aws_ecr_repository.looper`, then
+   the rest of `infra/prod/account`.
+2. Dev and stage: `infra/<env>/account`, locally, in two passes:
    first `-var webauthn_enabled=false`, then a plain apply (the
    `RelyingPartyId` failure in `.claude/rules/infra.md`).
 3. Push each branch so CI builds and pushes an image into that account's ECR.
-4. `infra/envs/main`, `infra/nonprod/dev/env`, `infra/nonprod/stage/env`.
+4. `infra/prod/app`, `infra/dev/app`, `infra/stage/app`.
 
-The step that catches people is `bootstrap_image_tag` in `infra/envs/main/main.tf`
-and `infra/nonprod/<env>/env/main.tf`. It points at a tag from the stack's
+The step that catches people is `bootstrap_image_tag` in `infra/prod/app/main.tf`
+and `infra/<env>/app/main.tf`. It points at a tag from the stack's
 first apply that may no longer exist, and because of `ignore_changes` it is
 only read at creation time. Update each one to a tag CI has actually pushed
 before the final apply:

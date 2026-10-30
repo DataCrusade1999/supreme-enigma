@@ -55,8 +55,8 @@ resource "aws_s3_bucket_public_access_block" "tf_state" {
 }
 
 # Account-wide backstop, so a future bucket cannot be created publicly accessible
-# by accident. It lives here rather than in infra/shared deliberately: `terraform
-# destroy` of infra/envs/* and infra/shared is the documented kill switch, and an
+# by accident. It lives here rather than in infra/prod/account deliberately: `terraform
+# destroy` of every infra/<env>/* stack is the documented kill switch, and an
 # account-wide guardrail must outlive it — otherwise tearing the app down would also remove the
 # protection for every bucket added afterwards. Per-bucket blocks already cover
 # every bucket that exists today, so this is a guard against future mistakes.
