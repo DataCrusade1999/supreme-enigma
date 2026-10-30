@@ -23,6 +23,7 @@ describe("COMMANDS", () => {
       "open-money-planner",
       "open-news-desk",
       "open-content-editor",
+      "open-access-admin",
       "theme",
     ]);
   });

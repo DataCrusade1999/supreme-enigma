@@ -97,6 +97,14 @@ export const TOOLS: Tool[] = [
       "Write and edit blog posts and newsletter issues. Commits straight to the repo through Keystatic.",
     pageAction: "keystatic:use",
   },
+  {
+    id: "access-admin",
+    href: "/tools/access-admin",
+    name: "Access",
+    kind: "Site",
+    blurb: "Approve people who asked for access, and grant or revoke the actions that cost money.",
+    pageAction: "access:manage",
+  },
 ];
 
 export type RouteAction = { tool: ToolId; action: ActionId; consumes: boolean };
@@ -135,6 +143,8 @@ const ROUTE_ACTIONS: Rule[] = [
   { methods: PAGE, path: /^\/tools\/newsletter-admin$/, tool: "newsletter-admin", action: "view" },
   { methods: ["POST"], path: /^\/api\/newsletter\/send$/, tool: "newsletter-admin", action: "newsletter:send" },
   { methods: "*", path: /^\/(api\/)?keystatic(\/.*)?$/, tool: "keystatic", action: "keystatic:use" },
+  { methods: PAGE, path: /^\/tools\/access-admin$/, tool: "access-admin", action: "access:manage" },
+  { methods: "*", path: /^\/api\/access(\/.*)?$/, tool: "access-admin", action: "access:manage" },
 ];
 
 export function actionFor(method: string, pathname: string): RouteAction | null {
@@ -156,6 +166,7 @@ const GATED_PREFIXES = [
   "/api/resume",
   "/api/newsletter",
   "/api/news-desk",
+  "/api/access",
   "/keystatic",
   "/api/keystatic",
 ];
