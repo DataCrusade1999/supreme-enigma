@@ -217,7 +217,7 @@ Dev's and stage's buckets also hold their own `resume/current.*`, published
 from those previews; back them up the same way if they matter.
 
 *(The `BucketNotEmpty` failure is read from the absence of `force_destroy` in
-`infra/modules/app/main.tf` and S3's documented behaviour; the destroy has
+`infra/modules/app/bucket.tf` and S3's documented behaviour; the destroy has
 not been run to confirm it. The empty-first commands are standard but
 likewise unexercised here.)*
 

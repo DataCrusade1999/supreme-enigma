@@ -1,4 +1,4 @@
-# --- IAM: each Lambda's exec role is per environment, in infra/modules/environment. The
+# --- IAM: each Lambda's exec role is per environment, in infra/modules/app. The
 #     Vercel runtime and CI deploy identities are federated roles, further down beside
 #     their OIDC providers — there are no IAM users and no long-lived access keys in
 #     this project ---
@@ -120,7 +120,7 @@ resource "aws_iam_role" "vercel" {
 # identity, not the permissions. ResumeHeadObjectNotFound in particular is load-bearing;
 # its comment explains why. The s3:DeleteObject grant that came across with it is gone:
 # nothing under web/ issues a DeleteObjectCommand, and deleting drafts is the job of the
-# resume/drafts/ lifecycle rule in infra/modules/environment, not the app's.
+# resume/drafts/ lifecycle rule in infra/modules/app, not the app's.
 resource "aws_iam_role_policy" "vercel_resume" {
   name = "${var.project_name}-vercel-resume"
   role = aws_iam_role.vercel.id

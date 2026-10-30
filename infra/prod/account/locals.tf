@@ -24,7 +24,7 @@ locals {
   # explicit teamId it answers 403 for ashutosh-pandey.com.
   vercel_team_id = "team_bSWug4zpM7jfChbYKg7G4PMI"
 
-  # Per-environment names, built from the same rule as infra/modules/environment so
+  # Per-environment names, built from the same rule as infra/modules/app so
   # this stack never reads an env stack's state. Only main is in this account: dev
   # and stage live in their own (nonprod-accounts spec).
   env_suffix = { main = "" }
