@@ -58,5 +58,10 @@
     "typescript": "~5.9.3",
     "vite": "^8.3.4",
     "vitest": "^5.0.4"
+  },
+  "overrides": {
+    "@vercel/cli-config": {
+      "zod": "$zod"
+    }
   }
 }
