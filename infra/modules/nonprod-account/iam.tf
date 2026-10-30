@@ -184,7 +184,8 @@ resource "aws_iam_role" "vercel_preview" {
 }
 
 # Verified Permissions decides every gated request from the Cedar files under
-# infra/modules/auth/cedar/; this lets the app ask this account's store.
+# infra/modules/auth/cedar/; this lets the app ask this account's store, and lets the
+# Access page read and write grants and manage the pool's users and groups.
 resource "aws_iam_role_policy" "vercel_preview_access" {
   name = "${var.project_name}-vercel-preview-access"
   role = aws_iam_role.vercel_preview.id
@@ -196,6 +197,25 @@ resource "aws_iam_role_policy" "vercel_preview_access" {
         Effect   = "Allow"
         Action   = ["verifiedpermissions:IsAuthorizedWithToken"]
         Resource = [module.auth.policy_store_arn]
+      },
+      {
+        Sid      = "AccessGrants"
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query"]
+        Resource = [module.auth.access_grants_table_arn]
+      },
+      {
+        Sid    = "ManageAccess"
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:ListUsers",
+          "cognito-idp:AdminListGroupsForUser",
+          "cognito-idp:AdminAddUserToGroup",
+          "cognito-idp:AdminRemoveUserFromGroup",
+          "cognito-idp:AdminUserGlobalSignOut",
+          "cognito-idp:AdminDeleteUser",
+        ]
+        Resource = [module.auth.user_pool_arn]
       },
     ]
   })

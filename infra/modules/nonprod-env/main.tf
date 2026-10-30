@@ -96,6 +96,18 @@ resource "vercel_project_environment_variable" "avp_policy_store_id" {
   sensitive  = false
 }
 
+# A literal, not an output of the account stack: this stack reads that one's applied
+# state, so a new output would fail the plan until the account stack had applied.
+# The table is aws_dynamodb_table.access_grants in infra/modules/auth.
+resource "vercel_project_environment_variable" "access_grants_table" {
+  project_id = data.vercel_project.looper.id
+  key        = "ACCESS_GRANTS_TABLE"
+  value      = "site-access-grants"
+  target     = ["preview"]
+  git_branch = var.vercel_git_branch
+  sensitive  = false
+}
+
 resource "vercel_project_environment_variable" "cognito_domain" {
   project_id = data.vercel_project.looper.id
   key        = "COGNITO_DOMAIN"

@@ -343,3 +343,28 @@ resource "aws_cognito_user_in_group" "owner" {
   group_name   = aws_cognito_user_group.owner.name
   username     = aws_cognito_user.owner.username
 }
+
+# One row per (user, metered action) grant, keyed by the pool's sub, so it lives in
+# the same account as the pool. TTL removes a row 30 days after it expires.
+# infra/modules/nonprod-env sets ACCESS_GRANTS_TABLE to this name as a literal.
+resource "aws_dynamodb_table" "access_grants" {
+  name         = "site-access-grants"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "sub"
+  range_key    = "action"
+
+  attribute {
+    name = "sub"
+    type = "S"
+  }
+
+  attribute {
+    name = "action"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+}
