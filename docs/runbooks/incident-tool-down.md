@@ -55,7 +55,7 @@ show a successful `/api/looper/upload-url` and nothing else.
   not match what was signed. `MAX_AUDIO_UPLOAD_BYTES` is 50 MB and is signed
   into the URL, so an oversized file is refused by S3 rather than by the app.
 - **CORS error in the browser console** — the bucket's CORS configuration.
-  It is Terraform-managed per bucket in `infra/modules/app/main.tf`; check a
+  It is Terraform-managed per bucket in `infra/modules/app/bucket.tf`; check a
   recent apply did not drop it.
 
 ### `processing failed` (500 from `/api/looper/process`)
@@ -79,12 +79,12 @@ group that does not exist at all means the function has never been invoked.)
 What to look for:
 
 - **`Task timed out after 60.00 seconds`** — the function's timeout. A long
-  or pathological input. Raising `timeout` in `infra/modules/app/main.tf` is a
+  or pathological input. Raising `timeout` in `infra/modules/app/lambda.tf` is a
   deliberate cost decision, not a quick fix.
 - **`Runtime exited: signal: killed` / OOM** — `memory_size` is 1024 MB.
   Same consideration.
 - **`AccessDenied` on S3** — note which side threw it, because the two
-  principals are scoped differently, both in `infra/modules/app/main.tf`.
+  principals are scoped differently, in `infra/modules/app/lambda.tf` and `vercel.tf`.
   Each environment's **Lambda exec role** (`bgm-looper-lambda-exec-<env>`) has
   bucket-wide `GetObject`/`PutObject` on **its own bucket only**, so a prefix
   is never its problem, but a payload naming another environment's bucket is:

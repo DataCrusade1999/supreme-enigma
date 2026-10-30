@@ -1,4 +1,4 @@
-# --- ECR (main's images, tagged main-<sha> — see infra/modules/environment's Lambda function
+# --- ECR (main's images, tagged main-<sha> — see infra/modules/app's Lambda function
 #     and .github/workflows/deploy.yml. Dev and stage push to their own accounts' repos) ---
 
 resource "aws_ecr_repository" "looper" {

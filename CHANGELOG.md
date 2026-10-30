@@ -24,6 +24,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
   `shared.tf` is split into `ecr.tf`, `oidc-roles.tf`, `vercel-project.tf`,
   `budget.tf` and `locals.tf`. No resource changes; state keys keep their old
   names (#477).
+- The `nonprod-account` and `app` Terraform modules are split into files by
+  purpose, using production's names where the job is the same: `ecr.tf`,
+  `alerts.tf`, `auth.tf`, `dns.tf`, `oidc-roles.tf` and
+  `terraform-ci-roles.tf` in `nonprod-account`; `bucket.tf`, `lambda.tf`,
+  `alarm.tf` and `vercel.tf` in `app`. No resource changes (#487).
 
 ### Security
 
