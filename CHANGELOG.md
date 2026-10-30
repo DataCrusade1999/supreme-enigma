@@ -25,6 +25,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
   `budget.tf` and `locals.tf`. No resource changes; state keys keep their old
   names (#477).
 
+### Security
+
+- `undici` 8.12.3 (from 8.11.2, via `jsdom`, dev only) and an npm override so
+  `@vercel/cli-config` uses the app's `zod` 4.6.7 instead of its pinned 4.1.11.
+  Clears six Dependabot advisories; neither copy ran in production (#479).
+
 ## [1.9.0] - 2026-10-17
 
 ### Added
