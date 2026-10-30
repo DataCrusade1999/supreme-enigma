@@ -200,11 +200,15 @@ jobs:
         run: |
           mkdir -p "$TF_PLUGIN_CACHE_DIR" plans
           drift=0
-          for pair in $(bash dev/.github/scripts/tf-stacks.sh drift); do
-            branch=${pair%%:*}; stack=${pair#*:}
+          # Each branch's own routing names its own stacks, so a stack renamed on dev but
+          # not yet promoted is still found under its old path on stage and main (#477).
+          for branch in dev main stage; do
+          for pair in $(bash $branch/.github/scripts/tf-stacks.sh drift); do
+            [ "${pair%%:*}" = "$branch" ] || continue
+            stack=${pair#*:}
             mkdir -p "plans/$stack"
             echo "::group::$stack ($branch)"
-            tf="bash dev/.github/scripts/tf-as.sh $stack plan terraform -chdir=$branch/infra/$stack"
+            tf="bash $branch/.github/scripts/tf-as.sh $stack plan terraform -chdir=$branch/infra/$stack"
             $tf init -lockfile=readonly
             set +e
             $tf plan -lock=false -detailed-exitcode -out=tfplan
@@ -215,6 +219,7 @@ jobs:
             [ $rc -eq 2 ] && drift=1
             $tf show -json tfplan > "plans/$stack/plan.json"
             $tf show -no-color tfplan > "plans/$stack/plan.txt"
+          done
           done
           echo "drift=$drift" >> "$GITHUB_ENV"
       - name: File or close the drift issue
