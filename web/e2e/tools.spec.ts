@@ -41,6 +41,7 @@ test("the hub links to every gated tool", async ({ page, baseURL }) => {
     ["Money Planner", "/tools/money-planner"],
     ["News Desk", "/tools/news-desk"],
     ["Content editor", "/keystatic"],
+    ["Access", "/tools/access-admin"],
   ]) {
     await expect(page.getByRole("link", { name: new RegExp(name) })).toHaveAttribute(
       "href",

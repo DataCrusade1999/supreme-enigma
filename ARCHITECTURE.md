@@ -83,7 +83,7 @@ own resume.
     subject, so a fork PR cannot assume it.
   - The Terraform plan and apply roles used by `terraform.yml`.
 
-**Shared:** one Vercel project in production's `infra/shared`, with each
+**Shared:** one Vercel project in production's `infra/prod/account`, with each
 environment's env vars scoped by target and `git_branch`.
 
 ## Auth
@@ -121,17 +121,17 @@ Actions.
 
 `infra/bootstrap` (one-time per account, just the TF state S3 bucket, never
 destroyed), then six stacks with one state each:
-- production: `infra/shared` (ECR, IAM, Cognito, the Vercel project and the
-  other one-of-each resources, applied from `dev` only) and `infra/envs/main`
+- production: `infra/prod/account` (ECR, IAM, Cognito, the Vercel project and the
+  other one-of-each resources, applied from `dev` only) and `infra/prod/app`
   (main's bucket, Lambda, alarm and Vercel env vars, through
-  `infra/modules/environment`)
-- dev and stage: `infra/nonprod/<env>/account` (through
+  `infra/modules/app`)
+- dev and stage: `infra/<env>/account` (through
   `infra/modules/nonprod-account` and `infra/modules/auth`) and
-  `infra/nonprod/<env>/env` (through `infra/modules/nonprod-env`, which wraps
-  `infra/modules/environment`)
+  `infra/<env>/app` (through `infra/modules/nonprod-app`, which wraps
+  `infra/modules/app`)
 
-Destroying each account's env stack, then its base stack, with production's
-`shared` last, is the kill switch. Credentials come from the environment
+Destroying each account's app stack, then its base stack, with production's
+`prod/account` last, is the kill switch. Credentials come from the environment
 (`AWS_PROFILE=personal`, `personal-dev` or `personal-stage` locally); no
 backend or provider block names a profile, and each provider's
 `allowed_account_ids` refuses the wrong account.

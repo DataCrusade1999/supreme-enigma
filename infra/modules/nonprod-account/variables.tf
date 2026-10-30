@@ -4,7 +4,7 @@ variable "env" {
 
   validation {
     condition     = contains(["dev", "stage"], var.env)
-    error_message = "env must be dev or stage. Production lives in infra/shared and infra/envs/main."
+    error_message = "env must be dev or stage. Production lives in infra/prod/account and infra/prod/app."
   }
 }
 

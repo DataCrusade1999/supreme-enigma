@@ -91,6 +91,12 @@ export const COMMANDS: Command[] = [
     run: (ctx) => ctx.push("/keystatic"),
   },
   {
+    id: "open-access-admin",
+    label: "open access-admin",
+    hint: "Approve people and grant metered actions",
+    run: (ctx) => ctx.push("/tools/access-admin"),
+  },
+  {
     id: "theme",
     label: "theme",
     hint: "Switch light / dark",

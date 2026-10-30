@@ -96,7 +96,8 @@ against account `223376380711` in `us-east-1` on 2026-09-05:
   and the daily-token quotas are `Adjustable: false`. A support case is the only route, with
   unknown turnaround.
 
-A support case has been raised. If Bedrock is ever restored, moving back is a client swap behind
+No support case was raised at the time (corrected 2026-10-22). The first one, 179265236900934, was
+filed from the management account on 2026-10-22 for prod, dev and stage. If Bedrock is ever restored, moving back is a client swap behind
 the same interface (§5.3) — but the design does not wait on it.
 
 ### 5.2 Provider and model
@@ -435,7 +436,7 @@ new skills section, About page headline and summary, and the `/resume.pdf` route
   `anthropic/claude-haiku-4.5`.
 - The OpenRouter key has no spend limit set (§5.2). Set one in the OpenRouter dashboard — it is
   not a Terraform-managed setting, and the AWS budget does not cover it.
-- The AWS support case for the zero Bedrock quota (§5.1) is open. Nothing depends on it — it is
-  tracked only so the option of moving back is not forgotten.
+- AWS support case 179265236900934 for the zero Bedrock quota (§5.1) is open (filed 2026-10-22).
+  Nothing depends on it — it is tracked only so the option of moving back is not forgotten.
 - Education and certifications are deferred. Adding them later is a schema extension plus one render
   block, with no change to the pipeline.

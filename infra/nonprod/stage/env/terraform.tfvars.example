@@ -1,3 +1,0 @@
-# Copy to terraform.tfvars (gitignored via *.tfvars). The env stack needs only the
-# Vercel token; every other secret belongs to infra/nonprod/stage/account.
-vercel_api_token = "..."
