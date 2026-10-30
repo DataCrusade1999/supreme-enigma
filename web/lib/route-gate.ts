@@ -12,6 +12,13 @@ export type ToolId =
 // infra/modules/auth/cedar/ declares the same twelve; the policy tests fail if they drift.
 export const METERED_ACTIONS = ["looper:process", "newsdesk:refresh", "newsdesk:ask"] as const;
 export type MeteredAction = (typeof METERED_ACTIONS)[number];
+
+// What the hub and the Access page call each metered action.
+export const METERED_LABELS: Record<MeteredAction, string> = {
+  "looper:process": "BGM Looper processing",
+  "newsdesk:refresh": "News Desk refresh",
+  "newsdesk:ask": "News Desk ask",
+};
 export type ActionId =
   | "view"
   | "newsdesk:pin"
@@ -97,6 +104,14 @@ export const TOOLS: Tool[] = [
       "Write and edit blog posts and newsletter issues. Commits straight to the repo through Keystatic.",
     pageAction: "keystatic:use",
   },
+  {
+    id: "access-admin",
+    href: "/tools/access-admin",
+    name: "Access",
+    kind: "Site",
+    blurb: "Approve people who asked for access, and grant or revoke the actions that cost money.",
+    pageAction: "access:manage",
+  },
 ];
 
 export type RouteAction = { tool: ToolId; action: ActionId; consumes: boolean };
@@ -135,6 +150,8 @@ const ROUTE_ACTIONS: Rule[] = [
   { methods: PAGE, path: /^\/tools\/newsletter-admin$/, tool: "newsletter-admin", action: "view" },
   { methods: ["POST"], path: /^\/api\/newsletter\/send$/, tool: "newsletter-admin", action: "newsletter:send" },
   { methods: "*", path: /^\/(api\/)?keystatic(\/.*)?$/, tool: "keystatic", action: "keystatic:use" },
+  { methods: PAGE, path: /^\/tools\/access-admin$/, tool: "access-admin", action: "access:manage" },
+  { methods: "*", path: /^\/api\/access(\/.*)?$/, tool: "access-admin", action: "access:manage" },
 ];
 
 export function actionFor(method: string, pathname: string): RouteAction | null {
@@ -156,6 +173,7 @@ const GATED_PREFIXES = [
   "/api/resume",
   "/api/newsletter",
   "/api/news-desk",
+  "/api/access",
   "/keystatic",
   "/api/keystatic",
 ];

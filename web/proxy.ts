@@ -10,7 +10,8 @@ import {
 } from "./lib/auth";
 import { refreshIdToken, verifyIdToken } from "./lib/cognito";
 import { getAuthorizer, type AuthzContext } from "./lib/authz/authorizer";
-import { actionFor, isGatedPath, isMetered, type RouteAction } from "./lib/route-gate";
+import { getGrantStore, type Grant } from "./lib/authz/grants";
+import { actionFor, isGatedPath, isMetered, type MeteredAction, type RouteAction } from "./lib/route-gate";
 
 export type Denial =
   | "no_access"
@@ -79,6 +80,15 @@ async function currentSession(
   }
 }
 
+/** Why a metered action was denied, from the grant the decision was made with.
+ * Verified Permissions only says deny; the reason is for the person reading it. */
+function meteredDenial(grant: Grant | null, now: number): Denial {
+  if (!grant) return "no_grant";
+  if (grant.expiresAt <= now) return "grant_expired";
+  if (grant.used >= grant.limit) return "quota_exhausted";
+  return "forbidden";
+}
+
 async function decide(request: NextRequest, session: Session): Promise<NextResponse> {
   if (!session.groups.some((group) => MEMBER_GROUPS.includes(group))) {
     return deny(request, "no_access", null);
@@ -87,7 +97,19 @@ async function decide(request: NextRequest, session: Session): Promise<NextRespo
   if (!route) return deny(request, "forbidden", null);
 
   const context: AuthzContext = { now: Math.floor(Date.now() / 1000) };
-  // Part 2 (grants) reads the user's grant for metered actions here.
+  // The owner's policy allows every action without a grant, and the owner is
+  // never counted.
+  const counted = isMetered(route.action) && !session.groups.includes("owner");
+  let grant: Grant | null = null;
+  if (counted) {
+    try {
+      grant = await getGrantStore().get(session.sub, route.action as MeteredAction);
+    } catch (err) {
+      console.error("authz: grant read failed", err);
+      return deny(request, "authorization_unavailable", route);
+    }
+    if (grant) context.grant = { remaining: grant.limit - grant.used, expiresAt: grant.expiresAt };
+  }
 
   let decision;
   try {
@@ -96,7 +118,22 @@ async function decide(request: NextRequest, session: Session): Promise<NextRespo
     console.error("authz: no decision", err);
     return deny(request, "authorization_unavailable", route);
   }
-  if (decision !== "allow") return deny(request, isMetered(route.action) ? "no_grant" : "forbidden", route);
+  if (decision !== "allow") {
+    return deny(request, isMetered(route.action) ? meteredDenial(grant, context.now) : "forbidden", route);
+  }
+
+  if (counted && route.consumes) {
+    let consumed: boolean;
+    try {
+      consumed = await getGrantStore().consume(session.sub, route.action as MeteredAction, context.now);
+    } catch (err) {
+      console.error("authz: grant consume failed", err);
+      return deny(request, "authorization_unavailable", route);
+    }
+    // Two requests can both be allowed on the last use; the conditional update
+    // lets exactly one through.
+    if (!consumed) return deny(request, "quota_exhausted", route);
+  }
   return NextResponse.next();
 }
 
