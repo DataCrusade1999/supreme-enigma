@@ -13,7 +13,7 @@ import {
 import { getGrantStore, GRANT_TTL_S, type Grant } from "./grants";
 
 const ddb = mockClient(DynamoDBDocumentClient);
-const env = { ACCESS_GRANTS_TABLE: "grants", APP_AWS_REGION: "us-east-1" } as NodeJS.ProcessEnv;
+const env = { ACCESS_GRANTS_TABLE: "grants", APP_AWS_REGION: "us-east-1" } as unknown as NodeJS.ProcessEnv;
 const grant: Grant = { sub: "u1", action: "newsdesk:ask", email: "a@example.com", limit: 20, used: 3, expiresAt: 2000, grantedAt: 1000 };
 
 beforeEach(() => ddb.reset());
@@ -75,12 +75,12 @@ describe("DynamoDB grant store", () => {
   });
 
   it("throws when the table name is missing", async () => {
-    await expect(getGrantStore({} as NodeJS.ProcessEnv).get("u1", "newsdesk:ask")).rejects.toThrow("ACCESS_GRANTS_TABLE");
+    await expect(getGrantStore({} as unknown as NodeJS.ProcessEnv).get("u1", "newsdesk:ask")).rejects.toThrow("ACCESS_GRANTS_TABLE");
   });
 });
 
 describe("in-memory grant store (AUTHZ_MODE=local)", () => {
-  const local = { AUTHZ_MODE: "local" } as NodeJS.ProcessEnv;
+  const local = { AUTHZ_MODE: "local" } as unknown as NodeJS.ProcessEnv;
 
   it("behaves like the table", async () => {
     const store = getGrantStore(local);
@@ -93,7 +93,7 @@ describe("in-memory grant store (AUTHZ_MODE=local)", () => {
   });
 
   it("is never used on Vercel", async () => {
-    await expect(getGrantStore({ AUTHZ_MODE: "local", VERCEL: "1" } as NodeJS.ProcessEnv).get("u1", "newsdesk:ask")).rejects.toThrow(
+    await expect(getGrantStore({ AUTHZ_MODE: "local", VERCEL: "1" } as unknown as NodeJS.ProcessEnv).get("u1", "newsdesk:ask")).rejects.toThrow(
       "ACCESS_GRANTS_TABLE",
     );
   });

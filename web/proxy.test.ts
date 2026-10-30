@@ -4,15 +4,19 @@ import { NextRequest } from "next/server";
 
 vi.mock("./lib/cognito", () => ({ refreshIdToken: vi.fn(), verifyIdToken: vi.fn() }));
 vi.mock("./lib/authz/authorizer", () => ({ getAuthorizer: vi.fn() }));
+vi.mock("./lib/authz/grants", () => ({ getGrantStore: vi.fn() }));
 
 import { refreshIdToken, verifyIdToken } from "./lib/cognito";
 import { getAuthorizer } from "./lib/authz/authorizer";
+import { getGrantStore } from "./lib/authz/grants";
 import { ID_COOKIE, REFRESH_COOKIE, seal, unseal } from "./lib/auth";
 import { proxy } from "./proxy";
 
 const SECRET = "secret";
 const NOW_S = Math.floor(Date.now() / 1000);
 const isAuthorized = vi.fn();
+const grants = { get: vi.fn(), consume: vi.fn() };
+const liveGrant = { sub: "u1", action: "newsdesk:ask", email: "a@x", limit: 5, used: 2, expiresAt: NOW_S + 3600, grantedAt: 0 };
 
 const jwt = (claims: Record<string, unknown>) =>
   `h.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.s`;
@@ -36,6 +40,9 @@ beforeEach(() => {
   process.env.COOKIE_SECRET = SECRET;
   vi.mocked(getAuthorizer).mockReturnValue({ isAuthorized });
   isAuthorized.mockResolvedValue("allow");
+  vi.mocked(getGrantStore).mockReturnValue(grants as never);
+  grants.get.mockResolvedValue(null);
+  grants.consume.mockResolvedValue(true);
 });
 
 describe("proxy: ungated and unauthenticated", () => {
@@ -165,5 +172,67 @@ describe("proxy: refresh", () => {
     const res = await proxy(request("/api/news-desk/ask", { method: "POST", idToken: token(["friends"], NOW_S - 10) }));
     expect(res.status).toBe(401);
     expect(res.cookies.get(ID_COOKIE)?.value).toBe("");
+  });
+});
+
+describe("proxy: metered grants", () => {
+  const ask = (groups = ["friends"]) => request("/api/news-desk/ask", { method: "POST", idToken: token(groups) });
+
+  it("passes the grant to the authorizer and consumes one use", async () => {
+    grants.get.mockResolvedValue(liveGrant);
+    const res = await proxy(ask());
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+    expect(isAuthorized).toHaveBeenCalledWith(
+      expect.objectContaining({ context: { now: expect.any(Number), grant: { remaining: 3, expiresAt: liveGrant.expiresAt } } }),
+    );
+    expect(grants.consume).toHaveBeenCalledWith("u1", "newsdesk:ask", expect.any(Number));
+  });
+
+  it("checks but doesn't consume on a route that doesn't consume (the looper's upload URL)", async () => {
+    grants.get.mockResolvedValue({ ...liveGrant, action: "looper:process" });
+    await proxy(request("/api/looper/upload-url", { method: "POST", idToken: token(["friends"]) }));
+    expect(grants.get).toHaveBeenCalledWith("u1", "looper:process");
+    expect(grants.consume).not.toHaveBeenCalled();
+  });
+
+  it("neither reads nor consumes for the owner", async () => {
+    await proxy(ask(["owner"]));
+    expect(grants.get).not.toHaveBeenCalled();
+    expect(grants.consume).not.toHaveBeenCalled();
+    expect(isAuthorized).toHaveBeenCalledWith(expect.objectContaining({ context: { now: expect.any(Number) } }));
+  });
+
+  it.each([
+    ["no_grant", null],
+    ["quota_exhausted", { ...liveGrant, used: 5 }],
+    ["grant_expired", { ...liveGrant, used: 5, expiresAt: NOW_S - 1 }],
+  ])("explains a denial as %s", async (reason, grant) => {
+    grants.get.mockResolvedValue(grant);
+    isAuthorized.mockResolvedValue("deny");
+    const res = await proxy(ask());
+    expect(await res.json()).toEqual({ error: reason });
+    expect(grants.consume).not.toHaveBeenCalled();
+  });
+
+  it("denies with quota_exhausted when another request took the last use", async () => {
+    grants.get.mockResolvedValue({ ...liveGrant, used: 4 });
+    grants.consume.mockResolvedValue(false);
+    const res = await proxy(ask());
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "quota_exhausted" });
+  });
+
+  it.each([
+    ["reading", () => grants.get.mockRejectedValue(new Error("throttled"))],
+    ["consuming", () => {
+      grants.get.mockResolvedValue(liveGrant);
+      grants.consume.mockRejectedValue(new Error("throttled"));
+    }],
+  ])("fails closed with 503 when %s the grant fails", async (_label, arrange) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    arrange();
+    const res = await proxy(ask());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "authorization_unavailable" });
   });
 });
