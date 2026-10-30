@@ -7,6 +7,14 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Access page at `/tools/access-admin` (owner only): approve people who signed
+  in, remove members, and grant or revoke the actions that cost money (News Desk
+  ask and refresh, BGM Looper processing), each with a number of uses and an
+  expiry. The hub shows each friend their remaining uses. Grants live in a
+  `site-access-grants` DynamoDB table in each account (#300).
+
 ## [1.9.0] - 2026-10-17
 
 ### Added
