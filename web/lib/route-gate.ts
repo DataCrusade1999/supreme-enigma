@@ -12,6 +12,13 @@ export type ToolId =
 // infra/modules/auth/cedar/ declares the same twelve; the policy tests fail if they drift.
 export const METERED_ACTIONS = ["looper:process", "newsdesk:refresh", "newsdesk:ask"] as const;
 export type MeteredAction = (typeof METERED_ACTIONS)[number];
+
+// What the hub and the Access page call each metered action.
+export const METERED_LABELS: Record<MeteredAction, string> = {
+  "looper:process": "BGM Looper processing",
+  "newsdesk:refresh": "News Desk refresh",
+  "newsdesk:ask": "News Desk ask",
+};
 export type ActionId =
   | "view"
   | "newsdesk:pin"

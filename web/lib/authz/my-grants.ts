@@ -1,13 +1,7 @@
 import { cookies } from "next/headers";
 import { readSession } from "../auth";
-import type { MeteredAction } from "../route-gate";
+import { METERED_LABELS } from "../route-gate";
 import { getGrantStore, type Grant } from "./grants";
-
-export const METERED_LABELS: Record<MeteredAction, string> = {
-  "looper:process": "BGM Looper processing",
-  "newsdesk:refresh": "News Desk refresh",
-  "newsdesk:ask": "News Desk ask",
-};
 
 export async function myGrants(): Promise<Grant[]> {
   const secret = process.env.COOKIE_SECRET;
