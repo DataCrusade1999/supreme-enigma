@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-30
+
 ### Added
 
 - Access page at `/tools/access-admin` (owner only): approve people who signed
