@@ -77,7 +77,7 @@ API routes only orchestrate. S3 objects expire after 1 day.
 
 **Infrastructure.** The whole stack (S3, ECR, Lambda, IAM, Cognito, the
 Vercel project itself) is Terraform, with each branch in its own AWS account.
-`terraform destroy` across `infra/*/{env,account}`, `infra/prod/app`
+`terraform destroy` across `infra/{dev,stage}/{app,account}`, `infra/prod/app`
 and then `infra/prod/account` is the kill switch: it removes everything that can
 incur AWS cost.
 
