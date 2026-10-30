@@ -4,7 +4,7 @@
 # owner, a verified identity below.
 #
 # No custom MAIL FROM and no DMARC record. DKIM alone aligns this subdomain's mail
-# for DMARC, and the apex _dmarc record (p=none, in infra/shared) already covers
+# for DMARC, and the apex _dmarc record (p=none, in infra/prod/account) already covers
 # subdomains that publish none of their own.
 
 resource "aws_sesv2_email_identity" "domain" {

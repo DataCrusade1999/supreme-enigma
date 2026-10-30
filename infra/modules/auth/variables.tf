@@ -50,7 +50,7 @@ variable "owner_email" {
   type        = string
 }
 
-# Passed in rather than read from data sources: shared's call has a module-level
+# Passed in rather than read from data sources: prod/account's call has a module-level
 # depends_on, which would defer any data source in here to apply time and turn
 # its no-op plan into an update.
 variable "account_id" {

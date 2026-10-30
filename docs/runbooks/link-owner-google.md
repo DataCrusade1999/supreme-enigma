@@ -16,7 +16,7 @@ A passkey registered to the Google user is lost when it is deleted in step 2. Re
      --profile personal --region us-east-1
    ```
 
-3. Link the Google identity to the native owner user (`<email>` is `alert_email` in `infra/shared/terraform.tfvars`; `<id>` is the number after `Google_`):
+3. Link the Google identity to the native owner user (`<email>` is `alert_email` in `infra/prod/account/terraform.tfvars`; `<id>` is the number after `Google_`):
 
    ```bash
    aws cognito-idp admin-link-provider-for-user --user-pool-id $POOL \

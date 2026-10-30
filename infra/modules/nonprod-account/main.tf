@@ -2,7 +2,7 @@
 # providers and roles, the ECR repo, the alerts topic, SES and sign-in. Everything here
 # lives in the account the caller's provider points at and trusts nothing outside it
 # (spec 2026-10-17-nonprod-accounts-design.md §4.1). The bucket, Lambda, exec role and
-# alarm come from infra/modules/environment, called from the env stack beside this one.
+# alarm come from infra/modules/app, called from the app stack beside this one.
 
 data "aws_caller_identity" "current" {}
 
@@ -71,7 +71,7 @@ resource "aws_ecr_lifecycle_policy" "looper" {
   })
 }
 
-# --- Alerts: the topic the env stack's invocation alarm publishes to. No project
+# --- Alerts: the topic the app stack's invocation alarm publishes to. No project
 #     budget here: the aws-org repo's $2 account budget covers this account. ---
 
 resource "aws_sns_topic" "budget_alerts" {

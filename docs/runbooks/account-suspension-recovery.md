@@ -16,9 +16,9 @@ be checked right now." after sign-in: the proxy treats the failing
 
 | Account | ID | Profile | Stacks | Applied from |
 |---|---|---|---|---|
-| Production | 223376380711 | `personal` | `shared`, `envs/main` | `dev`, `main` |
-| Dev | 624586968135 | `personal-dev` | `nonprod/dev/account`, `nonprod/dev/env` | `dev` |
-| Stage | 792682047320 | `personal-stage` | `nonprod/stage/account`, `nonprod/stage/env` | `stage` |
+| Production | 223376380711 | `personal` | `prod/account`, `prod/app` | `dev`, `main` |
+| Dev | 624586968135 | `personal-dev` | `dev/account`, `dev/app` | `dev` |
+| Stage | 792682047320 | `personal-stage` | `stage/account`, `stage/app` | `stage` |
 
 ## Prerequisites
 
@@ -98,8 +98,8 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 Apply each stack whose drift plan showed changes, from the branch that owns it:
 
 ```bash
-gh workflow run terraform.yml --ref dev   -f stack=nonprod/dev/account
-gh workflow run terraform.yml --ref stage -f stack=nonprod/stage/account
+gh workflow run terraform.yml --ref dev   -f stack=dev/account
+gh workflow run terraform.yml --ref stage -f stack=stage/account
 ```
 
 Read the plan first. If it deletes, replaces or forgets anything, the apply
@@ -107,9 +107,9 @@ stops at the destroy guard; rerun with `-f confirm=apply-destroys` only if the
 plan is what you expect. When CI cannot run, apply locally with
 [infra-apply-teardown.md](infra-apply-teardown.md).
 
-**If the Lambda function is gone**, the env stack recreates it from the fixed
-`bootstrap_image_tag` in `infra/envs/main/main.tf` or
-`infra/nonprod/<env>/env/main.tf`. ECR keeps only the latest image per
+**If the Lambda function is gone**, the app stack recreates it from the fixed
+`bootstrap_image_tag` in `infra/prod/app/main.tf` or
+`infra/<env>/app/main.tf`. ECR keeps only the latest image per
 branch, so that tag is usually gone too, and the apply fails. In that order:
 
 1. Push an image. `gh workflow run deploy.yml --ref <branch>` builds and pushes
@@ -119,13 +119,13 @@ branch, so that tag is usually gone too, and the apply fails. In that order:
 2. Set `bootstrap_image_tag` to the tag it pushed (`aws ecr describe-images
    --repository-name bgm-looper-lambda`). Land the change on the branch,
    through the usual promotion for `stage` and `main`; the push applies the
-   env stack.
+   app stack.
 
 Recreating the identity source needs no Vercel redeploy: the policy store ID in
 `AVP_POLICY_STORE_ID` stays the same. A recreated policy store, Cognito pool or
-client would come with new IDs. In a nonprod account the `env` stack copies
+client would come with new IDs. In a nonprod account the `app` stack copies
 them into the Vercel env vars, so apply it after the `account` stack; in
-production `shared` sets both. A deployment keeps the values it was built
+production `prod/account` sets both. A deployment keeps the values it was built
 with, so redeploy the branch afterwards.
 
 ## Verify

@@ -1,4 +1,4 @@
-# Read by this environment's env stack through terraform_remote_state, and set as its
+# Read by this environment's app stack through terraform_remote_state, and set as its
 # preview Vercel vars.
 
 output "cognito_user_pool_id" {
