@@ -7,6 +7,35 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Access page at `/tools/access-admin` (owner only): approve people who signed
+  in, remove members, and grant or revoke the actions that cost money (News Desk
+  ask and refresh, BGM Looper processing), each with a number of uses and an
+  expiry. The hub shows each friend their remaining uses. Grants live in a
+  `site-access-grants` DynamoDB table in each account (#300).
+
+### Changed
+
+- Terraform stacks are laid out by account: `infra/shared` is now
+  `infra/prod/account`, `infra/envs/main` is `infra/prod/app`, and
+  `infra/nonprod/<env>/{account,env}` is `infra/<env>/{account,app}`. The
+  modules `environment` and `nonprod-env` are now `app` and `nonprod-app`, and
+  `shared.tf` is split into `ecr.tf`, `oidc-roles.tf`, `vercel-project.tf`,
+  `budget.tf` and `locals.tf`. No resource changes; state keys keep their old
+  names (#477).
+- The `nonprod-account` and `app` Terraform modules are split into files by
+  purpose, using production's names where the job is the same: `ecr.tf`,
+  `alerts.tf`, `auth.tf`, `dns.tf`, `oidc-roles.tf` and
+  `terraform-ci-roles.tf` in `nonprod-account`; `bucket.tf`, `lambda.tf`,
+  `alarm.tf` and `vercel.tf` in `app`. No resource changes (#487).
+
+### Security
+
+- `undici` 8.12.3 (from 8.11.2, via `jsdom`, dev only) and an npm override so
+  `@vercel/cli-config` uses the app's `zod` 4.6.7 instead of its pinned 4.1.11.
+  Clears six Dependabot advisories; neither copy ran in production (#479).
+
 ## [1.9.0] - 2026-10-17
 
 ### Added

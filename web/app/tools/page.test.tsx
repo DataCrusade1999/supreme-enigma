@@ -13,6 +13,11 @@ vi.mock("../../lib/authz/visible-tools", async () => {
   return { visibleTools: vi.fn(async () => TOOLS) };
 });
 
+vi.mock("../../lib/authz/my-grants", () => ({
+  myGrants: vi.fn(async () => []),
+  describeGrant: vi.fn(() => "News Desk ask: 7 of 20 left, until 9 Oct 2026"),
+}));
+
 // An async server component: resolve its JSX first, then render (TESTING.md).
 const hub = (query: Record<string, string> = {}) => ToolsPage({ searchParams: Promise.resolve(query) });
 
@@ -71,5 +76,12 @@ describe("ToolsPage", () => {
     render(await hub());
     expect(screen.getByRole("link", { name: /News Desk/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Resume admin/ })).not.toBeInTheDocument();
+  });
+
+  it("lists the viewer's grants when there are any", async () => {
+    const { myGrants } = await import("../../lib/authz/my-grants");
+    vi.mocked(myGrants).mockResolvedValueOnce([{ action: "newsdesk:ask" } as never]);
+    render(await hub());
+    expect(screen.getByText("News Desk ask: 7 of 20 left, until 9 Oct 2026")).toBeInTheDocument();
   });
 });

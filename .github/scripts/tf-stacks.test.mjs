@@ -15,10 +15,10 @@ const role = (stack, mode) => {
 };
 const resolve = (EVENT, BRANCH, INPUT = "") => run("resolve", { EVENT, BRANCH, INPUT });
 
-test("push: dev applies shared, nonprod/dev/account, then nonprod/dev/env; stage nonprod/stage/account then nonprod/stage/env; main only its own env", () => {
-  assert.equal(resolve("push", "dev").out, "stacks=shared nonprod/dev/account nonprod/dev/env");
-  assert.equal(resolve("push", "stage").out, "stacks=nonprod/stage/account nonprod/stage/env");
-  assert.equal(resolve("push", "main").out, "stacks=envs/main");
+test("push: dev applies prod/account, dev/account, then dev/app; stage stage/account then stage/app; main only prod/app", () => {
+  assert.equal(resolve("push", "dev").out, "stacks=prod/account dev/account dev/app");
+  assert.equal(resolve("push", "stage").out, "stacks=stage/account stage/app");
+  assert.equal(resolve("push", "main").out, "stacks=prod/app");
 });
 
 test("push from any other branch fails", () => {
@@ -28,15 +28,16 @@ test("push from any other branch fails", () => {
 });
 
 test("dispatch: a stack runs only from the branch that owns it", () => {
-  assert.equal(resolve("workflow_dispatch", "dev", "shared").out, "stacks=shared");
-  assert.equal(resolve("workflow_dispatch", "dev", "nonprod/dev/account").out, "stacks=nonprod/dev/account");
-  assert.equal(resolve("workflow_dispatch", "dev", "nonprod/dev/env").out, "stacks=nonprod/dev/env");
-  assert.equal(resolve("workflow_dispatch", "stage", "nonprod/stage/account").out, "stacks=nonprod/stage/account");
-  assert.equal(resolve("workflow_dispatch", "stage", "nonprod/stage/env").out, "stacks=nonprod/stage/env");
-  assert.equal(resolve("workflow_dispatch", "main", "envs/main").out, "stacks=envs/main");
+  assert.equal(resolve("workflow_dispatch", "dev", "prod/account").out, "stacks=prod/account");
+  assert.equal(resolve("workflow_dispatch", "dev", "dev/account").out, "stacks=dev/account");
+  assert.equal(resolve("workflow_dispatch", "dev", "dev/app").out, "stacks=dev/app");
+  assert.equal(resolve("workflow_dispatch", "stage", "stage/account").out, "stacks=stage/account");
+  assert.equal(resolve("workflow_dispatch", "stage", "stage/app").out, "stacks=stage/app");
+  assert.equal(resolve("workflow_dispatch", "main", "prod/app").out, "stacks=prod/app");
   for (const [branch, input] of [
-    ["dev", "envs/main"], ["dev", "envs/stage"], ["dev", "envs/dev"], ["stage", "shared"], ["stage", "envs/dev"], ["stage", "envs/stage"],
-    ["main", "shared"], ["main", "envs/dev"], ["dev", "nonprod/stage/account"], ["main", "nonprod/stage/account"],
+    ["dev", "prod/app"], ["dev", "envs/stage"], ["dev", "envs/dev"], ["stage", "prod/account"], ["stage", "envs/dev"], ["stage", "envs/stage"],
+    ["main", "prod/account"], ["main", "envs/dev"], ["dev", "stage/account"], ["main", "stage/account"],
+    ["stage", "dev/account"], ["main", "dev/app"], ["dev", "shared"], ["main", "envs/main"],
   ]) {
     const r = resolve("workflow_dispatch", branch, input);
     assert.equal(r.rc, 1, `${input} on ${branch}`);
@@ -52,21 +53,21 @@ test("dispatch with an empty stack fails on every branch", () => {
   }
 });
 
-test("plan: shared only on PRs into dev", () => {
-  assert.equal(run("plan", { BASE: "dev" }).out, "shared nonprod/dev/account nonprod/dev/env");
-  assert.equal(run("plan", { BASE: "stage" }).out, "nonprod/stage/account nonprod/stage/env");
-  assert.equal(run("plan", { BASE: "main" }).out, "envs/main");
+test("plan: prod/account only on PRs into dev", () => {
+  assert.equal(run("plan", { BASE: "dev" }).out, "prod/account dev/account dev/app");
+  assert.equal(run("plan", { BASE: "stage" }).out, "stage/account stage/app");
+  assert.equal(run("plan", { BASE: "main" }).out, "prod/app");
 });
 
 test("role: each stack maps to its account's role", () => {
   const prod = "arn:aws:iam::223376380711:role/bgm-looper-tf-apply-prod";
-  assert.equal(role("shared", "apply").out, prod);
-  assert.equal(role("envs/main", "apply").out, prod);
-  for (const s of ["shared", "envs/main"]) {
+  assert.equal(role("prod/account", "apply").out, prod);
+  assert.equal(role("prod/app", "apply").out, prod);
+  for (const s of ["prod/account", "prod/app"]) {
     assert.equal(role(s, "plan").out, "arn:aws:iam::223376380711:role/bgm-looper-tf-plan", s);
   }
-  assert.equal(role("nonprod/dev/env", "apply").out, "arn:aws:iam::624586968135:role/bgm-looper-tf-apply");
-  assert.equal(role("nonprod/stage/account", "plan").out, "arn:aws:iam::792682047320:role/bgm-looper-tf-plan");
+  assert.equal(role("dev/app", "apply").out, "arn:aws:iam::624586968135:role/bgm-looper-tf-apply");
+  assert.equal(role("stage/account", "plan").out, "arn:aws:iam::792682047320:role/bgm-looper-tf-plan");
 });
 
 test("role: an unknown stack fails", () => {
@@ -75,8 +76,10 @@ test("role: an unknown stack fails", () => {
   assert.match(r.err, /::error::no role for bogus/);
 });
 
-test("role: the legacy envs/dev and envs/stage stacks have no role", () => {
-  for (const s of ["envs/dev", "envs/stage"]) {
+// envs/dev and envs/stage predate the nonprod accounts (#397); shared, envs/main and
+// nonprod/* are the paths before #477 renamed them.
+test("role: old stack names have no role", () => {
+  for (const s of ["envs/dev", "envs/stage", "shared", "envs/main", "nonprod/dev/account", "nonprod/stage/env"]) {
     for (const mode of ["plan", "apply"]) {
       const r = role(s, mode);
       assert.equal(r.rc, 1, `${s} ${mode}`);
@@ -86,5 +89,5 @@ test("role: the legacy envs/dev and envs/stage stacks have no role", () => {
 });
 
 test("drift: the branch:stack pairs", () => {
-  assert.equal(run("drift", {}).out, "dev:shared main:envs/main dev:nonprod/dev/account dev:nonprod/dev/env stage:nonprod/stage/account stage:nonprod/stage/env");
+  assert.equal(run("drift", {}).out, "dev:prod/account main:prod/app dev:dev/account dev:dev/app stage:stage/account stage:stage/app");
 });

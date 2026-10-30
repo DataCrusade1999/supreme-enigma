@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CommandBar } from "../../components/site/CommandBar";
+import { describeGrant, myGrants } from "../../lib/authz/my-grants";
 import { visibleTools } from "../../lib/authz/visible-tools";
 
 // Outside the `(site)` route group like the tool pages themselves, so it gets
@@ -19,6 +20,7 @@ export default async function ToolsPage({
   const { passkey } = await searchParams;
   const passkeyMessage = typeof passkey === "string" ? PASSKEY_MESSAGES[passkey] : undefined;
   const tools = await visibleTools();
+  const grants = await myGrants();
 
   return (
     <div className="flex min-h-screen flex-col font-ui">
@@ -87,6 +89,17 @@ export default async function ToolsPage({
             </li>
           ))}
         </ul>
+
+        {grants.length > 0 ? (
+          <section className="mt-9">
+            <h2 className="text-xs uppercase tracking-[0.14em] text-muted">Your grants</h2>
+            <ul className="mt-3 flex flex-col gap-1.5 text-sm">
+              {grants.map((grant) => (
+                <li key={grant.action}>{describeGrant(grant)}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <p className="mt-9 text-[0.8125rem] text-muted">
           {/* Through sign-in first: Cognito only adds a passkey for a user with

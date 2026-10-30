@@ -81,12 +81,12 @@ updates:
   - package-ecosystem: terraform
     directories:
       - /infra/bootstrap
-      - /infra/shared
-      - /infra/envs/main
-      - /infra/nonprod/dev/account
-      - /infra/nonprod/dev/env
-      - /infra/nonprod/stage/account
-      - /infra/nonprod/stage/env
+      - /infra/prod/account
+      - /infra/prod/app
+      - /infra/dev/account
+      - /infra/dev/app
+      - /infra/stage/account
+      - /infra/stage/app
     schedule:
       interval: monthly
     commit-message:

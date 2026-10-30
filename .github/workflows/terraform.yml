@@ -1,7 +1,7 @@
 # Terraform in CI (#339, docs/superpowers/specs/2026-10-02-terraform-ci-design.md).
-# PRs plan, pushes apply, a plan that deletes or replaces anything stops for a
+# PRs plan, pushes apply, a plan that deletes, replaces or forgets anything stops for a
 # manual `apply-destroys` run, and a weekly plan files drift as an issue. Each branch
-# applies its own env stack; dev also applies `shared`, first (#345).
+# applies its own app stack; dev also applies `prod/account`, first (#345).
 # One job per event: GitHub bills each job rounded up to a minute (#320).
 # Never upload or print a plan's JSON — it holds sensitive values in plain text.
 name: Terraform
@@ -21,9 +21,9 @@ on:
         description: "Stack to apply from this branch, or drift"
         required: true
         type: choice
-        options: [envs/main, shared, nonprod/dev/account, nonprod/dev/env, nonprod/stage/account, nonprod/stage/env, drift]
+        options: [prod/app, prod/account, dev/account, dev/app, stage/account, stage/app, drift]
       confirm:
-        description: "Type apply-destroys to apply a plan that deletes or replaces resources"
+        description: "Type apply-destroys to apply a plan that deletes, replaces or forgets resources"
         required: false
         default: ""
 
@@ -113,7 +113,7 @@ jobs:
             title="$title — ❌ incomplete: lint or plan failed, and a stack missing below was not planned ([run]($RUN))"
           fi
           if [ "$BASE" != dev ]; then
-            title="$title — \`shared\` is applied from \`dev\` and not planned here; a \`shared\` change in this PR applies only once it is on \`dev\`"
+            title="$title — \`prod/account\` is applied from \`dev\` and not planned here; a \`prod/account\` change in this PR applies only once it is on \`dev\`"
           fi
           mkdir -p plans
           node .github/scripts/tf-summary.mjs comment plans "$title" > comment.md
@@ -137,7 +137,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Stacks run in the order tf-stacks.sh gives (`shared` first, on dev only), each
+      # Stacks run in the order tf-stacks.sh gives (`prod/account` first, on dev only), each
       # under its own role via tf-as.sh. Routing and its tests: .github/scripts/tf-stacks.*
       - name: Resolve stacks
         id: stacks
@@ -200,11 +200,15 @@ jobs:
         run: |
           mkdir -p "$TF_PLUGIN_CACHE_DIR" plans
           drift=0
-          for pair in $(bash dev/.github/scripts/tf-stacks.sh drift); do
-            branch=${pair%%:*}; stack=${pair#*:}
+          # Each branch's own routing names its own stacks, so a stack renamed on dev but
+          # not yet promoted is still found under its old path on stage and main (#477).
+          for branch in dev main stage; do
+          for pair in $(bash $branch/.github/scripts/tf-stacks.sh drift); do
+            [ "${pair%%:*}" = "$branch" ] || continue
+            stack=${pair#*:}
             mkdir -p "plans/$stack"
             echo "::group::$stack ($branch)"
-            tf="bash dev/.github/scripts/tf-as.sh $stack plan terraform -chdir=$branch/infra/$stack"
+            tf="bash $branch/.github/scripts/tf-as.sh $stack plan terraform -chdir=$branch/infra/$stack"
             $tf init -lockfile=readonly
             set +e
             $tf plan -lock=false -detailed-exitcode -out=tfplan
@@ -215,6 +219,7 @@ jobs:
             [ $rc -eq 2 ] && drift=1
             $tf show -json tfplan > "plans/$stack/plan.json"
             $tf show -no-color tfplan > "plans/$stack/plan.txt"
+          done
           done
           echo "drift=$drift" >> "$GITHUB_ENV"
       - name: File or close the drift issue

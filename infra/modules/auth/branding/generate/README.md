@@ -15,6 +15,6 @@ npm ci
 npm run build
 ```
 
-Then `terraform plan` from `infra/shared` and check the diff before applying. A change to any SVG replaces the branding style, and the sign-in page is down until the new one is created. Cognito's size limits for the logos are in `.claude/rules/infra.md`.
+Then `terraform plan` from `infra/prod/account` and check the diff before applying. A change to any SVG replaces the branding style, and the sign-in page is down until the new one is created. Cognito's size limits for the logos are in `.claude/rules/infra.md`.
 
 The colours are copied from `web/app/globals.css` and the loop ring from `web/content/wave-envelope.ts`. A change to either on the site is not picked up here until these scripts are edited to match.

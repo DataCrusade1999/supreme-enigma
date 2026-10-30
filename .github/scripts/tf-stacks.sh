@@ -4,7 +4,7 @@
 #   tf-stacks.sh plan     (BASE)                 -> the stacks a PR into BASE plans
 #   tf-stacks.sh drift                           -> the branch:stack pairs the drift job plans
 #   tf-stacks.sh role <stack> <plan|apply>       -> the role ARN tf-as.sh assumes for that stack
-# `shared` is applied from dev only (#345): its state is single, so applying it from
+# `prod/account` is applied from dev only (#345): its state is single, so applying it from
 # several branches would revert each other's unpromoted changes.
 # Later tasks add stacks by editing only the tables below.
 set -euo pipefail
@@ -13,22 +13,22 @@ set -euo pipefail
 # The stacks a branch applies, in order.
 branch_stacks() {
   case "$1" in
-    dev)   echo "shared nonprod/dev/account nonprod/dev/env" ;;
-    stage) echo "nonprod/stage/account nonprod/stage/env" ;;
-    main)  echo "envs/main" ;;
+    dev)   echo "prod/account dev/account dev/app" ;;
+    stage) echo "stage/account stage/app" ;;
+    main)  echo "prod/app" ;;
     *) echo "::error::Terraform applies only from dev, stage or main" >&2; return 1 ;;
   esac
 }
 
-# The role for a stack: `nonprod/dev/*` and `nonprod/stage/*` live in their own
-# accounts, every other stack in the prod account (223376380711).
+# The role for a stack: `dev/*` and `stage/*` live in their own accounts, `prod/*` in
+# the prod account (223376380711).
 role() {
   local stack=$1 mode=$2 prod=arn:aws:iam::223376380711:role/bgm-looper-tf
   case "$mode" in plan|apply) ;; *) echo "::error::mode must be plan or apply, got $mode" >&2; return 1 ;; esac
   case "$stack" in
-    nonprod/dev/*)   echo "arn:aws:iam::624586968135:role/bgm-looper-tf-$mode" ;;
-    nonprod/stage/*) echo "arn:aws:iam::792682047320:role/bgm-looper-tf-$mode" ;;
-    shared|envs/main)
+    dev/account|dev/app)     echo "arn:aws:iam::624586968135:role/bgm-looper-tf-$mode" ;;
+    stage/account|stage/app) echo "arn:aws:iam::792682047320:role/bgm-looper-tf-$mode" ;;
+    prod/account|prod/app)
       if [ "$mode" = apply ]; then echo "$prod-apply-prod"; else echo "$prod-plan"; fi ;;
     *) echo "::error::no role for $stack" >&2; return 1 ;;
   esac
@@ -46,16 +46,17 @@ case "${1:-}" in
     printf 'stacks=%s\n' "$stacks"
     ;;
   plan)
-    # On a promotion, stage's or main's older copy of shared would show dev's applied
-    # changes as reverts, so shared is planned only on PRs into dev.
+    # On a promotion, stage's or main's older copy of prod/account would show dev's applied
+    # changes as reverts, so prod/account is planned only on PRs into dev.
     case "$BASE" in
-      dev)   echo "shared nonprod/dev/account nonprod/dev/env" ;;
-      stage) echo "nonprod/stage/account nonprod/stage/env" ;;
-      *)     echo "envs/$BASE" ;;
+      dev)   echo "prod/account dev/account dev/app" ;;
+      stage) echo "stage/account stage/app" ;;
+      main)  echo "prod/app" ;;
+      *) echo "::error::no stacks for PRs into $BASE" >&2; exit 1 ;;
     esac
     ;;
   drift)
-    echo "dev:shared main:envs/main dev:nonprod/dev/account dev:nonprod/dev/env stage:nonprod/stage/account stage:nonprod/stage/env"
+    echo "dev:prod/account main:prod/app dev:dev/account dev:dev/app stage:stage/account stage:stage/app"
     ;;
   role) role "${2:?stack}" "${3:?mode}" ;;
   *) echo "usage: tf-stacks.sh resolve|plan|drift|role" >&2; exit 2 ;;
