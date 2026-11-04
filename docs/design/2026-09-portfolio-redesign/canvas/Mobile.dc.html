@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home — mobile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=Fraunces:opsz,wght@9..144,500;9..144,600&amp;family=Space+Grotesk:wght@500;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 2400px; box-sizing: border-box; background: {{t.bg}}; color: {{t.ink}}; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<nav aria-label="Main" style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid {{t.line}}">
+<a href="#" style="display: flex; align-items: center; gap: 10px; color: {{t.ink}}; text-decoration: none; min-height: 44px">
+<span style="width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background: {{t.accent}}; color: {{t.onAccent}}; font-family: {{t.display}}; font-weight: 700; font-size: 14px">AP</span>
+<span style="font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 17px">Ashutosh Pandey</span>
+</a>
+<button type="button" aria-label="Open menu" style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1.5px solid {{t.ink}}; color: {{t.ink}}; padding: 0">
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h14M3 14h14"></path></svg>
+</button>
+</nav>
+
+<section style="padding: 48px 16px 48px; display: flex; flex-direction: column; gap: 22px; border-bottom: 1px solid {{t.line}}">
+<div style="display: flex; align-items: center; gap: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.muted}}">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: {{t.accent}}"></span>
+<span>Software engineer · [City]</span>
+</div>
+<h1 style="margin: 0; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 50px; line-height: 0.95; letter-spacing: -0.03em">I build software end to end, and care how it <span style="color: {{t.accent}}">holds up</span>.</h1>
+<p style="margin: 0; font-size: 17px; line-height: 1.6; color: {{t.soft}}">[One or two sentences on what you build and why it is worth building.]</p>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 20px; background: {{t.ink}}; color: {{t.bg}}; text-decoration: none; font-weight: 500; font-size: 16px">Selected work
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></a>
+<a href="#" style="display: flex; align-items: center; height: 52px; padding: 0 20px; border: 1.5px solid {{t.ink}}; color: {{t.ink}}; text-decoration: none; font-weight: 500; font-size: 16px">Resume</a>
+</div>
+</section>
+
+<section style="padding: 56px 16px 0; display: flex; flex-direction: column">
+<div style="display: flex; flex-direction: column; gap: 8px; border-bottom: 2px solid {{t.ink}}; padding-bottom: 14px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.accent}}">01 — Selected work</div>
+<h2 style="margin: 0; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 34px; letter-spacing: -0.02em">Things I have made</h2>
+</div>
+<sc-for list="{{work}}" as="w" hint-placeholder-count="3">
+<a href="{{w.href}}" style="display: flex; flex-direction: column; gap: 8px; padding: 22px 0; border-bottom: 1px solid {{t.line}}; color: {{t.ink}}; text-decoration: none">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: {{t.muted}}">{{w.n}} · {{w.meta}}</span>
+<span style="font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 26px">{{w.name}}</span>
+<span style="font-size: 15px; line-height: 1.55; color: {{t.soft}}">{{w.blurb}}</span>
+</a>
+</sc-for>
+</section>
+
+<section style="margin: 56px 16px 0; padding: 24px 20px; background: {{t.surface}}; border: 1px solid {{t.line}}; display: flex; flex-direction: column; gap: 16px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.accent}}">02 — About</div>
+<p style="margin: 0; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 26px; line-height: 1.2">[A line on who you are as an engineer.]</p>
+<p style="margin: 0; font-size: 15px; line-height: 1.6; color: {{t.soft}}">[How you got here and what you are looking for next.]</p>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.muted}}; margin-top: 8px">Also interested in</div>
+<div style="display: flex; flex-direction: column; border-top: 1.5px solid {{t.ink}}">
+<sc-for list="{{interests}}" as="i" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-bottom: 1px solid {{t.line}}">
+<span style="font-weight: 600; font-size: 15px">{{i.title}}</span>
+<span style="font-size: 13px; line-height: 1.5; color: {{t.muted}}">{{i.detail}}</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="padding: 56px 16px 0; display: flex; flex-direction: column; gap: 8px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: {{t.accent}}">03 — Writing</div>
+<h2 style="margin: 0 0 12px; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 34px; letter-spacing: -0.02em">Notes</h2>
+<div style="display: flex; flex-direction: column; border-top: 2px solid {{t.ink}}">
+<sc-for list="{{posts}}" as="p" hint-placeholder-count="2">
+<a href="#" style="display: flex; flex-direction: column; gap: 6px; padding: 18px 0; border-bottom: 1px solid {{t.line}}; color: {{t.ink}}; text-decoration: none">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: {{t.muted}}">{{p.date}}</span>
+<span style="font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 22px">{{p.title}}</span>
+<span style="font-size: 14px; color: {{t.muted}}">{{p.summary}}</span>
+</a>
+</sc-for>
+</div>
+</section>
+
+<footer style="margin-top: auto; background: {{t.invBg}}; color: {{t.invFg}}; padding: 48px 16px 32px; display: flex; flex-direction: column; gap: 28px">
+<h2 style="margin: 0; font-family: {{t.display}}; font-weight: {{t.dw}}; font-size: 40px; line-height: 0.98; letter-spacing: -0.03em">Working on something interesting? Say hello.</h2>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 20px; background: {{t.invFg}}; color: {{t.invBg}}; text-decoration: none; font-weight: 500; font-size: 16px">[your@email]
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></a>
+<div style="display: flex; justify-content: space-between; border-top: 1px solid {{t.invLine}}; padding-top: 18px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">
+<span>© 2026</span>
+<span style="display: flex; gap: 18px"><a href="#" style="color: {{t.invFg}}">GitHub</a><a href="#" style="color: {{t.invFg}}">LinkedIn</a><a href="#" style="color: {{t.invFg}}">RSS</a></span>
+</div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["paper","midnight","forest","cobalt","clay","midnightSerif","cobaltSerif"],"default":"paper"},"$preview":{"width":390,"height":2400}}'>
+class Component extends DCLogic {
+renderVals() {
+const themes = {
+paper: { bg: '#F4F1EA', surface: '#FBFAF6', ink: '#16181D', soft: '#3A3E47', muted: '#5A5F6A', line: '#D9D4C8', accent: '#D2451E', onAccent: '#FFFFFF', link: '#B53A17', invBg: '#16181D', invFg: '#F4F1EA', invLine: '#3A3F49', display: "'Bricolage Grotesque', sans-serif", dw: 700 },
+midnight: { bg: '#0F1115', surface: '#171A21', ink: '#E9EAEE', soft: '#C4C8D0', muted: '#9AA0AC', line: '#272B34', accent: '#7CE0B5', onAccent: '#0F1115', link: '#7CE0B5', invBg: '#7CE0B5', invFg: '#0F1115', invLine: '#4FA985', display: "'Space Grotesk', sans-serif", dw: 700 },
+midnightSerif: { bg: '#0F1115', surface: '#171A21', ink: '#E9EAEE', soft: '#C4C8D0', muted: '#9AA0AC', line: '#272B34', accent: '#7CE0B5', onAccent: '#0F1115', link: '#7CE0B5', invBg: '#7CE0B5', invFg: '#0F1115', invLine: '#4FA985', display: "'Fraunces', serif", dw: 600 },
+forest: { bg: '#EEF0E8', surface: '#F7F8F3', ink: '#14231B', soft: '#34443A', muted: '#4F5E55', line: '#CDD4C6', accent: '#2F6B45', onAccent: '#FFFFFF', link: '#2F6B45', invBg: '#14231B', invFg: '#EEF0E8', invLine: '#34443A', display: "'Fraunces', serif", dw: 600 },
+cobalt: { bg: '#F2F5FA', surface: '#FFFFFF', ink: '#0E1A33', soft: '#2E3B57', muted: '#4B5873', line: '#D3DBE8', accent: '#1F4FD8', onAccent: '#FFFFFF', link: '#1F4FD8', invBg: '#1F4FD8', invFg: '#FFFFFF', invLine: '#5A7FE6', display: "'Space Grotesk', sans-serif", dw: 700 },
+cobaltSerif: { bg: '#F2F5FA', surface: '#FFFFFF', ink: '#0E1A33', soft: '#2E3B57', muted: '#4B5873', line: '#D3DBE8', accent: '#1F4FD8', onAccent: '#FFFFFF', link: '#1F4FD8', invBg: '#1F4FD8', invFg: '#FFFFFF', invLine: '#5A7FE6', display: "'Fraunces', serif", dw: 600 },
+clay: { bg: '#1C1714', surface: '#26201C', ink: '#F2E8DC', soft: '#D6C9BA', muted: '#B3A596', line: '#3A302A', accent: '#E8895B', onAccent: '#1C1714', link: '#F0A07A', invBg: '#E8895B', invFg: '#1C1714', invLine: '#B96A45', display: "'Fraunces', serif", dw: 600 }
+};
+const t = themes[this.props.theme] ?? themes.paper;
+return {
+t,
+work: [
+{ n: '01', name: 'BGM Looper', blurb: 'Turns a background-music track into a seamless, loudness-normalized loop. A side project in audio processing.', meta: 'Python · AWS', href: 'Project.dc.html' },
+{ n: '02', name: '[Project name]', blurb: '[What it does and what was hard about it.]', meta: '[Stack]', href: '#' },
+{ n: '03', name: '[Project name]', blurb: '[What it does and what was hard about it.]', meta: '[Stack]', href: '#' }
+],
+interests: [
+{ title: 'DevOps and cloud infrastructure', detail: 'CI/CD pipelines, Terraform, AWS.' },
+{ title: 'Telecom systems', detail: 'LTE core networks like Magma EPC, eNodeB and the RAN.' },
+{ title: 'Computer networking', detail: 'How packets actually get from one place to another.' },
+{ title: 'Audio and DSP', detail: 'Where BGM Looper came from.' }
+],
+posts: [
+{ date: '2026-08-01', title: 'Hello, World', summary: 'The first post on this blog.' },
+{ date: '[Date]', title: '[Post title]', summary: '[One-line summary]' }
+]
+};
+}
+}
+</script>
+</body>
+</html>

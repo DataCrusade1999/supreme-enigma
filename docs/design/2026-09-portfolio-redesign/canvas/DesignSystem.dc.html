@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Datasheet design system</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',sans-serif;background:#F4F1EA;color:#16181D}
+a{color:#B53A17}a:hover{color:#8E2C10}
+</style>
+</helmet>
+<div style="width: 1440px; height: 2240px; box-sizing: border-box; padding: 80px; display: flex; flex-direction: column; gap: 72px; background: #F4F1EA; color: #16181D; font-family: 'IBM Plex Sans', sans-serif">
+
+<header style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #16181D; padding-bottom: 24px">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A">DS-01 · Rev A · 2026-09</div>
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 96px; line-height: 0.92; letter-spacing: -0.03em">Datasheet</h1>
+</div>
+<p style="margin: 0; max-width: 460px; font-size: 18px; line-height: 1.55; color: #3A3E47">A design system for a portfolio that reads like an instrument spec sheet: paper ground, ink type, one signal colour, and measured values set in mono.</p>
+</header>
+
+<section style="display: flex; flex-direction: column; gap: 24px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: {{accent}}">01 — Colour</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px">
+<sc-for list="{{swatches}}" as="s" hint-placeholder-count="6">
+<div style="display: flex; flex-direction: column; border: 1px solid #D9D4C8; background: #FBFAF6">
+<div style="height: 120px; background: {{s.hex}}; border-bottom: 1px solid #D9D4C8"></div>
+<div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+<div style="font-weight: 600; font-size: 15px">{{s.name}}</div>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #5A5F6A">{{s.hex}}</div>
+<div style="font-size: 13px; color: #5A5F6A">{{s.use}}</div>
+</div>
+</div>
+</sc-for>
+</div>
+<p style="margin: 0; font-size: 14px; color: #5A5F6A; max-width: 760px">Signal is used for marks, rules and large type; body-size links use Signal Deep (5.2:1 on Paper). Ink on Paper is 15.7:1, Graphite on Paper 5.7:1. Four alternative palettes are on the Themes board.</p>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px">
+<div style="grid-column: span 12; font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: {{accent}}; margin-bottom: 24px">02 — Type</div>
+<div style="grid-column: span 7; display: flex; flex-direction: column; border-top: 1px solid #16181D">
+<div style="display: flex; align-items: baseline; gap: 24px; padding: 20px 0; border-bottom: 1px solid #D9D4C8">
+<span style="width: 96px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A5F6A">D1 · 120</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 120px; line-height: 0.9; letter-spacing: -0.035em">Loop.</span>
+</div>
+<div style="display: flex; align-items: baseline; gap: 24px; padding: 20px 0; border-bottom: 1px solid #D9D4C8">
+<span style="width: 96px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A5F6A">H1 · 56</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 56px; line-height: 1; letter-spacing: -0.02em">Seamless by design</span>
+</div>
+<div style="display: flex; align-items: baseline; gap: 24px; padding: 20px 0; border-bottom: 1px solid #D9D4C8">
+<span style="width: 96px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A5F6A">H2 · 32</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 500; font-size: 32px; line-height: 1.1">Beat-aligned loop points</span>
+</div>
+<div style="display: flex; align-items: baseline; gap: 24px; padding: 20px 0; border-bottom: 1px solid #D9D4C8">
+<span style="width: 96px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A5F6A">Body · 18</span>
+<span style="font-size: 18px; line-height: 1.6; max-width: 560px">IBM Plex Sans carries the reading text. It stays quiet so the display face and the numbers can do the talking.</span>
+</div>
+<div style="display: flex; align-items: baseline; gap: 24px; padding: 20px 0; border-bottom: 1px solid #D9D4C8">
+<span style="width: 96px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A5F6A">Data · 15</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">−14.0 LUFS · 50 ms · top_db 40 · 300 s TTL</span>
+</div>
+<div style="display: flex; align-items: baseline; gap: 24px; padding: 20px 0; border-bottom: 1px solid #D9D4C8">
+<span style="width: 96px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A5F6A">Label · 13</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase">CH1 · Signal path</span>
+</div>
+</div>
+<div style="grid-column: 9 / span 4; display: flex; flex-direction: column; gap: 20px">
+<div style="background: #16181D; color: #F4F1EA; padding: 28px; display: flex; flex-direction: column; gap: 14px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #FF8A5B">Faces</div>
+<div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 28px; font-weight: 700">Bricolage Grotesque</div>
+<div style="font-size: 14px; color: #B9BCC4">Display. Optical size 96, tight tracking.</div>
+<div style="font-size: 22px; font-weight: 500; margin-top: 8px">IBM Plex Sans</div>
+<div style="font-size: 14px; color: #B9BCC4">Body and UI, 400 / 500 / 600.</div>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; margin-top: 8px">IBM Plex Mono</div>
+<div style="font-size: 14px; color: #B9BCC4">Values, labels, section indices.</div>
+</div>
+<div style="border: 1px solid #D9D4C8; padding: 24px; display: flex; flex-direction: column; gap: 10px; background: #FBFAF6">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A">Scale</div>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; line-height: 1.8">13 · 15 · 18 · 24 · 32 · 56 · 96 · 120</div>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A; margin-top: 8px">Spacing (4 px base)</div>
+<div style="display: flex; align-items: flex-end; gap: 10px">
+<div style="width: 4px; height: 4px; background: #16181D"></div>
+<div style="width: 8px; height: 8px; background: #16181D"></div>
+<div style="width: 16px; height: 16px; background: #16181D"></div>
+<div style="width: 24px; height: 24px; background: #16181D"></div>
+<div style="width: 40px; height: 40px; background: #16181D"></div>
+<div style="width: 64px; height: 64px; background: #16181D"></div>
+</div>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A5F6A">4 · 8 · 16 · 24 · 40 · 64 · 80 · 120</div>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 24px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: {{accent}}">03 — Components</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+
+<div style="border: 1px solid #D9D4C8; background: #FBFAF6; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A">Actions</div>
+<div style="display: flex; gap: 12px; flex-wrap: wrap">
+<a href="#" style="display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 22px; background: #16181D; color: #F4F1EA; text-decoration: none; font-weight: 500; font-size: 15px">Selected work
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></a>
+<a href="#" style="display: inline-flex; align-items: center; height: 48px; padding: 0 22px; border: 1.5px solid #16181D; color: #16181D; text-decoration: none; font-weight: 500; font-size: 15px">Read the build log</a>
+</div>
+<a href="#" style="font-weight: 500; font-size: 15px; text-underline-offset: 4px">Inline link, Signal Deep</a>
+</div>
+
+<div style="border: 1px solid #D9D4C8; background: #FBFAF6; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A">Tags and status</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; padding: 6px 10px; border: 1px solid #16181D">Python 3.12</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; padding: 6px 10px; border: 1px solid #16181D">AWS Lambda</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; padding: 6px 10px; border: 1px solid #16181D">Terraform</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; padding: 6px 10px; border: 1px solid #16181D">Next.js 16</span>
+</div>
+<div style="display: flex; gap: 20px; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
+<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 10px; height: 10px; background: #2F7D4F"></span>main · live</span>
+<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 10px; height: 10px; border: 2px solid #1F5FAD; box-sizing: border-box"></span>stage</span>
+<span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 10px; height: 10px; border: 2px dashed #5A5F6A; box-sizing: border-box"></span>dev</span>
+</div>
+</div>
+
+<div style="border: 1px solid #D9D4C8; background: #FBFAF6; padding: 28px; display: flex; flex-direction: column; gap: 12px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A">Spec row</div>
+<div style="display: flex; flex-direction: column; border-top: 1.5px solid #16181D">
+<div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #D9D4C8"><span style="font-size: 14px; color: #5A5F6A">Loudness target</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">−14.0 LUFS</span></div>
+<div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #D9D4C8"><span style="font-size: 14px; color: #5A5F6A">Crossfade</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">50 ms</span></div>
+<div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #D9D4C8"><span style="font-size: 14px; color: #5A5F6A">Silence trim</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">top_db 40</span></div>
+</div>
+</div>
+
+<div style="grid-column: span 2; background: #16181D; padding: 28px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #B9BCC4"><span>Scope trace — signature element</span><span style="color: #FF8A5B">CH1 · 1 loop</span></div>
+<svg viewBox="0 0 800 160" width="100%" height="160" style="display: block">
+<defs><pattern id="g1" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#2A2E36" stroke-width="1"></path></pattern></defs>
+<rect width="800" height="160" fill="url(#g1)"></rect>
+<line x1="0" y1="80" x2="800" y2="80" stroke="#3A3F49" stroke-width="1"></line>
+<path d="M0 80 C 25 20, 50 20, 75 80 S 125 140, 150 80 S 200 35, 225 80 S 275 125, 300 80 S 350 10, 375 80 S 425 150, 450 80 S 500 30, 525 80 S 575 130, 600 80 S 650 20, 675 80 S 725 140, 750 80 S 790 60, 800 80" fill="none" stroke="{{accent}}" stroke-width="2.5"></path>
+<line x1="0" y1="0" x2="0" y2="160" stroke="#F4F1EA" stroke-width="2"></line>
+<line x1="800" y1="0" x2="800" y2="160" stroke="#F4F1EA" stroke-width="2"></line>
+</svg>
+<div style="font-size: 14px; color: #B9BCC4">A single trace on a 40 px graticule. Start and end meet the centre line at the same phase, so the line visibly loops. Used once per page, never as decoration behind text.</div>
+</div>
+
+<div style="border: 1px solid #D9D4C8; background: #FBFAF6; padding: 28px; display: flex; flex-direction: column; gap: 14px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A">Rules</div>
+<div style="font-size: 14px; line-height: 1.6">Corners are square. Structure comes from 1 px hairlines and a 2 px ink rule under each masthead, not shadows or cards. Section indices (01, 02…) run in mono, in Signal.</div>
+<div style="height: 2px; background: #16181D"></div>
+<div style="height: 1px; background: #D9D4C8"></div>
+</div>
+
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D2451E","options":["#D2451E","#1F5FAD","#2F7D4F","#7A4FB5"]},"$preview":{"width":1440,"height":2240}}'>
+class Component extends DCLogic {
+renderVals() {
+const accent = this.props.accent ?? '#D2451E';
+return {
+accent,
+swatches: [
+{ name: 'Paper', hex: '#F4F1EA', use: 'Page ground' },
+{ name: 'Sheet', hex: '#FBFAF6', use: 'Raised surfaces' },
+{ name: 'Ink', hex: '#16181D', use: 'Type, rules, dark panels' },
+{ name: 'Graphite', hex: '#5A5F6A', use: 'Secondary text' },
+{ name: 'Signal', hex: '#D2451E', use: 'Marks, indices, traces' },
+{ name: 'Probe', hex: '#1F5FAD', use: 'Second channel, links in data' }
+]
+};
+}
+}
+</script>
+</body>
+</html>
