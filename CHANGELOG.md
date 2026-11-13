@@ -12,6 +12,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - Mail for ashutosh-pandey.com: Zoho Mail receives it (MX), and Zoho can send as
   the domain (DKIM selector zoho, SPF include). access@ is an alias of the
   mailbox. Closes #403.
+- Email for access requests: people get an email from access@ashutosh-pandey.com
+  when they're approved, given a grant, or lose access, and replies land in the
+  owner's Zoho inbox. A failed send doesn't undo the change; the Access page
+  shows why it failed. Production only (#300).
 
 ### Changed
 
