@@ -31,6 +31,19 @@ beforeEach(() => {
 });
 
 describe("AccessAdmin", () => {
+  it("reads a one-use limit in the singular", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => ({
+      ok: true,
+      json: async () =>
+        url === "/api/access/users" && !init?.method
+          ? { users: directory.users.map((u) => ({ ...u, grants: u.grants.map((g) => (g.action === "newsdesk:ask" ? { ...g, limit: 1, used: 0 } : g)) })) }
+          : { ok: true },
+    }));
+    render(<AccessAdmin />);
+    const members = await screen.findByRole("region", { name: "Members" });
+    expect(within(members).getByText(/News Desk ask: 1 of 1 use left, until/)).toBeInTheDocument();
+  });
+
   it("splits users into Pending, Members and You", async () => {
     render(<AccessAdmin />);
     const pending = await screen.findByRole("region", { name: "Pending" });

@@ -4,7 +4,7 @@ import type { AccessStatus, AccessUser } from "../../lib/access-admin";
 import type { Grant } from "../../lib/authz/grants";
 import { GRANT_KEYS, GRANTS, type GrantKey } from "../../lib/route-gate";
 import { isUnexpired } from "../../lib/authz/grant-status";
-import { formatDay, formatUntil } from "../../lib/access-format";
+import { formatDay, formatUntil, formatUses } from "../../lib/access-format";
 
 type Row = AccessUser & { status: AccessStatus; grants: Grant[] };
 
@@ -16,7 +16,7 @@ function grantText(g: Grant, now: number): { text: string; muted: boolean } {
   if (!GRANTS[g.action].metered) return { text: `${label}: until ${formatUntil(g.expiresAt)}`, muted: false };
   const left = (g.limit ?? 0) - (g.used ?? 0);
   if (left <= 0) return { text: `${label}: used up, until ${formatUntil(g.expiresAt)}`, muted: true };
-  return { text: `${label}: ${left} of ${g.limit ?? 0} uses left, until ${formatUntil(g.expiresAt)}`, muted: false };
+  return { text: `${label}: ${left} of ${formatUses(g.limit ?? 0)} left, until ${formatUntil(g.expiresAt)}`, muted: false };
 }
 
 export function AccessAdmin() {

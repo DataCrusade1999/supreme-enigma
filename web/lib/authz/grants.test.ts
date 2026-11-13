@@ -22,7 +22,7 @@ describe("DynamoDB grant store", () => {
   it("gets a row by sub and action", async () => {
     ddb.on(GetCommand).resolves({ Item: grant });
     expect(await getGrantStore(env).get("u1", "newsdesk:ask")).toEqual(grant);
-    expect(ddb.commandCalls(GetCommand)[0].args[0].input).toEqual({ TableName: "grants", Key: { sub: "u1", action: "newsdesk:ask" } });
+    expect(ddb.commandCalls(GetCommand)[0].args[0].input).toEqual({ TableName: "grants", Key: { sub: "u1", action: "newsdesk:ask" }, ConsistentRead: true });
   });
 
   it("returns null for a missing row", async () => {

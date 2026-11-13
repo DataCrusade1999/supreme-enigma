@@ -145,6 +145,13 @@ describe("changes", () => {
     expect((await grantAction({ ...p, action: "newsdesk:refresh" })).opensTool).toBe(true);
   });
 
+  it("grantAction on a key that is still unexpired does not open the tool again", async () => {
+    only("f", ["friends"]);
+    store.list.mockResolvedValue([{ action: "newsdesk:ask", expiresAt: 1000 + 100 }]);
+    const p = { sub: "f", expiresInDays: 7, now: 1000 };
+    expect((await grantAction({ ...p, action: "newsdesk:ask", limit: 5 })).opensTool).toBe(false);
+  });
+
   it("revokeGrant deletes one row and returns it", async () => {
     only("f", ["friends"]);
     const row = { action: "newsdesk:ask", expiresAt: 5 };

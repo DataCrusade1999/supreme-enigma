@@ -61,7 +61,7 @@ function dynamoStore(table: string): GrantStore {
   const key = (sub: string, action: string) => ({ sub, action });
   const store: GrantStore = {
     async get(sub, action) {
-      const out = await client().send(new GetCommand({ TableName: table, Key: key(sub, action) }));
+      const out = await client().send(new GetCommand({ TableName: table, Key: key(sub, action), ConsistentRead: true }));
       return (out.Item as Grant | undefined) ?? null;
     },
     async consume(sub, action, now) {

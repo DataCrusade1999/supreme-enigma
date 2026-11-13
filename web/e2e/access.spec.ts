@@ -11,6 +11,7 @@ test("a signed-in user in no group is sent to Access requested", async ({ page, 
 test("a friend with no grant opens no tool", async ({ page, baseURL }) => {
   await signIn(page, baseURL!, "friends");
   await page.goto("/tools");
+  await expect(page).toHaveURL(/\/tools$/);
   for (const name of ["BGM Looper", "Money Planner", "News Desk", "Resume admin", "Newsletter admin", "Content editor", "Access"]) {
     await expect(page.getByRole("link", { name: new RegExp(name) })).toHaveCount(0);
   }
