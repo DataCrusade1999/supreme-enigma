@@ -4,6 +4,12 @@
 # The store is in module.auth (auth.tf); this file grants production's Vercel role
 # use of it and of the grants table. Dev and stage have their own, in their own accounts.
 
+# Access emails (#300) go out from this address. Zoho receives replies: access@ is
+# an alias of the owner's mailbox (#403).
+locals {
+  access_address = "access@${vercel_project_domain.custom.domain}"
+}
+
 resource "aws_iam_role_policy" "vercel_access" {
   name = "${var.project_name}-vercel-access"
   role = aws_iam_role.vercel.id
@@ -35,6 +41,15 @@ resource "aws_iam_role_policy" "vercel_access" {
         ]
         Resource = [module.auth.user_pool_arn]
       },
+      {
+        Sid      = "SendAccessEmail"
+        Effect   = "Allow"
+        Action   = ["ses:SendEmail"]
+        Resource = [aws_sesv2_email_identity.domain.arn]
+        Condition = {
+          StringEquals = { "ses:FromAddress" = local.access_address }
+        }
+      },
     ]
   })
 }
@@ -51,6 +66,14 @@ resource "vercel_project_environment_variable" "access_grants_table" {
   project_id = vercel_project.looper.id
   key        = "ACCESS_GRANTS_TABLE"
   value      = module.auth.access_grants_table_name
+  target     = ["production"]
+  sensitive  = false
+}
+
+resource "vercel_project_environment_variable" "access_from_email" {
+  project_id = vercel_project.looper.id
+  key        = "ACCESS_FROM_EMAIL"
+  value      = local.access_address
   target     = ["production"]
   sensitive  = false
 }
