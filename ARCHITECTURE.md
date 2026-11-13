@@ -103,6 +103,11 @@ identity source. The proxy calls
 `owner` and `friends`; see
 `docs/superpowers/specs/2026-09-29-access-control-design.md`.
 
+Access emails: approve, grant, remove and revoke on the Access page email the
+person from `access@ashutosh-pandey.com` through SESv2 `SendEmail`, about
+$0.10 per 1,000 messages, production only. Mail to `access@` is received by
+Zoho (#403).
+
 ## CI/CD
 
 `.github/workflows/deploy.yml`: `changes` job on push (whether `lambda/`

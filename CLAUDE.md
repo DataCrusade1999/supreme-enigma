@@ -75,6 +75,12 @@ When the user names one instance of a problem (one URL showing `%2F`, one button
 
 Remove all mannered prose — in docs, specs, plans, commit messages, PR descriptions, and blog content. Say the thing plainly; no throat-clearing, no rhetorical flourishes, no summary paragraphs restating what was just said.
 
+## Auto mode boundaries
+
+- Routine: pushing feature branches, opening PRs into `dev`, and filing or closing issues in `DataCrusade1999/supreme-enigma` (public, checked out at `E:\Personal\looper`).
+- `stage` and `main` change only through a merged PR, never a direct push or force-push.
+- Cloud targets: the AWS accounts listed under Branching & releases and the Vercel project `bgm-looper`. `main` deploys to production at ashutosh-pandey.com; `dev` and `stage` are non-production.
+
 ## AWS DevOps Agent
 
 An AWS DevOps Agent Space (`bgm-looper`, id `bbfee9b3-446d-46b4-89e5-5a25fa1fc1ec`) is set up, scoped to exactly this project — the production AWS account (`223376380711`) and the `DataCrusade1999/supreme-enigma` GitHub repo, nothing else. Dev's and stage's accounts are outside the Agent Space, so it can't see their resources. Used for release-readiness review (e.g. before a `dev → main` promotion), UI release testing against `stage` (manual `gh workflow run release-tests.yml`), cost/recommendation queries, and incident investigation. See `docs/aws-devops-agent.md` for setup details and operational gotchas (polling patterns, output-size limits, how to invoke a review without an open PR).

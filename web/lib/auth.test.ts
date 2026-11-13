@@ -37,7 +37,7 @@ describe("seal / unseal", () => {
 
   it.each([
     ["wrong secret", (v: string) => ({ value: v, secret: "s2" })],
-    ["one changed character", (v: string) => ({ value: (v[5] === "A" ? "B" : "A") + v.slice(1), secret: "s1" })],
+    ["one changed character", (v: string) => ({ value: (v[0] === "A" ? "B" : "A") + v.slice(1), secret: "s1" })],
     ["truncated", (v: string) => ({ value: v.slice(0, 20), secret: "s1" })],
     ["not base64", () => ({ value: "!!!", secret: "s1" })],
     ["empty", () => ({ value: "", secret: "s1" })],

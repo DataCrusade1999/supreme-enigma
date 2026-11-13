@@ -165,6 +165,32 @@ done
 
 Read all of this before running it.
 
+### Keep the domain's mail records
+
+Destroying `prod/account` deletes every `vercel_dns_record` in the stack, so
+mail to the domain would bounce while Zoho keeps billing (#403). Before the
+loop above, take the mail records out of state, from `infra/prod/account` with
+`AWS_PROFILE=personal`:
+
+1. Write down each record's ID: the `id` line of `terraform state show
+   '<address>'` for `vercel_dns_record.zoho_verification`,
+   `vercel_dns_record.zoho_mx["10"]`, `["20"]`, `["50"]`,
+   `vercel_dns_record.zoho_dkim`, `vercel_dns_record.apex_spf` and
+   `vercel_dns_record.dmarc`. If state is already gone, list them with
+   `GET https://api.vercel.com/v4/domains/ashutosh-pandey.com/records?teamId=<team_id>`
+   and the Vercel token. The team ID is `local.vercel_team_id` in
+   `infra/prod/account/locals.tf`.
+2. Remove them from state. The bare `zoho_mx` address removes all three
+   instances:
+
+   ```bash
+   terraform state rm vercel_dns_record.zoho_verification vercel_dns_record.zoho_mx \
+     vercel_dns_record.zoho_dkim vercel_dns_record.apex_spf vercel_dns_record.dmarc
+   ```
+
+`dmarc` is on the list because it is the domain's policy for Zoho's mail as
+well as SES's. The SES DKIM CNAMEs and the `mail.` records go with SES.
+
 ### What goes
 
 The Vercel project, all three Lambdas, the three ECR repos (one per account,
@@ -224,8 +250,22 @@ likewise unexercised here.)*
 ### Recovery: applying from scratch afterwards
 
 A bare `terraform apply` will not work. The order:
-1. Production: `infra/prod/account` with `-target=aws_ecr_repository.looper`, then
-   the rest of `infra/prod/account`.
+1. Production: `infra/prod/account` with `-target=aws_ecr_repository.looper`.
+   Then import the mail records kept out of the destroy, one call per instance,
+   with the IDs written down before it:
+
+   ```bash
+   terraform import -var-file=terraform.tfvars 'vercel_dns_record.zoho_mx["10"]' <team_id>/<record_id>
+   ```
+
+   and the same for `zoho_mx["20"]`, `zoho_mx["50"]`, `zoho_verification`,
+   `zoho_dkim`, `apex_spf` and `dmarc`. Import evaluates the configuration, so
+   without `-var-file` it stops on the stack's seven required variables. An
+   apply with these records out of state creates a second `v=spf1` TXT at the
+   apex, a permerror that gets the domain's mail rejected, plus duplicate MX
+   records and a second `_dmarc` TXT, which receivers treat as no DMARC policy.
+   Then apply the rest of `infra/prod/account`; it should show `No changes` for
+   the imported records.
 2. Dev and stage: `infra/<env>/account`, locally, in two passes:
    first `-var webauthn_enabled=false`, then a plain apply (the
    `RelyingPartyId` failure in `.claude/rules/infra.md`).

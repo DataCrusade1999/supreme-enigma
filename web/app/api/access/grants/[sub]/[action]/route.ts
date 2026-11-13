@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
 import { revokeGrant } from "@/lib/access-admin";
-import { actingEmail, audit, badRequest, meteredAction, respond } from "@/lib/access-api";
+import { actingEmail, audit, badRequest, changed, meteredAction, respond } from "@/lib/access-api";
+import { sendEnded } from "@/lib/access-mail";
+import { METERED_LABELS } from "@/lib/route-gate";
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ sub: string; action: string }> }) {
   const { sub, action } = await params;
@@ -9,6 +10,6 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   return respond(async () => {
     const user = await revokeGrant(sub, parsed.data);
     audit({ by: await actingEmail(), op: "revoke", target: user.email, action: parsed.data });
-    return NextResponse.json({ ok: true });
+    return changed(await sendEnded(user, METERED_LABELS[parsed.data]));
   });
 }
