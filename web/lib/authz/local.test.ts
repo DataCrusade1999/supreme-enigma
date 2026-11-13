@@ -8,7 +8,7 @@ const authz = createLocalAuthorizer("us-east-1_e2e");
 
 describe("createLocalAuthorizer", () => {
   it("applies the real policies", async () => {
-    expect(await authz.isAuthorized({ session: as(["friends"]), tool: "news-desk", action: "view", context: { now: 1 } })).toBe("allow");
+    expect(await authz.isAuthorized({ session: as(["friends"]), tool: "hub", action: "view", context: { now: 1 } })).toBe("allow");
     expect(await authz.isAuthorized({ session: as(["friends"]), tool: "resume-admin", action: "view", context: { now: 1 } })).toBe("deny");
     expect(await authz.isAuthorized({ session: as(["owner"]), tool: "resume-admin", action: "resume:publish", context: { now: 1 } })).toBe("allow");
     expect(await authz.isAuthorized({ session: as([]), tool: "hub", action: "view", context: { now: 1 } })).toBe("deny");
@@ -18,5 +18,11 @@ describe("createLocalAuthorizer", () => {
     const req = { session: as(["friends"]), tool: "news-desk" as const, action: "newsdesk:ask" as const };
     expect(await authz.isAuthorized({ ...req, context: { now: 1 } })).toBe("deny");
     expect(await authz.isAuthorized({ ...req, context: { now: 1, grant: { remaining: 1, expiresAt: 2 } } })).toBe("allow");
+  });
+
+  it("needs access in the context for a friend to open a tool", async () => {
+    const req = { session: as(["friends"]), tool: "money-planner" as const, action: "view" as const };
+    expect(await authz.isAuthorized({ ...req, context: { now: 1 } })).toBe("deny");
+    expect(await authz.isAuthorized({ ...req, context: { now: 1, access: { expiresAt: 61 } } })).toBe("allow");
   });
 });

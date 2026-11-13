@@ -39,6 +39,19 @@ describe("createAvpAuthorizer", () => {
     });
   });
 
+  it("maps access to a record", async () => {
+    avp.on(IsAuthorizedWithTokenCommand).resolves({ decision: "ALLOW", determiningPolicies: [], errors: [] });
+    await createAvpAuthorizer("store1").isAuthorized({
+      session,
+      tool: "money-planner",
+      action: "view",
+      context: { now: 10, access: { expiresAt: 30 } },
+    });
+    expect(avp.commandCalls(IsAuthorizedWithTokenCommand)[0].args[0].input.context).toEqual({
+      contextMap: { now: { long: 10 }, access: { record: { expiresAt: { long: 30 } } } },
+    });
+  });
+
   it("sends no grant when there is none, and maps DENY", async () => {
     avp.on(IsAuthorizedWithTokenCommand).resolves({ decision: "DENY", determiningPolicies: [], errors: [] });
     const decision = await createAvpAuthorizer("store1").isAuthorized({ session, tool: "hub", action: "view", context: { now: 10 } });

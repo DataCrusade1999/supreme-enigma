@@ -3,19 +3,19 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readSession } from "./auth";
 import { AccessError } from "./access-admin";
-import { METERED_ACTIONS } from "./route-gate";
+import { GRANT_KEYS, GRANTS } from "./route-gate";
 
-export const meteredAction = z.enum(METERED_ACTIONS);
+export const grantKey = z.enum(GRANT_KEYS);
 
 export const subBody = z.object({ sub: z.string().min(1).max(128) });
 
 export const grantBody = z.object({
   sub: z.string().min(1).max(128),
-  action: meteredAction,
-  limit: z.number().int().min(1).max(1000).default(20),
+  action: grantKey,
+  limit: z.number().int().min(1).max(1000).optional(),
   expiresInDays: z.number().int().min(1).max(90).default(7),
   note: z.string().trim().max(200).optional(),
-});
+}).transform(({ limit, ...rest }) => (GRANTS[rest.action].metered ? { ...rest, limit: limit ?? 20 } : rest));
 
 /** Who made the change, for the audit line. The proxy already checked access:manage. */
 export async function actingEmail(): Promise<string> {
@@ -41,6 +41,16 @@ export async function respond(run: () => Promise<Response>): Promise<Response> {
 /** The change succeeded; say so, and pass on why the email didn't go, if it didn't. */
 export function changed(emailError: string | null): Response {
   return NextResponse.json(emailError ? { ok: true, emailError } : { ok: true });
+}
+
+/** Run a send; a sender that throws is reported like one that returns an error. */
+export async function attempt(send: () => Promise<string | null>): Promise<string | null> {
+  try {
+    return await send();
+  } catch (err) {
+    console.error("access: email threw", err);
+    return err instanceof Error ? `${err.name}: ${err.message}` : "the email could not be sent";
+  }
 }
 
 export function badRequest(): Response {
