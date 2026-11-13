@@ -11,11 +11,6 @@ const SITE = "https://ashutosh-pandey.com";
 let client: SESv2Client | null = null;
 const ses = () => (client ??= new SESv2Client({ region: process.env.APP_AWS_REGION!, ...awsCredentials() }));
 
-const day = (s: number) =>
-  new Date(s * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
-
-const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
 /** Null when sent; otherwise why not. A failed email never undoes the change
  * that triggered it: the Access page shows the reason instead. */
 async function deliver(to: string, subject: string, body: { html: string; text: string }): Promise<string | null> {
@@ -44,15 +39,6 @@ async function deliver(to: string, subject: string, body: { html: string; text: 
   }
 }
 
-function send(to: string, subject: string, lines: string[]): Promise<string | null> {
-  const text = [...lines, "", "Reply to this email if you have a question."].join("\n");
-  const html = text
-    .split("\n\n")
-    .map((p) => `<p>${escape(p).replace(/\n/g, "<br>")}</p>`)
-    .join("");
-  return deliver(to, subject, { html, text });
-}
-
 const toolOf = (g: Grant) => TOOLS.find((t) => t.id === GRANTS[g.action].tool)!;
 
 function grantRow(g: Grant): EmailParts["rows"][number] {
@@ -62,27 +48,6 @@ function grantRow(g: Grant): EmailParts["rows"][number] {
     ? `${GRANTS[g.action].label} · ${formatUses((g.limit ?? 0) - (g.used ?? 0))} · ${until}`
     : until;
   return { tool: tool.name, detail, button: { label: `Open ${tool.name}`, href: `${SITE}${toolHref(tool.id)}` } };
-}
-
-export function sendApproved(user: AccessUser): Promise<string | null> {
-  return send(user.email, "You can now use the tools on ashutosh-pandey.com", [
-    "You've been given access to BGM Looper, Money Planner and News Desk.",
-    "",
-    `Sign in at ${SITE}/tools with the same Google account.`,
-    "",
-    "Anything that costs money to run (the News Desk assistant and refresh, BGM Looper processing) needs a separate grant. Reply to ask for one.",
-  ]);
-}
-
-export function sendGrants(user: AccessUser, grants: Grant[]): Promise<string | null> {
-  const lines = grants.map((g) => `${GRANTS[g.action].label}: ${(g.limit ?? 0) - (g.used ?? 0)} uses, until ${day(g.expiresAt)}`);
-  return send(user.email, "Your grants on ashutosh-pandey.com", [
-    "You can now use:",
-    "",
-    ...lines,
-    "",
-    `Your remaining uses are shown at ${SITE}/tools.`,
-  ]);
 }
 
 export function sendWelcome(user: AccessUser, grant: Grant): Promise<string | null> {

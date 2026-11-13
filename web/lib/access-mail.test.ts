@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
-import { sendApproved, sendEnded, sendGrants, sendUpdate, sendWelcome } from "./access-mail";
+import { sendEnded, sendUpdate, sendWelcome } from "./access-mail";
 import type { Grant } from "./authz/grants";
 
 const ses = mockClient(SESv2Client);
@@ -19,29 +19,6 @@ beforeEach(() => {
 });
 
 describe("access emails", () => {
-  it("sends the approval from and replying to the access address", async () => {
-    ses.on(SendEmailCommand).resolves({ MessageId: "m" });
-    expect(await sendApproved(user)).toBeNull();
-    const input = ses.commandCalls(SendEmailCommand)[0].args[0].input;
-    expect(input.FromEmailAddress).toBe("Ashutosh Pandey <access@ashutosh-pandey.com>");
-    expect(input.ReplyToAddresses).toEqual(["access@ashutosh-pandey.com"]);
-    expect(input.Destination).toEqual({ ToAddresses: ["jane@example.com"] });
-    expect(input.Content?.Simple?.Subject?.Data).toBe("You can now use the tools on ashutosh-pandey.com");
-    expect(input.Content?.Simple?.Body?.Text?.Data).toContain("BGM Looper, Money Planner and News Desk");
-    expect(input.Content?.Simple?.Body?.Text?.Data).toContain("https://ashutosh-pandey.com/tools");
-  });
-
-  it("lists every live grant, with uses left and the last day", async () => {
-    ses.on(SendEmailCommand).resolves({ MessageId: "m" });
-    await sendGrants(user, [
-      { sub: "u1", action: "newsdesk:ask", email: "", limit: 20, used: 0, expiresAt: 1_791_504_000, grantedAt: 0 },
-      { sub: "u1", action: "looper:process", email: "", limit: 5, used: 2, expiresAt: 1_791_504_000, grantedAt: 0 },
-    ]);
-    const text = ses.commandCalls(SendEmailCommand)[0].args[0].input.Content?.Simple?.Body?.Text?.Data;
-    expect(text).toContain("News Desk ask: 20 uses, until 9 Oct 2026");
-    expect(text).toContain("BGM Looper processing: 3 uses, until 9 Oct 2026");
-  });
-
   it("says what ended", async () => {
     ses.on(SendEmailCommand).resolves({ MessageId: "m" });
     await sendEnded(user, "News Desk ask");
@@ -108,16 +85,16 @@ describe("access emails", () => {
 
   it("returns SES's error instead of throwing, e.g. in the sandbox", async () => {
     ses.on(SendEmailCommand).rejects(Object.assign(new Error("Email address is not verified."), { name: "MessageRejected" }));
-    expect(await sendApproved(user)).toBe("MessageRejected: Email address is not verified.");
+    expect(await sendWelcome(user, newsdesk)).toBe("MessageRejected: Email address is not verified.");
   });
 
   it("sends nothing to a user without an email address", async () => {
-    expect(await sendApproved({ ...user, email: "" })).toBe("this account has no email address");
+    expect(await sendWelcome({ ...user, email: "" }, newsdesk)).toBe("this account has no email address");
     expect(ses.commandCalls(SendEmailCommand)).toHaveLength(0);
   });
 
   it("sends nothing when ACCESS_FROM_EMAIL is not set", async () => {
     delete process.env.ACCESS_FROM_EMAIL;
-    expect(await sendApproved(user)).toBe("ACCESS_FROM_EMAIL is not set");
+    expect(await sendWelcome(user, newsdesk)).toBe("ACCESS_FROM_EMAIL is not set");
   });
 });

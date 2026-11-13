@@ -14,10 +14,10 @@ vi.mock("@/lib/access-api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/access-api")>()),
   actingEmail: vi.fn(async () => "owner@example.com"),
 }));
-vi.mock("@/lib/access-mail", () => ({ sendApproved: vi.fn(), sendGrants: vi.fn(), sendEnded: vi.fn() }));
-vi.mock("@/lib/authz/grants", () => ({ getGrantStore: vi.fn() }));
-import { sendApproved, sendEnded, sendGrants } from "@/lib/access-mail";
-import { getGrantStore } from "@/lib/authz/grants";
+vi.mock("@/lib/access-mail", () => ({ sendWelcome: vi.fn(), sendUpdate: vi.fn(), sendEnded: vi.fn() }));
+const marker = vi.hoisted(() => ({ wasWelcomed: vi.fn(), markWelcomed: vi.fn() }));
+vi.mock("@/lib/authz/grants", () => ({ getGrantStore: vi.fn(() => marker) }));
+import { sendEnded, sendUpdate, sendWelcome } from "@/lib/access-mail";
 
 import { AccessError, approve, dismiss, grantAction, listUsers, removeMember, revokeGrant } from "@/lib/access-admin";
 import { GET as users } from "./users/route";
@@ -34,10 +34,11 @@ const params = <T,>(p: T) => ({ params: Promise.resolve(p) });
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "info").mockImplementation(() => {});
-  vi.mocked(sendApproved).mockResolvedValue(null);
-  vi.mocked(sendGrants).mockResolvedValue(null);
+  vi.mocked(sendWelcome).mockResolvedValue(null);
+  vi.mocked(sendUpdate).mockResolvedValue(null);
   vi.mocked(sendEnded).mockResolvedValue(null);
-  vi.mocked(getGrantStore).mockReturnValue({ list: vi.fn(async () => []) } as never);
+  marker.wasWelcomed.mockResolvedValue(false);
+  marker.markWelcomed.mockResolvedValue(undefined);
 });
 
 describe("/api/access", () => {
@@ -57,7 +58,7 @@ describe("/api/access", () => {
   });
 
   it("DELETE members/[sub] removes, DELETE pending/[sub] dismisses", async () => {
-    vi.mocked(removeMember).mockResolvedValue(user);
+    vi.mocked(removeMember).mockResolvedValue({ user, hadLive: false });
     vi.mocked(dismiss).mockResolvedValue(user);
     expect((await removeRoute(new Request("http://x"), params({ sub: "u1" }))).status).toBe(200);
     expect((await dismissRoute(new Request("http://x"), params({ sub: "u1" }))).status).toBe(200);
@@ -66,7 +67,7 @@ describe("/api/access", () => {
   });
 
   it("PUT grants validates, applies defaults and grants", async () => {
-    vi.mocked(grantAction).mockResolvedValue({ user, grant: { expiresAt: 99 } as never });
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: { expiresAt: 99 } as never, opensTool: true });
     const res = await grantRoute(json({ sub: "u1", action: "newsdesk:ask" }));
     expect(res.status).toBe(200);
     expect(grantAction).toHaveBeenCalledWith(
@@ -74,8 +75,22 @@ describe("/api/access", () => {
     );
   });
 
+  it("PUT grants for a time-only key needs no limit and passes none", async () => {
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: { action: "moneyplanner:use", expiresAt: 99 } as never, opensTool: true });
+    const res = await grantRoute(json({ sub: "u1", action: "moneyplanner:use" }));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(grantAction).mock.calls[0][0]).not.toHaveProperty("limit");
+  });
+
+  it("PUT grants drops a limit sent for a time-only key", async () => {
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: { action: "moneyplanner:use", expiresAt: 99 } as never, opensTool: true });
+    await grantRoute(json({ sub: "u1", action: "moneyplanner:use", limit: 5 }));
+    expect(vi.mocked(grantAction).mock.calls[0][0]).not.toHaveProperty("limit");
+  });
+
   it.each([
     [{ sub: "u1", action: "resume:extract" }],
+    [{ sub: "u1", action: "keystatic:use" }],
     [{ sub: "u1", action: "newsdesk:ask", limit: 0 }],
     [{ sub: "u1", action: "newsdesk:ask", limit: 1001 }],
     [{ sub: "u1", action: "newsdesk:ask", expiresInDays: 91 }],
@@ -88,14 +103,14 @@ describe("/api/access", () => {
   });
 
   it("DELETE grants/[sub]/[action] receives the decoded action", async () => {
-    vi.mocked(revokeGrant).mockResolvedValue(user);
+    vi.mocked(revokeGrant).mockResolvedValue({ user, removed: null });
     // Next decodes route params, so "newsdesk%3Aask" arrives as "newsdesk:ask".
     const res = await revokeRoute(new Request("http://x"), params({ sub: "u1", action: "newsdesk:ask" }));
     expect(res.status).toBe(200);
     expect(revokeGrant).toHaveBeenCalledWith("u1", "newsdesk:ask");
   });
 
-  it("DELETE grants rejects an action that isn't metered", async () => {
+  it("DELETE grants rejects a key that isn't a grant", async () => {
     const res = await revokeRoute(new Request("http://x"), params({ sub: "u1", action: "keystatic:use" }));
     expect(res.status).toBe(400);
   });
@@ -120,62 +135,122 @@ describe("/api/access", () => {
 });
 
 describe("/api/access emails", () => {
-  it("approve emails the new member", async () => {
+  const ask = { action: "newsdesk:ask", expiresAt: 9e9 } as never;
+  const grantFor = (action = "newsdesk:ask") => grantRoute(json({ sub: "u1", action }));
+
+  it("approve sends nothing", async () => {
     vi.mocked(approve).mockResolvedValue(user);
     expect(await (await approveRoute(json({ sub: "u1" }))).json()).toEqual({ ok: true });
-    expect(sendApproved).toHaveBeenCalledWith(user);
+    expect(sendWelcome).not.toHaveBeenCalled();
+    expect(sendUpdate).not.toHaveBeenCalled();
+    expect(sendEnded).not.toHaveBeenCalled();
   });
 
-  it("reports a failed email without failing the change", async () => {
-    vi.mocked(approve).mockResolvedValue(user);
-    vi.mocked(sendApproved).mockResolvedValue("MessageRejected: Email address is not verified.");
-    const res = await approveRoute(json({ sub: "u1" }));
+  it("the first grant sends the welcome, then marks the member welcomed", async () => {
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool: true });
+    const res = await grantFor();
+    expect(await res.json()).toEqual({ ok: true });
+    expect(sendWelcome).toHaveBeenCalledWith(user, ask);
+    expect(marker.markWelcomed).toHaveBeenCalledWith("u1", expect.any(Number));
+    expect(sendUpdate).not.toHaveBeenCalled();
+  });
+
+  it("a failed welcome is reported and the member is not marked", async () => {
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool: true });
+    vi.mocked(sendWelcome).mockResolvedValue("MessageRejected: Email address is not verified.");
+    const res = await grantFor();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, emailError: "MessageRejected: Email address is not verified." });
+    expect(marker.markWelcomed).not.toHaveBeenCalled();
   });
 
-  it("grant emails every live grant the member now holds", async () => {
-    const live = { action: "newsdesk:ask", limit: 20, used: 0, expiresAt: 9e9 };
-    const spent = { action: "looper:process", limit: 5, used: 5, expiresAt: 9e9 };
-    vi.mocked(grantAction).mockResolvedValue({ user, grant: live as never });
-    vi.mocked(getGrantStore).mockReturnValue({ list: vi.fn(async () => [live, spent]) } as never);
-    await grantRoute(json({ sub: "u1", action: "newsdesk:ask" }));
-    expect(sendGrants).toHaveBeenCalledWith(user, [live]);
-  });
-
-  it("grant still answers ok and emails the new grant when listing the others fails", async () => {
+  it("a welcome that throws still answers 200 with the error", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const live = { action: "newsdesk:ask", limit: 20, used: 0, expiresAt: 9e9 };
-    vi.mocked(grantAction).mockResolvedValue({ user, grant: live as never });
-    vi.mocked(getGrantStore).mockReturnValue({
-      list: vi.fn(async () => {
-        throw new Error("ProvisionedThroughputExceededException");
-      }),
-    } as never);
-    const res = await grantRoute(json({ sub: "u1", action: "newsdesk:ask" }));
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool: true });
+    vi.mocked(sendWelcome).mockRejectedValue(new Error("boom"));
+    const res = await grantFor();
     expect(res.status).toBe(200);
-    expect(sendGrants).toHaveBeenCalledWith(user, [live]);
+    expect(await res.json()).toEqual({ ok: true, emailError: "Error: boom" });
+    expect(marker.markWelcomed).not.toHaveBeenCalled();
   });
 
-  it("grant emails the new grant even when the read after the write is stale", async () => {
-    const made = { action: "newsdesk:ask", limit: 20, used: 0, expiresAt: 9e9 };
-    const old = { action: "newsdesk:ask", limit: 5, used: 5, expiresAt: 9e9 };
-    const other = { action: "looper:process", limit: 5, used: 1, expiresAt: 9e9 };
-    vi.mocked(grantAction).mockResolvedValue({ user, grant: made as never });
-    vi.mocked(getGrantStore).mockReturnValue({ list: vi.fn(async () => [old, other]) } as never);
-    await grantRoute(json({ sub: "u1", action: "newsdesk:ask" }));
-    expect(sendGrants).toHaveBeenCalledWith(user, [other, made]);
+  it("an update that throws still answers 200 with the error", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    marker.wasWelcomed.mockResolvedValue(true);
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool: false });
+    vi.mocked(sendUpdate).mockRejectedValue(new Error("boom"));
+    const res = await grantFor();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, emailError: "Error: boom" });
   });
 
-  it("remove and revoke email what ended; dismiss sends nothing", async () => {
-    vi.mocked(removeMember).mockResolvedValue(user);
-    vi.mocked(revokeGrant).mockResolvedValue(user);
-    vi.mocked(dismiss).mockResolvedValue(user);
-    await removeRoute(new Request("http://x"), params({ sub: "u1" }));
+  it.each([true, false])("a welcomed member gets an update with opensTool %s", async (opensTool) => {
+    marker.wasWelcomed.mockResolvedValue(true);
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool });
+    await grantFor();
+    expect(sendUpdate).toHaveBeenCalledWith(user, ask, opensTool);
+    expect(sendWelcome).not.toHaveBeenCalled();
+    expect(marker.markWelcomed).not.toHaveBeenCalled();
+  });
+
+  it("answers 200 and sends the update when reading the marker throws", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    marker.wasWelcomed.mockRejectedValue(new Error("ProvisionedThroughputExceededException"));
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool: true });
+    const res = await grantFor();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(sendUpdate).toHaveBeenCalledWith(user, ask, true);
+    expect(sendWelcome).not.toHaveBeenCalled();
+  });
+
+  it("answers 200 without an email error when writing the marker throws", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    marker.markWelcomed.mockRejectedValue(new Error("boom"));
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool: true });
+    const res = await grantFor();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(sendWelcome).toHaveBeenCalled();
+  });
+
+  it("revoke of an unexpired grant says what ended", async () => {
+    vi.mocked(revokeGrant).mockResolvedValue({ user, removed: { action: "newsdesk:ask", expiresAt: 9e9 } as never });
     await revokeRoute(new Request("http://x"), params({ sub: "u1", action: "newsdesk:ask" }));
+    expect(sendEnded).toHaveBeenCalledWith(user, "News Desk ask");
+  });
+
+  it("revoke of an expired or missing grant sends nothing", async () => {
+    vi.mocked(revokeGrant).mockResolvedValueOnce({ user, removed: { action: "newsdesk:ask", expiresAt: 1 } as never });
+    await revokeRoute(new Request("http://x"), params({ sub: "u1", action: "newsdesk:ask" }));
+    vi.mocked(revokeGrant).mockResolvedValueOnce({ user, removed: null });
+    await revokeRoute(new Request("http://x"), params({ sub: "u1", action: "newsdesk:ask" }));
+    expect(sendEnded).not.toHaveBeenCalled();
+  });
+
+  it("remove sends the ended email only for a member with a live grant", async () => {
+    vi.mocked(removeMember).mockResolvedValueOnce({ user, hadLive: true });
+    await removeRoute(new Request("http://x"), params({ sub: "u1" }));
+    expect(sendEnded).toHaveBeenCalledWith(user, "the tools");
+    vi.mocked(sendEnded).mockClear();
+    vi.mocked(removeMember).mockResolvedValueOnce({ user, hadLive: false });
+    await removeRoute(new Request("http://x"), params({ sub: "u1" }));
+    expect(sendEnded).not.toHaveBeenCalled();
+  });
+
+  it("an ended email that throws still answers 200 with the error", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(removeMember).mockResolvedValue({ user, hadLive: true });
+    vi.mocked(sendEnded).mockRejectedValue(new Error("boom"));
+    const res = await removeRoute(new Request("http://x"), params({ sub: "u1" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, emailError: "Error: boom" });
+  });
+
+  it("dismiss sends nothing", async () => {
+    vi.mocked(dismiss).mockResolvedValue(user);
     await dismissRoute(new Request("http://x"), params({ sub: "u1" }));
-    expect(sendEnded).toHaveBeenNthCalledWith(1, user, "the tools");
-    expect(sendEnded).toHaveBeenNthCalledWith(2, user, "News Desk ask");
-    expect(sendEnded).toHaveBeenCalledTimes(2);
+    expect(sendEnded).not.toHaveBeenCalled();
+    expect(sendWelcome).not.toHaveBeenCalled();
   });
 });
