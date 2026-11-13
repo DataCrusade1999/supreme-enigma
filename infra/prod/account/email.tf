@@ -80,6 +80,16 @@ resource "vercel_dns_record" "apex_spf" {
   ttl     = 1800
 }
 
+# Zoho Mail domain verification (#403). Kept after verifying: removing it can make Zoho ask to verify again.
+resource "vercel_dns_record" "zoho_verification" {
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = ""
+  type    = "TXT"
+  value   = "zoho-verification=zb62690927.zmverify.zoho.in"
+  ttl     = 1800
+}
+
 # In the sandbox SES delivers only to verified addresses. SES emails a link to this
 # address on first apply; it must be clicked once.
 resource "aws_sesv2_email_identity" "owner" {

@@ -7,6 +7,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Zoho Mail domain-verification record on ashutosh-pandey.com. Part of #403.
+
 ## [1.10.0] - 2026-10-30
 
 ### Added
