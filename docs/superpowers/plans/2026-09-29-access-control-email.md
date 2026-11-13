@@ -461,9 +461,11 @@ EOF
 
 Then invoke the `merging-a-pr` skill and follow it to merge.
 
-- [ ] **Step 5: Manual check on `dev`**
+- [ ] **Step 5: Manual check on production**
 
-1. From a second account, email `access@ashutosh-pandey.com` → it lands in the owner's Zoho inbox.
+`ACCESS_FROM_EMAIL` and the send grant are production only (#511), so dev and stage report `ACCESS_FROM_EMAIL is not set`. After promotion to `main`, use a second account of the owner's before approving anyone else.
+
+1. From the second account, email `access@ashutosh-pandey.com` → it lands in the owner's Zoho inbox.
 2. Approve the account on the Access page → it receives "You can now use the tools on ashutosh-pandey.com".
 3. Grant News Desk ask, 2 uses → it receives "Your grants on ashutosh-pandey.com" listing "News Desk ask: 2 uses, until …".
 4. Revoke it → "Your access on ashutosh-pandey.com has ended".
