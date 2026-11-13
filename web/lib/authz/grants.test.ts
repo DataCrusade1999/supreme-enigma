@@ -10,7 +10,7 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { getGrantStore, GRANT_TTL_S, type Grant } from "./grants";
+import { getGrantStore, GRANT_TTL_S, isLive, isUnexpired, type Grant } from "./grants";
 
 const ddb = mockClient(DynamoDBDocumentClient);
 const env = { ACCESS_GRANTS_TABLE: "grants", APP_AWS_REGION: "us-east-1" } as unknown as NodeJS.ProcessEnv;
@@ -71,6 +71,56 @@ describe("DynamoDB grant store", () => {
     expect(ddb.commandCalls(DeleteCommand).map((c) => c.args[0].input.Key)).toEqual([
       { sub: "u1", action: "newsdesk:ask" },
       { sub: "u1", action: "looper:process" },
+      { sub: "u1", action: "_welcomed" },
+    ]);
+  });
+
+  it("reads a user's rows consistently", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [] });
+    await getGrantStore(env).list("u1");
+    expect(ddb.commandCalls(QueryCommand)[0].args[0].input.ConsistentRead).toBe(true);
+  });
+
+  it("puts a time-only row without limit or used", async () => {
+    ddb.on(PutCommand).resolves({});
+    await getGrantStore(env).put({ sub: "u1", action: "newsdesk:read", email: "a@example.com", expiresAt: 2000, grantedAt: 1000 });
+    const item = ddb.commandCalls(PutCommand)[0].args[0].input.Item!;
+    expect(item).toEqual({ sub: "u1", action: "newsdesk:read", email: "a@example.com", expiresAt: 2000, grantedAt: 1000, ttl: 2000 + GRANT_TTL_S });
+    expect("limit" in item).toBe(false);
+    expect("used" in item).toBe(false);
+  });
+
+  it("never lists the welcome marker", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [grant, { sub: "u1", action: "_welcomed", at: 5 }] });
+    expect((await getGrantStore(env).list("u1")).map((g) => g.action)).toEqual(["newsdesk:ask"]);
+  });
+
+  it("records the welcome marker with no ttl and reads it consistently", async () => {
+    ddb.on(GetCommand).resolves({});
+    ddb.on(PutCommand).resolves({});
+    const store = getGrantStore(env);
+    expect(await store.wasWelcomed("u1")).toBe(false);
+    expect(ddb.commandCalls(GetCommand)[0].args[0].input).toEqual({
+      TableName: "grants",
+      Key: { sub: "u1", action: "_welcomed" },
+      ConsistentRead: true,
+    });
+    await store.markWelcomed("u1", 77);
+    expect(ddb.commandCalls(PutCommand)[0].args[0].input).toEqual({
+      TableName: "grants",
+      Item: { sub: "u1", action: "_welcomed", at: 77 },
+    });
+    ddb.on(GetCommand).resolves({ Item: { sub: "u1", action: "_welcomed", at: 77 } });
+    expect(await store.wasWelcomed("u1")).toBe(true);
+  });
+
+  it("removeAll deletes the grants and the marker", async () => {
+    ddb.on(QueryCommand).resolves({ Items: [grant, { sub: "u1", action: "_welcomed", at: 5 }] });
+    ddb.on(DeleteCommand).resolves({});
+    await getGrantStore(env).removeAll("u1");
+    expect(ddb.commandCalls(DeleteCommand).map((c) => c.args[0].input.Key)).toEqual([
+      { sub: "u1", action: "newsdesk:ask" },
+      { sub: "u1", action: "_welcomed" },
     ]);
   });
 
@@ -92,9 +142,44 @@ describe("in-memory grant store (AUTHZ_MODE=local)", () => {
     expect(await store.list("mem")).toEqual([]);
   });
 
+  it("keeps the welcome marker out of list and clears it with removeAll", async () => {
+    const store = getGrantStore(local);
+    expect(await store.wasWelcomed("w")).toBe(false);
+    await store.put({ ...grant, sub: "w" });
+    await store.markWelcomed("w", 5);
+    expect(await store.wasWelcomed("w")).toBe(true);
+    expect((await store.list("w")).map((g) => g.action)).toEqual(["newsdesk:ask"]);
+    await store.removeAll("w");
+    expect(await store.wasWelcomed("w")).toBe(false);
+    expect(await store.list("w")).toEqual([]);
+  });
+
   it("is never used on Vercel", async () => {
     await expect(getGrantStore({ AUTHZ_MODE: "local", VERCEL: "1" } as unknown as NodeJS.ProcessEnv).get("u1", "newsdesk:ask")).rejects.toThrow(
       "ACCESS_GRANTS_TABLE",
     );
+  });
+});
+
+describe("isLive and isUnexpired", () => {
+  it("is false for a metered grant that is used up", () => {
+    expect(isLive({ ...grant, used: 20 }, 1500)).toBe(false);
+  });
+
+  it("is true for a metered grant with uses left", () => {
+    expect(isLive(grant, 1500)).toBe(true);
+  });
+
+  it("is true for an unexpired time-only grant", () => {
+    const g: Grant = { sub: "u1", action: "newsdesk:read", email: "", expiresAt: 2000, grantedAt: 1000 };
+    expect(isLive(g, 1999)).toBe(true);
+    expect(isUnexpired(g, 1999)).toBe(true);
+  });
+
+  it("is false once expired, at the expiry second included", () => {
+    const g: Grant = { sub: "u1", action: "newsdesk:read", email: "", expiresAt: 2000, grantedAt: 1000 };
+    expect(isLive(g, 2000)).toBe(false);
+    expect(isUnexpired(g, 2000)).toBe(false);
+    expect(isLive(grant, 2001)).toBe(false);
   });
 });

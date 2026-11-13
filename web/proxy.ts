@@ -85,7 +85,7 @@ async function currentSession(
 function meteredDenial(grant: Grant | null, now: number): Denial {
   if (!grant) return "no_grant";
   if (grant.expiresAt <= now) return "grant_expired";
-  if (grant.used >= grant.limit) return "quota_exhausted";
+  if ((grant.used ?? 0) >= (grant.limit ?? 0)) return "quota_exhausted";
   return "forbidden";
 }
 
@@ -108,7 +108,7 @@ async function decide(request: NextRequest, session: Session): Promise<NextRespo
       console.error("authz: grant read failed", err);
       return deny(request, "authorization_unavailable", route);
     }
-    if (grant) context.grant = { remaining: grant.limit - grant.used, expiresAt: grant.expiresAt };
+    if (grant) context.grant = { remaining: (grant.limit ?? 0) - (grant.used ?? 0), expiresAt: grant.expiresAt };
   }
 
   let decision;

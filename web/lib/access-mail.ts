@@ -58,7 +58,7 @@ export function sendApproved(user: AccessUser): Promise<string | null> {
 }
 
 export function sendGrants(user: AccessUser, grants: Grant[]): Promise<string | null> {
-  const lines = grants.map((g) => `${GRANTS[g.action].label}: ${g.limit - g.used} uses, until ${day(g.expiresAt)}`);
+  const lines = grants.map((g) => `${GRANTS[g.action].label}: ${(g.limit ?? 0) - (g.used ?? 0)} uses, until ${day(g.expiresAt)}`);
   return send(user.email, "Your grants on ashutosh-pandey.com", [
     "You can now use:",
     "",

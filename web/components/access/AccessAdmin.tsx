@@ -89,7 +89,7 @@ export function AccessAdmin() {
                 {u.grants.map((g) => (
                   <li key={g.action} className="flex gap-3">
                     <span>
-                      {GRANTS[g.action].label}: {g.limit - g.used} of {g.limit} left, expires {until(g.expiresAt)}
+                      {GRANTS[g.action].label}: {(g.limit ?? 0) - (g.used ?? 0)} of {g.limit ?? 0} left, expires {until(g.expiresAt)}
                     </span>
                     <button aria-label={`Revoke ${GRANTS[g.action].label} for ${u.email}`} className="text-muted hover:text-fg"
                       onClick={() =>

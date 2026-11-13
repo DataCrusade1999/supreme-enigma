@@ -10,7 +10,7 @@ export async function myGrants(): Promise<Grant[]> {
   const now = Math.floor(Date.now() / 1000);
   try {
     const grants = await getGrantStore().list(session.sub);
-    return grants.filter((g) => g.used < g.limit && g.expiresAt > now);
+    return grants.filter((g) => (g.used ?? 0) < (g.limit ?? 0) && g.expiresAt > now);
   } catch (err) {
     console.error("authz: could not read grants for the hub", err);
     return [];
@@ -24,5 +24,5 @@ export function describeGrant(grant: Grant): string {
     year: "numeric",
     timeZone: "Asia/Kolkata",
   });
-  return `${GRANTS[grant.action].label}: ${grant.limit - grant.used} of ${grant.limit} left, until ${until}`;
+  return `${GRANTS[grant.action].label}: ${(grant.limit ?? 0) - (grant.used ?? 0)} of ${grant.limit ?? 0} left, until ${until}`;
 }

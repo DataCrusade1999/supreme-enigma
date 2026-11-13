@@ -29,7 +29,7 @@ async function liveGrants(sub: string, made: Grant): Promise<Grant[]> {
   const now = Math.floor(Date.now() / 1000);
   try {
     const others = (await getGrantStore().list(sub)).filter(
-      (g) => g.action !== made.action && g.used < g.limit && g.expiresAt > now,
+      (g) => g.action !== made.action && (g.used ?? 0) < (g.limit ?? 0) && g.expiresAt > now,
     );
     return [...others, made];
   } catch (err) {
