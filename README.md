@@ -244,6 +244,9 @@ no app data and costs nothing meaningful.
 The destroy will not run as written — no bucket sets `force_destroy`, and
 main's bucket holds the published resume indefinitely. Back it up and empty
 the buckets first: [docs/runbooks/infra-apply-teardown.md](docs/runbooks/infra-apply-teardown.md#kill-switch-full-teardown).
+The domain's mail DNS records (Zoho's MX, SPF and DKIM, and `_dmarc`) have to
+leave state before the destroy and come back by import before a re-apply:
+[Keep the domain's mail records](docs/runbooks/infra-apply-teardown.md#keep-the-domains-mail-records).
 
 ## Cost
 

@@ -4,8 +4,9 @@
 # owner, a verified identity below.
 #
 # No custom MAIL FROM and no DMARC record. DKIM alone aligns this subdomain's mail
-# for DMARC, and the apex _dmarc record (p=none, in infra/prod/account) already covers
-# subdomains that publish none of their own.
+# for DMARC, and the apex _dmarc record (p=quarantine since #508, in infra/prod/account)
+# already covers subdomains that publish none of their own. If this identity's DKIM
+# ever fails, its mail goes to spam.
 
 resource "aws_sesv2_email_identity" "domain" {
   email_identity = local.site_host
