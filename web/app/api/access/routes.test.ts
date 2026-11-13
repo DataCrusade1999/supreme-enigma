@@ -157,6 +157,16 @@ describe("/api/access emails", () => {
     expect(sendGrants).toHaveBeenCalledWith(user, [live]);
   });
 
+  it("grant emails the new grant even when the read after the write is stale", async () => {
+    const made = { action: "newsdesk:ask", limit: 20, used: 0, expiresAt: 9e9 };
+    const old = { action: "newsdesk:ask", limit: 5, used: 5, expiresAt: 9e9 };
+    const other = { action: "looper:process", limit: 5, used: 1, expiresAt: 9e9 };
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: made as never });
+    vi.mocked(getGrantStore).mockReturnValue({ list: vi.fn(async () => [old, other]) } as never);
+    await grantRoute(json({ sub: "u1", action: "newsdesk:ask" }));
+    expect(sendGrants).toHaveBeenCalledWith(user, [other, made]);
+  });
+
   it("remove and revoke email what ended; dismiss sends nothing", async () => {
     vi.mocked(removeMember).mockResolvedValue(user);
     vi.mocked(revokeGrant).mockResolvedValue(user);

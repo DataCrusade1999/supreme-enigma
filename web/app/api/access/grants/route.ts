@@ -20,13 +20,18 @@ export async function PUT(request: Request) {
   });
 }
 
-/** Every grant the member can still use, read after the put so it includes the
- * new one. The grant is saved by now, so a failed read must not turn into a 500
- * that says nothing changed: the email then lists only the new grant. */
+/** Every grant the member can still use. The query is eventually consistent, so
+ * it may not show the put that just happened: the other actions come from the
+ * read, and the new grant from the write. The grant is saved by now, so a failed
+ * read must not turn into a 500 that says nothing changed: the email then lists
+ * only the new grant. */
 async function liveGrants(sub: string, made: Grant): Promise<Grant[]> {
   const now = Math.floor(Date.now() / 1000);
   try {
-    return (await getGrantStore().list(sub)).filter((g) => g.used < g.limit && g.expiresAt > now);
+    const others = (await getGrantStore().list(sub)).filter(
+      (g) => g.action !== made.action && g.used < g.limit && g.expiresAt > now,
+    );
+    return [...others, made];
   } catch (err) {
     console.error("access: listing grants for the email failed", err);
     return [made];
