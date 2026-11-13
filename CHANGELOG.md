@@ -18,6 +18,9 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - The kill-switch runbook keeps the domain's mail DNS records out of the destroy
   and re-imports them before a re-apply. #300's email design no longer receives
   mail through SES.
+- ashutosh-pandey.com's mail policy is enforced: the apex SPF ends in `-all` and
+  DMARC is `p=quarantine`, so mail forged as the domain (or its dev and stage
+  subdomains) goes to spam. Closes #508.
 
 ## [1.10.0] - 2026-10-30
 

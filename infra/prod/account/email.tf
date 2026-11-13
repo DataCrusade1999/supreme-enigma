@@ -28,14 +28,16 @@ resource "vercel_dns_record" "ses_dkim" {
   ttl     = 1800
 }
 
-# p=none: report nothing, reject nothing, but DMARC-aware receivers see a policy.
+# p=quarantine: mail whose From is this domain and that fails both aligned SPF
+# and aligned DKIM goes to spam (#508). Both senders pass: Zoho on SPF and DKIM
+# selector zoho, SES on DKIM and SPF for mail. (checked 2026-11-13, #403).
 # No rua= address, which would publish the owner's email in DNS.
 resource "vercel_dns_record" "dmarc" {
   team_id = local.vercel_team_id
   domain  = vercel_project_domain.custom.domain
   name    = "_dmarc"
   type    = "TXT"
-  value   = "v=DMARC1; p=none;"
+  value   = "v=DMARC1; p=quarantine;"
   ttl     = 1800
 }
 
@@ -77,13 +79,14 @@ resource "vercel_dns_record" "mail_from_spf" {
 # Zoho sends with the bare domain as its envelope sender, so the apex SPF lists
 # Zoho. SES uses mail. above and needs no entry here. A new service that sends as
 # the bare domain goes into this include list: a second v=spf1 record at the apex
-# is a permerror. ~all stays until a header shows spf=pass for Zoho's mail (#403).
+# is a permerror. -all since Zoho's mail showed spf=pass (#403, #508). A change
+# here makes Vercel replace the record, so check afterwards for exactly one v=spf1.
 resource "vercel_dns_record" "apex_spf" {
   team_id = local.vercel_team_id
   domain  = vercel_project_domain.custom.domain
   name    = ""
   type    = "TXT"
-  value   = "v=spf1 include:zoho.in ~all"
+  value   = "v=spf1 include:zoho.in -all"
   ttl     = 1800
 }
 
