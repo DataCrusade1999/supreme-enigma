@@ -102,7 +102,7 @@ Do this only when PR 1 can merge the same day. One Zoho help page says a domain 
   - `apex_spf.value` becomes `"v=spf1 include:<console: zoho.in or zohomail.in> ~all"`, replaced with the real include.
   - Rewrite its comment. Zoho sends with the bare domain as envelope sender, SES still uses `mail.` and needs no entry here, and `~all` stays until a header shows `spf=pass` (#403).
   - Rewrite the file header. It now covers two senders, SES (Cognito codes, later the News Desk digest and #300's access emails, through MAIL FROM `mail.`) and Zoho Mail (the mailbox, `access@` an alias, apex MX/SPF and DKIM selector `zoho`). It also states SES production access, granted 2026-10-01 (`ProductionAccessEnabled: true`). The "stays in the SES sandbox" sentence goes.
-  - The comment on `aws_sesv2_email_identity.owner` ("In the sandbox SES delivers only to verified addresses…") becomes: the owner's address stays a verified identity, though delivery to it no longer depends on that since production access was granted. Don't use the word "sandbox", so that Task 5, Step 7's grep stays clean. Leave the resource in place, because removing it is a destroy and is out of scope.
+  - The comment on `aws_sesv2_email_identity.owner` ("In the sandbox SES delivers only to verified addresses…") becomes: the owner's address stays a verified identity, though delivery to it no longer depends on that since production access was granted. Don't use the word "sandbox", so that Task 5, Step 8's grep stays clean. Leave the resource in place, because removing it is a destroy and is out of scope.
 - [ ] **Step 5: Static checks.** Run the three commands from Task 2, Step 4. Expected: the same clean output.
 - [ ] **Step 6:** Commit: `feat(infra): point ashutosh-pandey.com mail at Zoho`, with the sign-off.
 
@@ -126,7 +126,7 @@ The posted plan and the DNS checks for this task run in Task 6, after the docs c
 - [ ] **Step 2: The runbook's recovery.** In "Recovery: applying from scratch afterwards", step 1, insert after the `-target=aws_ecr_repository.looper` apply and before the rest of `infra/prod/account`: import each record, one call per instance, `terraform import -var-file=terraform.tfvars '<address>' <team_id>/<record_id>`, for example `terraform import -var-file=terraform.tfvars 'vercel_dns_record.zoho_mx["10"]' team_xxx/rec_xxx`. Import evaluates the configuration, so without `-var-file` it stops on `prod/account`'s seven required variables. Then the reason, in one sentence: an apply with these records out of state creates a second `v=spf1` TXT at the apex, a permerror that gets the domain's mail rejected, plus duplicate MX records and a second `_dmarc` TXT, which receivers treat as no DMARC policy. The full apply should then show `No changes` for them.
 - [ ] **Step 3: README.** In "Tearing everything down (kill switch)", next to the existing bucket warning, add one sentence linking to the runbook's new subsection: the mail DNS records have to leave state before the destroy and come back by import before a re-apply.
 - [ ] **Step 4: The #300 spec** (`2026-09-29-access-control-design.md`). Keep SES sending from `access@` and drop SES receiving:
-  - §2 (line 27): mail to `access@` reaches the owner's Zoho inbox (an alias, #403).
+  - §2 (line 28): mail to `access@` reaches the owner's Zoho inbox (an alias, #403).
   - §3, the "Inbound mail" row: Zoho Mail, `access@` an alias of the owner's mailbox. Why: a domain has one MX set, and Zoho owns it (#403).
   - §7 "Receiving": replace it with two sentences. Zoho owns the apex MX (`infra/prod/account/email.tf`, #403), and `access@` is a Zoho alias, so nothing in AWS receives mail. Remove the receipt rule set, the S3 action, the `mail_forwarder` description and "No other address…".
   - §7 "Sending": the SES production access bullet becomes "granted 2026-10-01". "replies arrive through the receiving path" becomes "replies land in the owner's Zoho inbox".
@@ -142,14 +142,21 @@ The posted plan and the DNS checks for this task run in Task 6, after the docs c
   - Task 3 (request production access): replace it with "Done 2026-10-01; confirm with `aws sesv2 get-account --profile personal-ro --region us-east-1` → `ProductionAccessEnabled: true`."
   - Task 6: drop the receiving bullet for `.claude/rules/infra.md`. Rewrite its SPF bullet: the apex SPF includes Zoho, and a new sender must be added to it. Drop receiving from the `ARCHITECTURE.md` line and the CHANGELOG line, and drop `lambda` pytest from Step 3. Manual checks 1 and 5 become "lands in the Zoho inbox".
   - Renumber the tasks and fix the cross-references ("Tasks 1–2", "Tasks 4–6", the Consumes lines).
-- [ ] **Step 6: `.claude/rules/infra.md`.** Add one gotcha bullet: **The apex's mail records belong to Zoho (#403)**: the MX, the verification TXT, DKIM selector `zoho._domainkey` and `apex_spf`. Don't add another apex MX (receivers would split mail between providers) or a second `v=spf1` TXT (permerror). A new service that sends as the bare domain goes into `apex_spf`'s include list. The kill switch has to `state rm` and re-import these (runbook).
-- [ ] **Step 7: Leftover check.**
+- [ ] **Step 6: Repoint the #300 docs' paths.** Both files predate the stack renames (#478) and the file split (#488). In what Steps 4–5 keep, replace:
+  - `infra/shared/` → `infra/prod/account/` (`access.tf`, `auth.tf`, `backend.tf`, `email.tf`, `.terraform.lock.hcl`, `terraform.tfvars`, `.build/`), the `shared` stack → `prod/account`, and `ci.tf` → `terraform-ci-roles.tf`.
+  - `infra/shared/cedar/` → `infra/modules/auth/cedar/`.
+  - `infra/envs/main` → `infra/prod/app`, and `envs/dev` → `dev/app`.
+  - `infra/modules/environment/main.tf` → `infra/modules/app/bucket.tf`, where `aws_s3_bucket_lifecycle_configuration.data` now lives.
+  - The send permission no longer has a shared statement list for "both Vercel roles". Production's role policy is `aws_iam_role_policy.vercel_access` in `infra/prod/account/access.tf`. The preview roles are `aws_iam_role.vercel_preview` in each nonprod account, in `infra/modules/nonprod-account/oidc-roles.tf` (#397). Point the plan's send-permission step at those.
+- [ ] **Step 7: `.claude/rules/infra.md`.** Add one gotcha bullet: **The apex's mail records belong to Zoho (#403)**: the MX, the verification TXT, DKIM selector `zoho._domainkey` and `apex_spf`. Don't add another apex MX (receivers would split mail between providers) or a second `v=spf1` TXT (permerror). A new service that sends as the bare domain goes into `apex_spf`'s include list. The kill switch has to `state rm` and re-import these (runbook).
+- [ ] **Step 8: Leftover check.**
   ```bash
   git grep -n -E "inbound-smtp|mail_forwarder|receipt rule|inbound-mail" -- docs/superpowers/specs/2026-09-29-access-control-design.md docs/superpowers/plans/2026-09-29-access-control-email.md
+  git grep -n -E "infra/(shared|envs)|modules/environment|envs/dev|\bci\.tf" -- docs/superpowers/specs/2026-09-29-access-control-design.md docs/superpowers/plans/2026-09-29-access-control-email.md
   git grep -n -i "sandbox" -- infra/prod/account/ .claude/rules/infra.md ARCHITECTURE.md README.md
   ```
-  Expected: the first grep returns only lines saying receiving was dropped for Zoho. The second returns nothing in `infra/prod/account/`. The nonprod modules' sandbox mentions are correct (dev and stage accounts are still in the sandbox) and are out of scope. Older specs and plans (`2026-09-28-*`) are historical and stay as written.
-- [ ] **Step 8:** Commit: `docs: Zoho owns the apex mail records; drop SES receiving from #300`, with the sign-off.
+  Expected: the first grep returns only lines saying receiving was dropped for Zoho. The second returns nothing. The third returns nothing in `infra/prod/account/`. The nonprod modules' sandbox mentions are correct (dev and stage accounts are still in the sandbox) and are out of scope. Older specs and plans (`2026-09-28-*`) are historical and stay as written.
+- [ ] **Step 9:** Commit: `docs: Zoho owns the apex mail records; drop SES receiving from #300`, with the sign-off.
 
 ---
 
