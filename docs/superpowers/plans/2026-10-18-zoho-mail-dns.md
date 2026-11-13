@@ -4,9 +4,9 @@
 
 **Goal:** A Zoho Mail mailbox at `<name>@ashutosh-pandey.com`, with `access@` as an alias, receives and sends mail for the domain, while SES keeps sending Cognito codes.
 
-**Architecture:** Zoho owns the apex MX, the apex SPF and its own DKIM selector. SES keeps its custom MAIL FROM (`mail.`), its three DKIM CNAMEs and the shared `_dmarc` record. All records are `vercel_dns_record` resources in `infra/shared/email.tf`, applied by CI when a PR merges to `dev`. It takes two PRs, because Zoho shows the MX, SPF and DKIM values only after you verify the domain, which needs the verification TXT already published.
+**Architecture:** Zoho owns the apex MX, the apex SPF and its own DKIM selector. SES keeps its custom MAIL FROM (`mail.`), its three DKIM CNAMEs and the shared `_dmarc` record. All records are `vercel_dns_record` resources in `infra/prod/account/email.tf`, applied by CI when a PR merges to `dev` (#345). It takes two PRs, because Zoho shows the MX, SPF and DKIM values only after you verify the domain, which needs the verification TXT already published.
 
-**Tech Stack:** Terraform, `vercel/vercel` provider (`~> 5.15`, locked at 5.18.0), Vercel DNS, Zoho Mail Lite (India data center).
+**Tech Stack:** Terraform, `vercel/vercel` provider (`~> 5.15`, locked at 5.24.1), Vercel DNS, Zoho Mail Lite (India data center).
 
 **Spec:** issue [#403](https://github.com/DataCrusade1999/supreme-enigma/issues/403). The design is its body and its three comments ("Review findings, 2026-10-08/09", "Thunderbird setup", "Gmail app and Thunderbird sign-in"). There is no separate spec. Where the body and the comments disagree, the comments win. The comments correct the body on the SES sandbox, the SPF include and `dig`.
 
@@ -20,14 +20,14 @@
 - SPF ends in `~all` until a test message shows `spf=pass`. Changing it to `-all` is not part of this plan.
 - Keep the verification TXT after Zoho verifies the domain. Removing it is a destroy, and a DNS change can send the domain back to "Yet to reverify".
 - Both PRs go into `dev` from `dev`, squash-merged through the `merging-a-pr` skill. PR 1 says `Part of #403`. PR 2 says `Closes #403`.
-- Each PR gets a devops agent release-readiness review. The skill counts a plan that creates a resource as a significant infra change, and both plans create records. `shared` applies when the PR merges to `dev`, so the `dev → stage` review comes after the records are already live in production. Request the review once the `Terraform` plan comment is posted. Only `Standard Deployment` lets the PR merge.
+- Each PR gets a devops agent release-readiness review. The skill counts a plan that creates a resource as a significant infra change, and both plans create records. `prod/account` applies when the PR merges to `dev`, so the `dev → stage` review comes after the records are already live in production. Request the review once the `Terraform` plan comment is posted. Only `Standard Deployment` lets the PR merge.
 - A fix found after PR 2 merges (the 1024-bit DKIM fallback, a wrong SPF include) needs a new `bug` issue first, because #403 is closed by then. The PR closes that issue instead.
 - Every manual `aws` call uses `--profile personal-ro --region us-east-1`.
 - Commits end with `Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>`.
 
 ## Review Focus
 
-1. **2048-bit DKIM value through the provider.** It has never been written through `vercel_dns_record`. Vercel has to serve it as split strings that join back into the full key, and the provider has to read it back as the same string, or every later `shared` plan shows a change. Task 6, Step 5 checks the published value against the console's, and Step 6 checks that a fresh plan is clean. If the published value is wrong, fall back to a 1024-bit key.
+1. **2048-bit DKIM value through the provider.** It has never been written through `vercel_dns_record`. Vercel has to serve it as split strings that join back into the full key, and the provider has to read it back as the same string, or every later `prod/account` plan shows a change. Task 6, Step 5 checks the published value against the console's, and Step 6 checks that a fresh plan is clean. If the published value is wrong, fall back to a 1024-bit key.
 2. **India vs. US Zoho values.** The help pages print `.com` hosts and `include:zohomail.com`, which covers none of the India relays. Task 3 copies only from the console. Task 6 shows `spf=pass` in a real header.
 3. **A kill-switch re-apply with the mail records out of state.** It creates a second apex `v=spf1` TXT (permerror, so mail is rejected) and duplicate MX. Task 5's runbook makes import mandatory before the full apply and says why.
 4. **#300's PR 3 built from its old plan.** It would add SES's MX at priority 10 next to Zoho's, so incoming mail would split between them. Task 5 rewrites that spec and plan in the same PR that makes Zoho own the MX.
@@ -52,7 +52,7 @@ Do this only when PR 1 can merge the same day. One Zoho help page says a domain 
 ### Task 2: PR 1, the verification TXT
 
 **Files:**
-- Modify: `infra/shared/email.tf`, `CHANGELOG.md`
+- Modify: `infra/prod/account/email.tf`, `CHANGELOG.md`
 
 **Interfaces:**
 - Consumes: the verification value from Task 1.
@@ -69,7 +69,7 @@ Do this only when PR 1 can merge the same day. One Zoho help page says a domain 
   ```
   Expected: fmt and tflint print nothing and exit 0. The grep finds nothing. If `tflint` isn't installed locally, skip it: the `Terraform` workflow runs the same `fmt -check` and tflint on the PR.
 - [ ] **Step 5:** Commit `email.tf` and `CHANGELOG.md` as `feat(infra): add Zoho Mail domain verification record`, with the sign-off. Push, and open a PR into `dev` whose body says `Part of #403`.
-- [ ] **Step 6: Read the plan the `Terraform` workflow posts.** Expected: `shared` shows `Plan: 1 to add, 0 to change, 0 to destroy.`, the add being `vercel_dns_record.zoho_verification`, and every other stack shows `No changes.`. No `⚠ destroys or replaces` line.
+- [ ] **Step 6: Read the plan the `Terraform` workflow posts.** Expected: `prod/account` shows `Plan: 1 to add, 0 to change, 0 to destroy.`, the add being `vercel_dns_record.zoho_verification`, and every other stack shows `No changes.`. No `⚠ destroys or replaces` line.
 - [ ] **Step 7:** Request the release-readiness review (Global Constraints), then merge through the `merging-a-pr` skill. Wait for the apply on `dev`: `gh run list --workflow terraform.yml --branch dev --limit 1`, then `gh run watch <id>`. Expected: success.
 - [ ] **Step 8: Check DNS.** `nslookup -type=TXT ashutosh-pandey.com ns1.vercel-dns.com`. Expected: the `zoho-verification=…` string and, unchanged, `v=spf1 -all`.
 
@@ -89,7 +89,7 @@ Do this only when PR 1 can merge the same day. One Zoho help page says a domain 
 ### Task 4: PR 2, the MX, DKIM and SPF records
 
 **Files:**
-- Modify: `infra/shared/email.tf`
+- Modify: `infra/prod/account/email.tf`
 
 **Interfaces:**
 - Consumes: Task 3's values.
@@ -118,17 +118,17 @@ The posted plan and the DNS checks for this task run in Task 6, after the docs c
 **Interfaces:**
 - Consumes: the resource addresses from Tasks 2 and 4.
 
-- [ ] **Step 1: The runbook's kill switch.** In `docs/runbooks/infra-apply-teardown.md` → "Kill switch: full teardown", add a subsection before the destroy loop, **Keep the domain's mail records**. It says that destroying `shared` deletes every `vercel_dns_record` in the stack, so mail to the domain would bounce while Zoho keeps billing. Before the loop, from `infra/shared` with `AWS_PROFILE=personal`:
-  1. Write down each record's ID, with `terraform state show '<address>'` (the `id` line) for each of `vercel_dns_record.zoho_verification`, `vercel_dns_record.zoho_mx["10"]`, `["20"]`, `["50"]`, `vercel_dns_record.zoho_dkim`, `vercel_dns_record.apex_spf` and `vercel_dns_record.dmarc`. If state is already gone, use `GET https://api.vercel.com/v4/domains/ashutosh-pandey.com/records?teamId=<team_id>` with the Vercel token. The team ID is `local.vercel_team_id` in `infra/shared/shared.tf`.
+- [ ] **Step 1: The runbook's kill switch.** In `docs/runbooks/infra-apply-teardown.md` → "Kill switch: full teardown", add a subsection before the destroy loop, **Keep the domain's mail records**. It says that destroying `prod/account` deletes every `vercel_dns_record` in the stack, so mail to the domain would bounce while Zoho keeps billing. Before the loop, from `infra/prod/account` with `AWS_PROFILE=personal`:
+  1. Write down each record's ID, with `terraform state show '<address>'` (the `id` line) for each of `vercel_dns_record.zoho_verification`, `vercel_dns_record.zoho_mx["10"]`, `["20"]`, `["50"]`, `vercel_dns_record.zoho_dkim`, `vercel_dns_record.apex_spf` and `vercel_dns_record.dmarc`. If state is already gone, use `GET https://api.vercel.com/v4/domains/ashutosh-pandey.com/records?teamId=<team_id>` with the Vercel token. The team ID is `local.vercel_team_id` in `infra/prod/account/locals.tf`.
   2. `terraform state rm vercel_dns_record.zoho_verification vercel_dns_record.zoho_mx vercel_dns_record.zoho_dkim vercel_dns_record.apex_spf vercel_dns_record.dmarc`. The bare `zoho_mx` address removes all three instances.
 
   `dmarc` is on the list because it is the domain's policy for Zoho mail as well as SES mail. The SES DKIM CNAMEs and the `mail.` records go with SES.
-- [ ] **Step 2: The runbook's recovery.** In "Recovery: applying from scratch afterwards", step 1, insert after the `-target=aws_ecr_repository.looper` apply and before the full `infra/shared` apply: import each record, one call per instance, `terraform import -var-file=terraform.tfvars '<address>' <team_id>/<record_id>`, for example `terraform import -var-file=terraform.tfvars 'vercel_dns_record.zoho_mx["10"]' team_xxx/rec_xxx`. Import evaluates the configuration, so without `-var-file` it stops on `shared`'s seven required variables. Then the reason, in one sentence: an apply with these records out of state creates a second `v=spf1` TXT at the apex, a permerror that gets the domain's mail rejected, plus duplicate MX records and a second `_dmarc` TXT, which receivers treat as no DMARC policy. The full apply should then show `No changes` for them.
+- [ ] **Step 2: The runbook's recovery.** In "Recovery: applying from scratch afterwards", step 1, insert after the `-target=aws_ecr_repository.looper` apply and before the rest of `infra/prod/account`: import each record, one call per instance, `terraform import -var-file=terraform.tfvars '<address>' <team_id>/<record_id>`, for example `terraform import -var-file=terraform.tfvars 'vercel_dns_record.zoho_mx["10"]' team_xxx/rec_xxx`. Import evaluates the configuration, so without `-var-file` it stops on `prod/account`'s seven required variables. Then the reason, in one sentence: an apply with these records out of state creates a second `v=spf1` TXT at the apex, a permerror that gets the domain's mail rejected, plus duplicate MX records and a second `_dmarc` TXT, which receivers treat as no DMARC policy. The full apply should then show `No changes` for them.
 - [ ] **Step 3: README.** In "Tearing everything down (kill switch)", next to the existing bucket warning, add one sentence linking to the runbook's new subsection: the mail DNS records have to leave state before the destroy and come back by import before a re-apply.
 - [ ] **Step 4: The #300 spec** (`2026-09-29-access-control-design.md`). Keep SES sending from `access@` and drop SES receiving:
   - §2 (line 27): mail to `access@` reaches the owner's Zoho inbox (an alias, #403).
   - §3, the "Inbound mail" row: Zoho Mail, `access@` an alias of the owner's mailbox. Why: a domain has one MX set, and Zoho owns it (#403).
-  - §7 "Receiving": replace it with two sentences. Zoho owns the apex MX (`infra/shared/email.tf`, #403), and `access@` is a Zoho alias, so nothing in AWS receives mail. Remove the receipt rule set, the S3 action, the `mail_forwarder` description and "No other address…".
+  - §7 "Receiving": replace it with two sentences. Zoho owns the apex MX (`infra/prod/account/email.tf`, #403), and `access@` is a Zoho alias, so nothing in AWS receives mail. Remove the receipt rule set, the S3 action, the `mail_forwarder` description and "No other address…".
   - §7 "Sending": the SES production access bullet becomes "granted 2026-10-01". "replies arrive through the receiving path" becomes "replies land in the owner's Zoho inbox".
   - §8 `email.tf`: keep only `aws_sesv2_account_suppression_attributes`. Remove the MX, receipt rules, bucket policy, `inbound-mail/` lifecycle rule, `mail_forwarder` and its role and permission. In the closing paragraph, drop the `hashicorp/archive` sentences.
   - §10: drop the `mail_forwarder` pytest bullet. Manual step 5 becomes "Email `access@` from that account → it lands in the owner's Zoho inbox".
@@ -146,9 +146,9 @@ The posted plan and the DNS checks for this task run in Task 6, after the docs c
 - [ ] **Step 7: Leftover check.**
   ```bash
   git grep -n -E "inbound-smtp|mail_forwarder|receipt rule|inbound-mail" -- docs/superpowers/specs/2026-09-29-access-control-design.md docs/superpowers/plans/2026-09-29-access-control-email.md
-  git grep -n -i "sandbox" -- infra/shared/ .claude/rules/infra.md ARCHITECTURE.md README.md
+  git grep -n -i "sandbox" -- infra/prod/account/ .claude/rules/infra.md ARCHITECTURE.md README.md
   ```
-  Expected: the first grep returns only lines saying receiving was dropped for Zoho. The second returns nothing in `infra/shared/`. The nonprod modules' sandbox mentions are correct (dev and stage accounts are still in the sandbox) and are out of scope. Older specs and plans (`2026-09-28-*`) are historical and stay as written.
+  Expected: the first grep returns only lines saying receiving was dropped for Zoho. The second returns nothing in `infra/prod/account/`. The nonprod modules' sandbox mentions are correct (dev and stage accounts are still in the sandbox) and are out of scope. Older specs and plans (`2026-09-28-*`) are historical and stay as written.
 - [ ] **Step 8:** Commit: `docs: Zoho owns the apex mail records; drop SES receiving from #300`, with the sign-off.
 
 ---
@@ -163,7 +163,7 @@ The posted plan and the DNS checks for this task run in Task 6, after the docs c
   - `### Changed`: `- The kill-switch runbook keeps the domain's mail DNS records out of the destroy and re-imports them before a re-apply. #300's email design no longer receives mail through SES.`
   - If PR 1's `### Added` line is still under `[Unreleased]` (no release since), delete it. The new line covers it.
 - [ ] **Step 2:** Run the Task 2, Step 4 checks again. Commit (`docs(changelog): Zoho Mail`, with the sign-off), push, and open the PR into `dev` with `Closes #403`.
-- [ ] **Step 3: Read the posted plan.** Expected: `shared` shows `Plan: 4 to add, 1 to change, 0 to destroy.` The adds are `zoho_mx["10"]`, `["20"]`, `["50"]` and `zoho_dkim`. The change is `apex_spf`, `value` only. Every other stack shows `No changes.`. No `⚠ destroys or replaces` line. Anything else, stop.
+- [ ] **Step 3: Read the posted plan.** Expected: `prod/account` shows `Plan: 4 to add, 1 to change, 0 to destroy.` The adds are `zoho_mx["10"]`, `["20"]`, `["50"]` and `zoho_dkim`. The change is `apex_spf`, `value` only. Every other stack shows `No changes.`. No `⚠ destroys or replaces` line. Anything else, stop.
 - [ ] **Step 4:** Request the release-readiness review (Global Constraints), then merge through the `merging-a-pr` skill (squash, delete the branch). Wait for the apply on `dev`, as in Task 2, Step 7.
 - [ ] **Step 5: Check DNS** against `ns1.vercel-dns.com`:
   - `nslookup -type=MX ashutosh-pandey.com ns1.vercel-dns.com` shows exactly Zoho's three hosts and priorities.
@@ -173,7 +173,7 @@ The posted plan and the DNS checks for this task run in Task 6, after the docs c
     ((Resolve-DnsName zoho._domainkey.ashutosh-pandey.com -Type TXT -Server ns1.vercel-dns.com).Strings -join '') -ceq '<zoho_dkim.value from email.tf>'
     ```
     Expected: `True`. If the apply failed on this record or this prints `False`, generate a 1024-bit key under the same selector in Zoho, update `zoho_dkim.value` in a follow-up PR, and repeat this check.
-- [ ] **Step 6: The plan is clean after the apply.** From `infra/shared`, after `terraform init`: `AWS_PROFILE=personal terraform plan -var-file=terraform.tfvars -lock=false`. Without a local `terraform.tfvars`, run `gh workflow run terraform.yml --ref dev -f stack=drift` instead, then `gh run list --workflow terraform.yml --branch dev --event workflow_dispatch --limit 1` for its ID and `gh run watch <id>`. The dispatch returns before anything is planned, so don't tick this step until the run finishes. Expected: `No changes.` for `shared` locally; for the drift run, success and no new comment or issue under `gh issue list --label drift` (the job files one only when a stack drifts). A change on `zoho_dkim.value` means the provider reads the value back in a different form from the one it wrote, and every later `shared` plan will show it. File a `bug` issue before the next `shared` change merges.
+- [ ] **Step 6: The plan is clean after the apply.** From `infra/prod/account`, after `terraform init`: `AWS_PROFILE=personal terraform plan -var-file=terraform.tfvars -lock=false`. Without a local `terraform.tfvars`, run `gh workflow run terraform.yml --ref dev -f stack=drift` instead, then `gh run list --workflow terraform.yml --branch dev --event workflow_dispatch --limit 1` for its ID and `gh run watch <id>`. The dispatch returns before anything is planned, so don't tick this step until the run finishes. Expected: `No changes.` for `prod/account` locally; for the drift run, success and no new comment or issue under `gh issue list --label drift` (the job files one only when a stack drifts). A change on `zoho_dkim.value` means the provider reads the value back in a different form from the one it wrote, and every later `prod/account` plan will show it. File a `bug` issue before the next `prod/account` change merges.
 - [ ] **Step 7: Zoho console (owner).** Enable DKIM for selector `zoho`. Expected: domain, MX, SPF and DKIM all show verified.
 - [ ] **Step 8: Mail round trip (owner).**
   - From an outside Gmail account, send to `<name>@` and to `access@`. Both arrive in the Zoho inbox.
