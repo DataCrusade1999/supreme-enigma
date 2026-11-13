@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { removeMember } from "@/lib/access-admin";
-import { actingEmail, audit, respond } from "@/lib/access-api";
+import { actingEmail, audit, changed, respond } from "@/lib/access-api";
+import { sendEnded } from "@/lib/access-mail";
 
 // Three calls: leave the group, sign out everywhere, delete grants. If a later
 // one fails the member is already out of the group; a retry answers 409, and
@@ -10,6 +10,6 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   return respond(async () => {
     const user = await removeMember(sub);
     audit({ by: await actingEmail(), op: "remove", target: user.email });
-    return NextResponse.json({ ok: true });
+    return changed(await sendEnded(user, "the tools"));
   });
 }

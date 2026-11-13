@@ -38,6 +38,11 @@ export async function respond(run: () => Promise<Response>): Promise<Response> {
   }
 }
 
+/** The change succeeded; say so, and pass on why the email didn't go, if it didn't. */
+export function changed(emailError: string | null): Response {
+  return NextResponse.json(emailError ? { ok: true, emailError } : { ok: true });
+}
+
 export function badRequest(): Response {
   return NextResponse.json({ error: "invalid request" }, { status: 400 });
 }

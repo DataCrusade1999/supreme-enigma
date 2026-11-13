@@ -14,6 +14,10 @@ vi.mock("@/lib/access-api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/access-api")>()),
   actingEmail: vi.fn(async () => "owner@example.com"),
 }));
+vi.mock("@/lib/access-mail", () => ({ sendApproved: vi.fn(), sendGrants: vi.fn(), sendEnded: vi.fn() }));
+vi.mock("@/lib/authz/grants", () => ({ getGrantStore: vi.fn() }));
+import { sendApproved, sendEnded, sendGrants } from "@/lib/access-mail";
+import { getGrantStore } from "@/lib/authz/grants";
 
 import { AccessError, approve, dismiss, grantAction, listUsers, removeMember, revokeGrant } from "@/lib/access-admin";
 import { GET as users } from "./users/route";
@@ -30,6 +34,10 @@ const params = <T,>(p: T) => ({ params: Promise.resolve(p) });
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "info").mockImplementation(() => {});
+  vi.mocked(sendApproved).mockResolvedValue(null);
+  vi.mocked(sendGrants).mockResolvedValue(null);
+  vi.mocked(sendEnded).mockResolvedValue(null);
+  vi.mocked(getGrantStore).mockReturnValue({ list: vi.fn(async () => []) } as never);
 });
 
 describe("/api/access", () => {
@@ -108,5 +116,56 @@ describe("/api/access", () => {
     const res = await approveRoute(json({ sub: "u1" }));
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "the change failed; nothing was changed" });
+  });
+});
+
+describe("/api/access emails", () => {
+  it("approve emails the new member", async () => {
+    vi.mocked(approve).mockResolvedValue(user);
+    expect(await (await approveRoute(json({ sub: "u1" }))).json()).toEqual({ ok: true });
+    expect(sendApproved).toHaveBeenCalledWith(user);
+  });
+
+  it("reports a failed email without failing the change", async () => {
+    vi.mocked(approve).mockResolvedValue(user);
+    vi.mocked(sendApproved).mockResolvedValue("MessageRejected: Email address is not verified.");
+    const res = await approveRoute(json({ sub: "u1" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, emailError: "MessageRejected: Email address is not verified." });
+  });
+
+  it("grant emails every live grant the member now holds", async () => {
+    const live = { action: "newsdesk:ask", limit: 20, used: 0, expiresAt: 9e9 };
+    const spent = { action: "looper:process", limit: 5, used: 5, expiresAt: 9e9 };
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: live as never });
+    vi.mocked(getGrantStore).mockReturnValue({ list: vi.fn(async () => [live, spent]) } as never);
+    await grantRoute(json({ sub: "u1", action: "newsdesk:ask" }));
+    expect(sendGrants).toHaveBeenCalledWith(user, [live]);
+  });
+
+  it("grant still answers ok and emails the new grant when listing the others fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const live = { action: "newsdesk:ask", limit: 20, used: 0, expiresAt: 9e9 };
+    vi.mocked(grantAction).mockResolvedValue({ user, grant: live as never });
+    vi.mocked(getGrantStore).mockReturnValue({
+      list: vi.fn(async () => {
+        throw new Error("ProvisionedThroughputExceededException");
+      }),
+    } as never);
+    const res = await grantRoute(json({ sub: "u1", action: "newsdesk:ask" }));
+    expect(res.status).toBe(200);
+    expect(sendGrants).toHaveBeenCalledWith(user, [live]);
+  });
+
+  it("remove and revoke email what ended; dismiss sends nothing", async () => {
+    vi.mocked(removeMember).mockResolvedValue(user);
+    vi.mocked(revokeGrant).mockResolvedValue(user);
+    vi.mocked(dismiss).mockResolvedValue(user);
+    await removeRoute(new Request("http://x"), params({ sub: "u1" }));
+    await revokeRoute(new Request("http://x"), params({ sub: "u1", action: "newsdesk:ask" }));
+    await dismissRoute(new Request("http://x"), params({ sub: "u1" }));
+    expect(sendEnded).toHaveBeenNthCalledWith(1, user, "the tools");
+    expect(sendEnded).toHaveBeenNthCalledWith(2, user, "News Desk ask");
+    expect(sendEnded).toHaveBeenCalledTimes(2);
   });
 });
