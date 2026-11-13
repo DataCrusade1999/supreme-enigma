@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Everything in parts 1 and 2's Global Constraints still holds.
-- Two PRs into `dev`, in order, each squash-merged after the `merging-a-pr` skill: `feat/access-control-email-infra` (Task 2 is done, so this PR is Task 1 only: the send permission, `ACCESS_FROM_EMAIL` and the suppression list; `Refs #300`) from `dev` after part 2 merged, then `feat/access-control-email` (Tasks 3–5; `Closes #300`) from `dev` after the first merged and CI's apply on `dev` finished. Same reason as parts 1 and 2: the code that reads `ACCESS_FROM_EMAIL` ships after the apply that creates it.
+- Two PRs into `dev`, in order, each squash-merged after the `merging-a-pr` skill: `feat/access-control-email-infra` (Task 2 is done, so this PR is Task 1 only: the send permission and `ACCESS_FROM_EMAIL`; `Refs #300`) from `dev` after part 2 merged, then `feat/access-control-email` (Tasks 3–5; `Closes #300`) from `dev` after the first merged and CI's apply on `dev` finished. Same reason as parts 1 and 2: the code that reads `ACCESS_FROM_EMAIL` ships after the apply that creates it.
 - Site mail `From:` is `Access <access@ashutosh-pandey.com>`, `Reply-To` the same, so replies land in the owner's Zoho inbox.
 - Zoho owns the apex MX and SPF (#403). Don't add an apex MX or a second `v=spf1` record. SES sends with MAIL FROM `mail.ashutosh-pandey.com` and needs no apex SPF entry.
 
@@ -27,24 +27,15 @@
 ### Task 1: Terraform — sending permission
 
 **Files:**
-- Modify: `infra/prod/account/email.tf` (suppression list), `infra/prod/account/access.tf` (send permission and env var)
+- Modify: `infra/prod/account/access.tf` (send permission and env var)
 
 **Interfaces:**
 - Consumes: `aws_sesv2_email_identity.domain`, `aws_iam_role_policy.vercel_access`, `vercel_project.looper`.
 - Produces: Vercel env var `ACCESS_FROM_EMAIL` for production; production's Vercel role may `ses:SendEmail` as `access@`.
 
-- [ ] **Step 1: Suppression list**
+- [x] **Step 1: Suppression list**
 
-Append to `infra/prod/account/email.tf`:
-
-```hcl
-# Production senders are expected to stop mailing addresses that bounce or complain.
-resource "aws_sesv2_account_suppression_attributes" "site" {
-  suppressed_reasons = ["BOUNCE", "COMPLAINT"]
-}
-```
-
-Leave `email.tf`'s header comment as it is: #403 wrote it to cover both senders.
+Done in #509 (#510): `aws_sesv2_account_suppression_attributes.site` is in `infra/prod/account/email.tf`, with alarms on the bounce and complaint rates.
 
 - [ ] **Step 2: Let the app send as `access@`**
 
@@ -89,13 +80,12 @@ The preview roles are `aws_iam_role.vercel_preview` in each nonprod account (`in
 ```bash
 cd /e/Personal/looper/infra/prod/account && terraform fmt && terraform validate
 cd /e/Personal/looper
-git add infra/prod/account/email.tf infra/prod/account/access.tf
+git add infra/prod/account/access.tf
 git commit -m "feat(infra): let the site send from access@ (#300)" -m "Signed-off-by: Ashutosh Pandey <ashutosh.pandeyhlr007@gmail.com>"
 git push -u origin feat/access-control-email-infra
 gh pr create --base dev --title "feat(infra): let the site send from access@ (#300)" --body "$(cat <<'EOF'
 Part 3a of #300 (plan: docs/superpowers/plans/2026-09-29-access-control-email.md, Task 1).
 
-- Account suppression list for bounces and complaints
 - Production's Vercel role may ses:SendEmail as access@; ACCESS_FROM_EMAIL for production
 - No receiving here: Zoho owns the apex MX and access@ is a Zoho alias (#403)
 
@@ -104,7 +94,7 @@ EOF
 )"
 ```
 
-The `Terraform` workflow posts a plan per stack. `prod/account`: 2 to add (the suppression attributes and the env var), 1 to change (`vercel_access`), 0 to destroy. Every other stack: `No changes`. Stop on any destroy.
+The `Terraform` workflow posts a plan per stack. `prod/account`: 1 to add (the env var), 1 to change (`vercel_access`), 0 to destroy. Every other stack: `No changes`. Stop on any destroy.
 
 - [ ] **Step 4: Merge, wait for the apply, check**
 
@@ -113,10 +103,9 @@ Invoke the `merging-a-pr` skill and merge. Then:
 ```bash
 gh run list --workflow terraform.yml --branch dev --limit 1
 gh run watch <id> --exit-status
-aws sesv2 get-account --profile personal-ro --region us-east-1 --query 'SuppressionAttributes.SuppressedReasons'
 ```
 
-Expected: the run succeeds; `["BOUNCE", "COMPLAINT"]`.
+Expected: the run succeeds.
 
 ---
 
