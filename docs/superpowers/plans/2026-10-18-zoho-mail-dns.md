@@ -147,12 +147,13 @@ The posted plan and the DNS checks for this task run in Task 6, after the docs c
   - `infra/shared/cedar/` → `infra/modules/auth/cedar/`.
   - `infra/envs/main` → `infra/prod/app`, and `envs/dev` → `dev/app`.
   - `infra/modules/environment/main.tf` → `infra/modules/app/bucket.tf`, where `aws_s3_bucket_lifecycle_configuration.data` now lives.
+  - `shared.tf` and its `vercel_resume_statements` local are gone. Production's resume grant is `aws_iam_role_policy.vercel_resume` in `infra/prod/account/oidc-roles.tf`, and its access grant is `aws_iam_role_policy.vercel_access` in `infra/prod/account/access.tf`. Point the spec's §8 sentence at those.
   - The send permission no longer has a shared statement list for "both Vercel roles". Production's role policy is `aws_iam_role_policy.vercel_access` in `infra/prod/account/access.tf`. The preview roles are `aws_iam_role.vercel_preview` in each nonprod account, in `infra/modules/nonprod-account/oidc-roles.tf` (#397). Point the plan's send-permission step at those.
 - [ ] **Step 7: `.claude/rules/infra.md`.** Add one gotcha bullet: **The apex's mail records belong to Zoho (#403)**: the MX, the verification TXT, DKIM selector `zoho._domainkey` and `apex_spf`. Don't add another apex MX (receivers would split mail between providers) or a second `v=spf1` TXT (permerror). A new service that sends as the bare domain goes into `apex_spf`'s include list. The kill switch has to `state rm` and re-import these (runbook).
 - [ ] **Step 8: Leftover check.**
   ```bash
   git grep -n -E "inbound-smtp|mail_forwarder|receipt rule|inbound-mail" -- docs/superpowers/specs/2026-09-29-access-control-design.md docs/superpowers/plans/2026-09-29-access-control-email.md
-  git grep -n -E "infra/(shared|envs)|modules/environment|envs/dev|\bci\.tf" -- docs/superpowers/specs/2026-09-29-access-control-design.md docs/superpowers/plans/2026-09-29-access-control-email.md
+  git grep -n -E "infra/(shared|envs)|modules/environment|envs/dev|\bci\.tf|shared\.tf|vercel_resume_statements|vercel_access_statements" -- docs/superpowers/specs/2026-09-29-access-control-design.md docs/superpowers/plans/2026-09-29-access-control-email.md
   git grep -n -i "sandbox" -- infra/prod/account/ .claude/rules/infra.md ARCHITECTURE.md README.md
   ```
   Expected: the first grep returns only lines saying receiving was dropped for Zoho. The second returns nothing. The third returns nothing in `infra/prod/account/`. The nonprod modules' sandbox mentions are correct (dev and stage accounts are still in the sandbox) and are out of scope. Older specs and plans (`2026-09-28-*`) are historical and stay as written.
