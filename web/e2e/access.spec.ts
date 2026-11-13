@@ -8,15 +8,14 @@ test("a signed-in user in no group is sent to Access requested", async ({ page, 
   await expect(page.getByRole("link", { name: "access@ashutosh-pandey.com" })).toBeVisible();
 });
 
-test("a friend's hub lists only the shareable tools", async ({ page, baseURL }) => {
+test("a friend with no grant opens no tool", async ({ page, baseURL }) => {
   await signIn(page, baseURL!, "friends");
   await page.goto("/tools");
-  for (const name of ["BGM Looper", "Money Planner", "News Desk"]) {
-    await expect(page.getByRole("link", { name: new RegExp(name) })).toBeVisible();
-  }
-  for (const name of ["Resume admin", "Newsletter admin", "Content editor", "Access"]) {
+  for (const name of ["BGM Looper", "Money Planner", "News Desk", "Resume admin", "Newsletter admin", "Content editor", "Access"]) {
     await expect(page.getByRole("link", { name: new RegExp(name) })).toHaveCount(0);
   }
+  await page.goto("/tools/money-planner");
+  await expect(page).toHaveURL(/\/access-denied\?reason=no_tool_grant&tool=money-planner&action=view$/);
 });
 
 test("a friend opening an owner-only tool lands on Access denied", async ({ page, baseURL }) => {
