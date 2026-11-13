@@ -1,7 +1,12 @@
-# SES for mail sent from ashutosh-pandey.com: Cognito sign-in codes (spec
-# 2026-09-28-cognito-login-design.md) and, later, the News Desk digest (spec
-# 2026-09-28-news-digest-design.md). The account stays in the SES sandbox: the only
-# recipient is the owner, a verified identity.
+# Mail for ashutosh-pandey.com has two senders.
+#
+# SES sends Cognito sign-in codes (spec 2026-09-28-cognito-login-design.md) and,
+# later, the News Desk digest (spec 2026-09-28-news-digest-design.md) and #300's
+# access emails, with MAIL FROM mail.ashutosh-pandey.com. The account has SES
+# production access, granted 2026-10-01 (ProductionAccessEnabled: true).
+#
+# Zoho Mail (#403) holds the owner's mailbox, with access@ as an alias. It owns the
+# apex MX records, the apex SPF and DKIM selector zoho. Both senders share _dmarc.
 
 resource "aws_sesv2_email_identity" "domain" {
   email_identity = vercel_project_domain.custom.domain
@@ -69,14 +74,16 @@ resource "vercel_dns_record" "mail_from_spf" {
   ttl     = 1800
 }
 
-# Nothing sends with the bare domain as its envelope sender (SES uses mail. above),
-# so say so. Checked 2026-09-29: no other service sends mail for this domain.
+# Zoho sends with the bare domain as its envelope sender, so the apex SPF lists
+# Zoho. SES uses mail. above and needs no entry here. A new service that sends as
+# the bare domain goes into this include list: a second v=spf1 record at the apex
+# is a permerror. ~all stays until a header shows spf=pass for Zoho's mail (#403).
 resource "vercel_dns_record" "apex_spf" {
   team_id = local.vercel_team_id
   domain  = vercel_project_domain.custom.domain
   name    = ""
   type    = "TXT"
-  value   = "v=spf1 -all"
+  value   = "v=spf1 include:zoho.in ~all"
   ttl     = 1800
 }
 
@@ -90,8 +97,42 @@ resource "vercel_dns_record" "zoho_verification" {
   ttl     = 1800
 }
 
-# In the sandbox SES delivers only to verified addresses. SES emails a link to this
-# address on first apply; it must be clicked once.
+# Zoho Mail receives the domain's mail (#403). Keyed by priority, so an instance's
+# address stays the same if a host name changes. Don't add another apex MX:
+# receivers would split mail between providers.
+locals {
+  zoho_mx = {
+    "10" = "mx.zoho.in"
+    "20" = "mx2.zoho.in"
+    "50" = "mx3.zoho.in"
+  }
+}
+
+resource "vercel_dns_record" "zoho_mx" {
+  for_each    = local.zoho_mx
+  team_id     = local.vercel_team_id
+  domain      = vercel_project_domain.custom.domain
+  name        = ""
+  type        = "MX"
+  value       = each.value
+  mx_priority = tonumber(each.key)
+  ttl         = 1800
+}
+
+# Zoho Mail's DKIM key, selector zoho, 2048-bit (#403). Its name differs from
+# SES's <token>._domainkey CNAMEs above, so the two don't conflict.
+resource "vercel_dns_record" "zoho_dkim" {
+  team_id = local.vercel_team_id
+  domain  = vercel_project_domain.custom.domain
+  name    = "zoho._domainkey"
+  type    = "TXT"
+  value   = "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3xsBL5HuGIWa2kM7E0MGQaAquDj9Wz+IUSpZDkOy4b5J5pMa70wASq92RQYyIRDTHXPtgAnQrgYTN9fZQasN0aSo1PWbgf9XBavXaWJs3rG3lNRz2trmYiIRtYxzxh2SzvgXlX972ZLWoc99Bjp5+Fm7tkdjblciji7V6XV2CDIDbISX8ByV3akL++Z3MjxtGBFpmwWxcLqC/8O4ymyNlSiOJKQMN004n2U7oPj8ds/Jp1svBm/6emIfMba64kmHyV2k2yDmtRsB6gltiyXAksY3Zk0zbrLkjBsQ2Et3n8LsriJ0Q9PK+1eeRL9AbLkg6rvr1etzjl2jXnw4PFP4pwIDAQAB"
+  ttl     = 1800
+}
+
+# The owner's address stays a verified SES identity, though delivery to it no
+# longer depends on that since production access was granted. SES emailed a link
+# to this address on first apply; it had to be clicked once.
 resource "aws_sesv2_email_identity" "owner" {
   email_identity = var.alert_email
 }

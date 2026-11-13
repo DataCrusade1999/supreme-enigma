@@ -9,7 +9,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Added
 
-- Zoho Mail domain-verification record on ashutosh-pandey.com. Part of #403.
+- Mail for ashutosh-pandey.com: Zoho Mail receives it (MX), and Zoho can send as
+  the domain (DKIM selector zoho, SPF include). access@ is an alias of the
+  mailbox. Closes #403.
+
+### Changed
+
+- The kill-switch runbook keeps the domain's mail DNS records out of the destroy
+  and re-imports them before a re-apply. #300's email design no longer receives
+  mail through SES.
 
 ## [1.10.0] - 2026-10-30
 

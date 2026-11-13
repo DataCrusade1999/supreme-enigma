@@ -24,7 +24,7 @@ Goals:
   - owner only, never grantable: Resume admin, Newsletter admin, Keystatic and the Access page
 - **Grants are made from an owner-only Access page** at `/tools/access-admin`, not through Terraform. People who have signed in but have no access show up there as pending.
 - **Revocation takes effect within 15 minutes.**
-- **A domain address for requests**, `access@ashutosh-pandey.com`. Mail to it reaches the owner's Gmail, and the site emails invitees from it when their access changes.
+- **A domain address for requests**, `access@ashutosh-pandey.com`. Mail to it reaches the owner's Zoho inbox (an alias, #403), and the site emails invitees from it when their access changes.
 
 Non-goals:
 
@@ -52,7 +52,7 @@ Non-goals:
 | Unmapped gated path | Denied | Adding a route without deciding its action must fail, not open. A test enforces the mapping. |
 | Failure mode | Fail closed after 2 s | A bypass on error would be the hole this design closes. The owner is locked out during an outage too, and accepts that. |
 | Hub check | Parallel `IsAuthorizedWithToken` calls, one per tool | `BatchIsAuthorizedWithToken` costs $0.00015 a call, 30 single calls' worth; the hub needs 7. |
-| Inbound mail | SES receiving → S3 → a forwarding Lambda → the owner's Gmail | Stays in AWS, costs almost nothing, and forwarding to the owner's verified address works in the SES sandbox. |
+| Inbound mail | Zoho Mail, `access@` an alias of the owner's mailbox | A domain has one MX set, and Zoho owns it (#403). |
 | Outbound mail | SESv2 `SendEmail` from `access@ashutosh-pandey.com`, after SES production access | Sending to invitees needs production access. |
 
 ## 4. Access model
@@ -232,31 +232,17 @@ Each change writes one structured log line to Vercel's logs: `{event:"access", b
 
 ## 7. Email
 
-SES already holds `ashutosh-pandey.com` as a verified identity with DKIM and a DMARC record (`infra/shared/email.tf`).
+SES already holds `ashutosh-pandey.com` as a verified identity with DKIM and a DMARC record (`infra/prod/account/email.tf`).
 
 ### Receiving
 
-- An MX record at the apex on Vercel DNS: `10 inbound-smtp.us-east-1.amazonaws.com`. The domain has no MX record today.
-- A receipt rule set, made the account's active set in `us-east-1`, with one rule for the recipient `access@ashutosh-pandey.com`, spam and virus scanning on. It has two actions, in order:
-  1. S3: the raw message goes to main's data bucket under `inbound-mail/`. A lifecycle rule for that prefix deletes objects after 30 days. The bucket policy lets `ses.amazonaws.com` write under the prefix, with `aws:SourceAccount` set to this account.
-  2. Lambda: `mail_forwarder`, invoked asynchronously.
-- No other address at the domain gets a rule.
-
-`mail_forwarder` is Python 3.12, standard library plus the runtime's boto3, in `lambda/src/mail_forwarder/` with tests in `lambda/tests/`. Terraform packages it with `archive_file` and deploys it, so it is not part of the container image or `deploy.yml`. It:
-
-- drops the message if SES's spam or virus verdict is `FAIL`
-- reads the raw message from S3
-- sets `From: Access request <access@ashutosh-pandey.com>`, since SES only sends from verified addresses and the original sender's DMARC would fail on a forward
-- sets `Reply-To:` to the original sender
-- prefixes the subject with `[access] `
-- removes the headers SES would reject on resend (`Return-Path`, `Sender`, `Message-ID`, `DKIM-Signature`)
-- sends it with `SendRawEmail` to `var.alert_email`
+Zoho owns the apex MX (`infra/prod/account/email.tf`, #403), and `access@` is a Zoho alias of the owner's mailbox, so nothing in AWS receives mail.
 
 ### Sending
 
-- **SES production access** is requested once by hand, with `aws sesv2 put-account-details` or the console. The use case: transactional email to invited users of a personal site, when their access changes, a few a month. The rollout PR carries the exact text. Until it is granted, sends to anyone but the owner fail and the Access page says so.
+- **SES production access**: granted 2026-10-01.
 - `aws_sesv2_account_suppression_attributes` with `BOUNCE` and `COMPLAINT`.
-- From `Access <access@ashutosh-pandey.com>`, `Reply-To` the same address, so replies arrive through the receiving path.
+- From `Access <access@ashutosh-pandey.com>`, `Reply-To` the same address, so replies land in the owner's Zoho inbox.
 - Three emails, plain text with a simple HTML version:
   1. Approved: which tools they can use, and a link to `/tools`.
   2. Grant: "You can use News Desk ask 20 times until 9 Oct 2026", plus any other grants they hold.
@@ -265,37 +251,32 @@ SES already holds `ashutosh-pandey.com` as a verified identity with DKIM and a D
 
 ## 8. Infrastructure
 
-### `infra/shared/access.tf` (new)
+### `infra/prod/account/access.tf` (new)
 
 - `aws_verifiedpermissions_policy_store.site`, `validation_settings { mode = "STRICT" }`
-- `aws_verifiedpermissions_schema.site` from `infra/shared/cedar/schema.cedarschema.json`
+- `aws_verifiedpermissions_schema.site` from `infra/modules/auth/cedar/schema.cedarschema.json`
 - `aws_verifiedpermissions_identity_source.cognito`: the user pool ARN, `client_ids = [aws_cognito_user_pool_client.web.id]`, `group_configuration.group_entity_type = "Site::Group"`, `principal_entity_type = "Site::User"`
-- `aws_verifiedpermissions_policy` × 4, from `infra/shared/cedar/policies/*.cedar` through `templatefile()` with the pool ID
+- `aws_verifiedpermissions_policy` × 4, from `infra/modules/auth/cedar/policies/*.cedar` through `templatefile()` with the pool ID
 - `aws_cognito_user_group` `owner` and `friends`
 - `aws_cognito_user_in_group` putting `aws_cognito_user.owner` in `owner`
 - `aws_dynamodb_table.access_grants`, `PAY_PER_REQUEST`, TTL on `ttl`
-- An IAM policy on both Vercel roles, `aws_iam_role.vercel` (production) and `aws_iam_role.vercel_preview` (dev and stage), built from one statement list the way `vercel_resume_statements` is in `shared.tf`. Everything it grants is shared by the three environments, so it lives in `infra/shared`, not in `infra/modules/environment`:
+- An IAM policy on production's Vercel role, `aws_iam_role_policy.vercel_access` in `infra/prod/account/access.tf`, next to its resume grant, `aws_iam_role_policy.vercel_resume` in `infra/prod/account/oidc-roles.tf`. Dev's and stage's preview roles are `aws_iam_role.vercel_preview` in each nonprod account (`infra/modules/nonprod-account/oidc-roles.tf`, #397). It grants:
   - `verifiedpermissions:IsAuthorizedWithToken` on the policy store
   - `cognito-idp:ListUsers`, `AdminListGroupsForUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminUserGlobalSignOut`, `AdminDeleteUser` on the user pool
   - `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query` on the table
   - `ses:SendEmail` on the domain identity, with the condition `ses:FromAddress = access@ashutosh-pandey.com`
 - Vercel env vars for production and preview: `AVP_POLICY_STORE_ID`, `ACCESS_GRANTS_TABLE`, `ACCESS_FROM_EMAIL`
 
-### `infra/shared/auth.tf`
+### `infra/prod/account/auth.tf`
 
 - `aws_cognito_user_pool_client.web`: `id_token_validity = 15`, `access_token_validity = 15`, `refresh_token_validity = 7`, with `token_validity_units` of minutes, minutes and days. `enable_token_revocation = true`, the default, stated explicitly.
 - `OWNER_EMAIL` stays as a Vercel env var for now and is no longer read by the callback. It is removed in PR 1's cleanup (§11).
 
-### `infra/shared/email.tf`
+### `infra/prod/account/email.tf`
 
-- `vercel_dns_record` MX at the apex, with `team_id`
-- `aws_ses_receipt_rule_set`, `aws_ses_active_receipt_rule_set`, `aws_ses_receipt_rule`
-- the bucket policy statement on main's data bucket, which `shared` names with `local.data_bucket_names["main"]` rather than reading the env stack's state
-- the `inbound-mail/` lifecycle rule, which goes in `infra/modules/environment/main.tf`'s `aws_s3_bucket_lifecycle_configuration.data` instead: S3 allows one lifecycle configuration per bucket and the module already owns it. The rule lands on all three buckets and is harmless on dev and stage, which get no mail. It reaches main's bucket when the change is promoted to `main`; until then stored mail does not expire.
-- `aws_lambda_function.mail_forwarder` from `archive_file`, its role (`s3:GetObject` on `inbound-mail/*`, `ses:SendRawEmail` on the domain identity, CloudWatch Logs), and `aws_lambda_permission` for `ses.amazonaws.com` with `source_account`
 - `aws_sesv2_account_suppression_attributes`
 
-No new required variables. The CI apply role that applies `shared` (`aws_iam_role.tf_apply_prod` in `ci.tf`) has no `verifiedpermissions:*` or `dynamodb:*` today; a separate PR adds both before any of these resources (§11). `archive_file` needs the `hashicorp/archive` provider, which `backend.tf`'s `required_providers` and the lock file don't have yet; PR 3 adds it. `hashicorp/aws` is already at `~> 6.62`, which has the Verified Permissions resources.
+No new required variables. The CI apply role that applies `prod/account` (`aws_iam_role.tf_apply_prod` in `terraform-ci-roles.tf`) has no `verifiedpermissions:*` or `dynamodb:*` today; a separate PR adds both before any of these resources (§11). `hashicorp/aws` is already at `~> 6.62`, which has the Verified Permissions resources.
 
 ### The owner's Google identity
 
@@ -341,7 +322,6 @@ After that, Google, email code and passkey all sign in as the same user, with on
   - fail-closed on a timeout and on an error from Verified Permissions or DynamoDB
   - Access API: input validation, and the refusal to change an `owner` member
   - email bodies and a failed send leaving the change in place
-- **`mail_forwarder`** (pytest): header rewriting, `Reply-To`, the subject prefix, removed headers, and dropping `FAIL` verdicts.
 - **e2e.** Today's specs forge a session cookie with `E2E_COOKIE_SECRET`. They now forge an encrypted session holding an unsigned test token whose claims set `sub` and `cognito:groups`. The proxy uses the `local` authorizer, which runs the same Cedar files in-process with cedar-wasm and trusts the groups in the session. It is not a bypass, because it applies the same policies. `local` is used only when `AUTHZ_MODE=local` and `VERCEL` is unset; if `AUTHZ_MODE=local` is set on Vercel, the proxy denies every gated request. New specs:
   - a friend sees three tools on the hub and gets 403 on Resume admin
   - a pending user is sent to `/access-requested`
@@ -352,11 +332,11 @@ After that, Google, email code and passkey all sign in as the same user, with on
   2. Approve it on the Access page → it sees three tools; the approval email arrives.
   3. Grant `newsdesk:ask` with a limit of 2 → two asks succeed, the third gets `quota_exhausted`.
   4. Remove the member → access ends within 15 minutes.
-  5. Email `access@ashutosh-pandey.com` from that account → it reaches the owner's Gmail, and Reply goes to the sender.
+  5. Email `access@ashutosh-pandey.com` from that account → it lands in the owner's Zoho inbox.
 
 ## 11. Rollout
 
-One CI-permissions PR, then three parts, in order. Terraform runs in CI: a PR that touches `infra/` gets a plan posted by the `Terraform` workflow, and a push to `dev` applies `shared`, so everything in §8 reaches production when it merges to `dev`. The Vercel deployment for that same push is created before the apply finishes and keeps the env vars it was created with, so a web change that reads a new env var cannot ship in the same PR that creates it. Each part therefore lands its Terraform in its own PR first, waits for the apply on `dev`, and then merges the web change.
+One CI-permissions PR, then three parts, in order. Terraform runs in CI: a PR that touches `infra/` gets a plan posted by the `Terraform` workflow, and a push to `dev` applies `prod/account`, so everything in §8 reaches production when it merges to `dev`. The Vercel deployment for that same push is created before the apply finishes and keeps the env vars it was created with, so a web change that reads a new env var cannot ship in the same PR that creates it. Each part therefore lands its Terraform in its own PR first, waits for the apply on `dev`, and then merges the web change.
 
 0. **CI permissions.** `verifiedpermissions:*` and `dynamodb:*` on `tf_apply_prod`. Merged and applied before part 1's infra PR, because a role cannot reliably use a permission granted in the same apply.
 
@@ -369,21 +349,19 @@ One CI-permissions PR, then three parts, in order. Terraform runs in CI: a PR th
    - The runbook for linking the owner's Google identity.
    - After it reaches `main`, remove the `OWNER_EMAIL` Vercel env var. The plan for that PR destroys a resource, so CI's apply stops and needs a manual `apply-destroys` run of the `Terraform` workflow.
 2. **Grants and the Access page.** The table, the grant context and consumption in the proxy, the Access page and its API, and the IAM statements for Cognito admin calls and DynamoDB.
-3. **Email.** The MX record, receipt rules, `mail_forwarder`, the suppression list, the SES send permission, the three emails, and the production access request with its text.
+3. **Email.** The suppression list, the SES send permission and the three emails.
 
-Docs updated along the way: `CLAUDE.md` (what `route-gate.ts` now holds, the new env vars), `.claude/rules/infra.md` (the receipt rule set is account-wide, the forwarder deploys through Terraform), the header comment in `infra/shared/email.tf` (it says the account stays in the SES sandbox, which PR 3 ends), `.claude/rules/web.md` (the session format and `AUTHZ_MODE`), `ARCHITECTURE.md`, and `CHANGELOG.md` under `[Unreleased]` in each PR.
+Docs updated along the way: `CLAUDE.md` (what `route-gate.ts` now holds, the new env vars), `.claude/rules/web.md` (the session format and `AUTHZ_MODE`), `ARCHITECTURE.md`, and `CHANGELOG.md` under `[Unreleased]` in each PR.
 
 ## 12. Cost
 
-Assumed monthly use: 10,000 gated requests, 300 hub loads, 1,000 DynamoDB reads and writes, 50 emails in and 50 out.
+Assumed monthly use: 10,000 gated requests, 300 hub loads, 1,000 DynamoDB reads and writes, 50 emails out.
 
 | Item | Price | Monthly |
 |---|---|---|
 | Verified Permissions checks | $0.000005 each; 10,000 + 300 × 7 hub checks | $0.061 |
 | DynamoDB on-demand | $0.625 per million writes, $0.125 per million reads | < $0.01 |
 | SES sending | $0.10 per 1,000 | $0.005 |
-| SES receiving | $0.10 per 1,000 emails, $0.09 per 1,000 incoming 256 KB chunks | $0.01 |
-| `mail_forwarder` Lambda, S3 | inside the free tier | $0 |
-| **Total** | | **about ₹8 ($0.08)** |
+| **Total** | | **about ₹7 ($0.07)** |
 
 At ₹96.07 to the dollar (29 September 2026). The existing `$5` budget alarm covers all of it.
