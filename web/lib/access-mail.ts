@@ -2,7 +2,7 @@ import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { awsCredentials } from "./aws";
 import type { AccessUser } from "./access-admin";
 import type { Grant } from "./authz/grants";
-import { METERED_LABELS } from "./route-gate";
+import { GRANTS } from "./route-gate";
 
 const SITE = "https://ashutosh-pandey.com";
 
@@ -58,7 +58,7 @@ export function sendApproved(user: AccessUser): Promise<string | null> {
 }
 
 export function sendGrants(user: AccessUser, grants: Grant[]): Promise<string | null> {
-  const lines = grants.map((g) => `${METERED_LABELS[g.action]}: ${g.limit - g.used} uses, until ${day(g.expiresAt)}`);
+  const lines = grants.map((g) => `${GRANTS[g.action].label}: ${g.limit - g.used} uses, until ${day(g.expiresAt)}`);
   return send(user.email, "Your grants on ashutosh-pandey.com", [
     "You can now use:",
     "",

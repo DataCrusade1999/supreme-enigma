@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { readSession } from "../auth";
-import { METERED_LABELS } from "../route-gate";
+import { GRANTS } from "../route-gate";
 import { getGrantStore, type Grant } from "./grants";
 
 export async function myGrants(): Promise<Grant[]> {
@@ -24,5 +24,5 @@ export function describeGrant(grant: Grant): string {
     year: "numeric",
     timeZone: "Asia/Kolkata",
   });
-  return `${METERED_LABELS[grant.action]}: ${grant.limit - grant.used} of ${grant.limit} left, until ${until}`;
+  return `${GRANTS[grant.action].label}: ${grant.limit - grant.used} of ${grant.limit} left, until ${until}`;
 }

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AccessStatus, AccessUser } from "../../lib/access-admin";
 import type { Grant } from "../../lib/authz/grants";
-import { METERED_ACTIONS, METERED_LABELS, type MeteredAction } from "../../lib/route-gate";
+import { METERED_ACTIONS, GRANTS, type MeteredAction } from "../../lib/route-gate";
 
 type Row = AccessUser & { status: AccessStatus; grants: Grant[] };
 
@@ -89,9 +89,9 @@ export function AccessAdmin() {
                 {u.grants.map((g) => (
                   <li key={g.action} className="flex gap-3">
                     <span>
-                      {METERED_LABELS[g.action]}: {g.limit - g.used} of {g.limit} left, expires {until(g.expiresAt)}
+                      {GRANTS[g.action].label}: {g.limit - g.used} of {g.limit} left, expires {until(g.expiresAt)}
                     </span>
-                    <button aria-label={`Revoke ${METERED_LABELS[g.action]} for ${u.email}`} className="text-muted hover:text-fg"
+                    <button aria-label={`Revoke ${GRANTS[g.action].label} for ${u.email}`} className="text-muted hover:text-fg"
                       onClick={() =>
                         change(`/api/access/grants/${encodeURIComponent(u.sub)}/${encodeURIComponent(g.action)}`, { method: "DELETE" })
                       }>
@@ -147,7 +147,7 @@ function GrantForm({
         <span className="text-muted">Action</span>
         <select id={`${id}-action`} value={action} onChange={(e) => setAction(e.target.value as MeteredAction)} className="border border-line bg-bg px-2 py-1">
           {METERED_ACTIONS.map((a) => (
-            <option key={a} value={a}>{METERED_LABELS[a]}</option>
+            <option key={a} value={a}>{GRANTS[a].label}</option>
           ))}
         </select>
       </label>
