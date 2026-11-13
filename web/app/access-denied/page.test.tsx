@@ -11,6 +11,7 @@ describe("AccessDeniedPage", () => {
     ["forbidden", "This account can't open that."],
     ["no_grant", "That uses paid services, and needs a separate grant."],
     ["quota_exhausted", "You've used every run your grant allowed."],
+    ["no_tool_grant", "You don't have access to that tool yet."],
     ["grant_expired", "Your grant for that has expired."],
     ["authorization_unavailable", "Access can't be checked right now."],
   ])("explains reason=%s", async (reason, message) => {

@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { readSession } from "../auth";
-import { GRANTS } from "../route-gate";
+import { formatUntil, formatUses } from "../access-format";
+import { GRANTS, isMetered } from "../route-gate";
+import { isLive } from "./grant-status";
 import { getGrantStore, type Grant } from "./grants";
 
 export async function myGrants(): Promise<Grant[]> {
@@ -10,7 +12,7 @@ export async function myGrants(): Promise<Grant[]> {
   const now = Math.floor(Date.now() / 1000);
   try {
     const grants = await getGrantStore().list(session.sub);
-    return grants.filter((g) => (g.used ?? 0) < (g.limit ?? 0) && g.expiresAt > now);
+    return grants.filter((g) => isLive(g, now));
   } catch (err) {
     console.error("authz: could not read grants for the hub", err);
     return [];
@@ -18,11 +20,9 @@ export async function myGrants(): Promise<Grant[]> {
 }
 
 export function describeGrant(grant: Grant): string {
-  const until = new Date(grant.expiresAt * 1000).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  });
-  return `${GRANTS[grant.action].label}: ${(grant.limit ?? 0) - (grant.used ?? 0)} of ${grant.limit ?? 0} left, until ${until}`;
+  const until = formatUntil(grant.expiresAt);
+  const label = GRANTS[grant.action].label;
+  if (!isMetered(grant.action)) return `${label}: until ${until}`;
+  const left = (grant.limit ?? 0) - (grant.used ?? 0);
+  return `${label}: ${left} of ${formatUses(grant.limit ?? 0)} left, until ${until}`;
 }

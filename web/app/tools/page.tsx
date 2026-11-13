@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CommandBar } from "../../components/site/CommandBar";
+import { ACCESS_EMAIL, requestAccessHref } from "../../lib/authz/access-request";
 import { describeGrant, myGrants } from "../../lib/authz/my-grants";
 import { visibleTools } from "../../lib/authz/visible-tools";
 
@@ -51,6 +52,16 @@ export default async function ToolsPage({
         {passkeyMessage ? (
           <p role="status" className="mt-6 text-sm text-fg">
             {passkeyMessage}
+          </p>
+        ) : null}
+
+        {tools.length === 0 ? (
+          <p className="mt-10 max-w-[52ch] text-base leading-relaxed text-muted">
+            Nothing is open to this account yet. Write to{" "}
+            <a href={requestAccessHref("Access request")} className="text-accent hover:text-fg">
+              {ACCESS_EMAIL}
+            </a>{" "}
+            to ask.
           </p>
         ) : null}
 
