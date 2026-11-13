@@ -238,6 +238,22 @@ describe("/api/access emails", () => {
     expect(sendEnded).not.toHaveBeenCalled();
   });
 
+  it("revoke with an unreadable grant sends nothing and says so", async () => {
+    vi.mocked(revokeGrant).mockResolvedValueOnce({ user, removed: "unknown" });
+    const res = await revokeRoute(new Request("http://x"), params({ sub: "u1", action: "newsdesk:ask" }));
+    expect(res.status).toBe(200);
+    expect(sendEnded).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ ok: true, emailError: "Couldn't read the grant before revoking it, so no email was sent." });
+  });
+
+  it("remove with unreadable grants sends nothing and says so", async () => {
+    vi.mocked(removeMember).mockResolvedValueOnce({ user, hadLive: "unknown" });
+    const res = await removeRoute(new Request("http://x"), params({ sub: "u1" }));
+    expect(res.status).toBe(200);
+    expect(sendEnded).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ ok: true, emailError: "Couldn't read the member's grants before removing them, so no email was sent." });
+  });
+
   it("an ended email that throws still answers 200 with the error", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(removeMember).mockResolvedValue({ user, hadLive: true });

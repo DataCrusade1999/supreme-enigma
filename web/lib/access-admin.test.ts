@@ -162,6 +162,38 @@ describe("changes", () => {
     expect((await revokeGrant("f", "newsdesk:ask")).removed).toBeNull();
   });
 
+  describe("a failed grants read never blocks the change", () => {
+    beforeEach(() => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    it("revokeGrant still removes and reports removed as unknown", async () => {
+      only("f", ["friends"]);
+      store.get.mockRejectedValue(new Error("ddb down"));
+      expect((await revokeGrant("f", "newsdesk:ask")).removed).toBe("unknown");
+      expect(store.remove).toHaveBeenCalledWith("f", "newsdesk:ask");
+    });
+
+    it("removeMember still removes, signs out and deletes grants, with hadLive unknown", async () => {
+      only("f", ["friends"]);
+      cognito.on(AdminRemoveUserFromGroupCommand).resolves({});
+      cognito.on(AdminUserGlobalSignOutCommand).resolves({});
+      store.list.mockRejectedValue(new Error("ddb down"));
+      expect((await removeMember("f")).hadLive).toBe("unknown");
+      expect(cognito.commandCalls(AdminRemoveUserFromGroupCommand)).toHaveLength(1);
+      expect(cognito.commandCalls(AdminUserGlobalSignOutCommand)).toHaveLength(1);
+      expect(store.removeAll).toHaveBeenCalledWith("f");
+    });
+
+    it("grantAction still puts, with opensTool false", async () => {
+      only("f", ["friends"]);
+      store.list.mockRejectedValue(new Error("ddb down"));
+      const { grant, opensTool } = await grantAction({ sub: "f", action: "newsdesk:ask", limit: 5, expiresInDays: 7, now: 1000 });
+      expect(opensTool).toBe(false);
+      expect(store.put).toHaveBeenCalledWith(grant);
+    });
+  });
+
   // The owner can't be locked out from this page.
   it.each([
     ["approve", () => approve("o")],

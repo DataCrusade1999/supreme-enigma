@@ -10,6 +10,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   return respond(async () => {
     const { user, hadLive } = await removeMember(sub);
     audit({ by: await actingEmail(), op: "remove", target: user.email });
+    if (hadLive === "unknown") return changed("Couldn't read the member's grants before removing them, so no email was sent.");
     return changed(hadLive ? await attempt(() => sendEnded(user, "the tools")) : null);
   });
 }

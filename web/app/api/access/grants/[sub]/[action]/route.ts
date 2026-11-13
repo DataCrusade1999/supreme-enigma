@@ -11,7 +11,8 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   return respond(async () => {
     const { user, removed } = await revokeGrant(sub, parsed.data);
     audit({ by: await actingEmail(), op: "revoke", target: user.email, action: parsed.data });
-    const ended = removed && isUnexpired(removed, Math.floor(Date.now() / 1000));
+    if (removed === "unknown") return changed("Couldn't read the grant before revoking it, so no email was sent.");
+    const ended = removed !== null && isUnexpired(removed, Math.floor(Date.now() / 1000));
     return changed(ended ? await attempt(() => sendEnded(user, GRANTS[parsed.data].label)) : null);
   });
 }

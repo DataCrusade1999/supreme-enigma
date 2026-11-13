@@ -91,10 +91,18 @@ export async function approve(sub: string): Promise<AccessUser> {
   return user;
 }
 
-export async function removeMember(sub: string): Promise<{ user: AccessUser; hadLive: boolean }> {
+// The reads below only choose which email to send, so a failed one must not
+// block the change.
+export async function removeMember(sub: string): Promise<{ user: AccessUser; hadLive: boolean | "unknown" }> {
   const user = await requireStatus(sub, "member");
   const now = Math.floor(Date.now() / 1000);
-  const hadLive = (await getGrantStore().list(user.sub)).some((g) => isUnexpired(g, now));
+  let hadLive: boolean | "unknown";
+  try {
+    hadLive = (await getGrantStore().list(user.sub)).some((g) => isUnexpired(g, now));
+  } catch (err) {
+    console.error("access: reading grants before removal failed", err);
+    hadLive = "unknown";
+  }
   await cognito().send(new AdminRemoveUserFromGroupCommand({ UserPoolId: pool(), Username: user.username, GroupName: "friends" }));
   // Revokes their refresh tokens: access ends when the current ID token expires.
   await cognito().send(new AdminUserGlobalSignOutCommand({ UserPoolId: pool(), Username: user.username }));
@@ -117,8 +125,13 @@ export async function grantAction(p: {
   now: number;
 }): Promise<{ user: AccessUser; grant: Grant; opensTool: boolean }> {
   const user = await requireStatus(p.sub, "member");
-  const before = await getGrantStore().list(user.sub);
-  const opensTool = toolAccess(before, GRANTS[p.action].tool, p.now) === undefined;
+  let opensTool = false;
+  try {
+    const before = await getGrantStore().list(user.sub);
+    opensTool = toolAccess(before, GRANTS[p.action].tool, p.now) === undefined;
+  } catch (err) {
+    console.error("access: reading grants before granting failed", err);
+  }
   const grant: Grant = {
     sub: user.sub,
     action: p.action,
@@ -132,9 +145,15 @@ export async function grantAction(p: {
   return { user, grant, opensTool };
 }
 
-export async function revokeGrant(sub: string, action: GrantKey): Promise<{ user: AccessUser; removed: Grant | null }> {
+export async function revokeGrant(sub: string, action: GrantKey): Promise<{ user: AccessUser; removed: Grant | null | "unknown" }> {
   const user = await requireStatus(sub, "member");
-  const removed = await getGrantStore().get(user.sub, action);
+  let removed: Grant | null | "unknown";
+  try {
+    removed = await getGrantStore().get(user.sub, action);
+  } catch (err) {
+    console.error("access: reading the grant before revoking failed", err);
+    removed = "unknown";
+  }
   await getGrantStore().remove(user.sub, action);
   return { user, removed };
 }
