@@ -7,6 +7,17 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- Approval no longer opens any tool: every tool needs a grant. Money Planner and
+  News Desk reading are time-only grants; News Desk ask and refresh and BGM
+  Looper processing stay metered. Access emails are now welcome, update and
+  ended messages in the site's look (#518).
+
+### Fixed
+
+- Grant emails read grants consistently (#516).
+
 ## [1.11.0] - 2026-11-13
 
 ### Added
