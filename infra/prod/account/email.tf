@@ -139,3 +139,39 @@ resource "vercel_dns_record" "zoho_dkim" {
 resource "aws_sesv2_email_identity" "owner" {
   email_identity = var.alert_email
 }
+
+# --- Bounces and complaints (#510) ---
+# What the SES production-access case (179068422100658) committed to: SES stops
+# sending to an address that bounced or complained, and the rates are watched.
+# Feedback forwarding mails each notice to the sender, no-reply@, which is a Zoho
+# alias of the owner's mailbox.
+resource "aws_sesv2_account_suppression_attributes" "site" {
+  suppressed_reasons = ["BOUNCE", "COMPLAINT"]
+}
+
+# AWS reviews an account at a 5% bounce rate or a 0.1% complaint rate. Both alarms
+# go to the budget-alerts topic, whose policy already lets CloudWatch publish.
+# treat_missing_data = "notBreaching" because SES emits nothing while idle.
+locals {
+  ses_reputation_alarms = {
+    bounce    = { metric = "Reputation.BounceRate", threshold = 0.05 }
+    complaint = { metric = "Reputation.ComplaintRate", threshold = 0.001 }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ses_reputation" {
+  for_each            = local.ses_reputation_alarms
+  alarm_name          = "${var.project_name}-ses-${each.key}-rate"
+  namespace           = "AWS/SES"
+  metric_name         = each.value.metric
+  statistic           = "Maximum"
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = each.value.threshold
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.budget_alerts.arn]
+  ok_actions          = [aws_sns_topic.budget_alerts.arn]
+
+  alarm_description = "SES ${each.key} rate at or above AWS's review threshold. Check bounce or complaint notices in the no-reply@ alias and stop the sender before AWS pauses sending."
+}

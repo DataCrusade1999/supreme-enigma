@@ -21,6 +21,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - ashutosh-pandey.com's mail policy is enforced: the apex SPF ends in `-all` and
   DMARC is `p=quarantine`, so mail forged as the domain (or its dev and stage
   subdomains) goes to spam. Closes #508.
+- SES bounces and complaints: the account's suppression list is now in Terraform,
+  CloudWatch alarms email the owner when the bounce or complaint rate reaches
+  AWS's review threshold, and bounce notices to no-reply@ reach the owner's Zoho
+  inbox. Closes #510.
 
 ## [1.10.0] - 2026-10-30
 
