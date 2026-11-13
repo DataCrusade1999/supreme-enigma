@@ -11,12 +11,23 @@ import {
 import { refreshIdToken, verifyIdToken } from "./lib/cognito";
 import { getAuthorizer, type AuthzContext } from "./lib/authz/authorizer";
 import { getGrantStore, type Grant } from "./lib/authz/grants";
-import { actionFor, isGatedPath, isMetered, type MeteredAction, type RouteAction } from "./lib/route-gate";
+import { isUnexpired } from "./lib/authz/grant-status";
+import { toolAccess } from "./lib/authz/tool-access";
+import {
+  actionFor,
+  GRANTABLE_TOOLS,
+  GRANTS,
+  isGatedPath,
+  isMetered,
+  type MeteredAction,
+  type RouteAction,
+} from "./lib/route-gate";
 
 export type Denial =
   | "no_access"
   | "forbidden"
   | "no_grant"
+  | "no_tool_grant"
   | "quota_exhausted"
   | "grant_expired"
   | "authorization_unavailable";
@@ -85,8 +96,15 @@ async function currentSession(
 function meteredDenial(grant: Grant | null, now: number): Denial {
   if (!grant) return "no_grant";
   if (grant.expiresAt <= now) return "grant_expired";
-  if (grant.used >= grant.limit) return "quota_exhausted";
+  if (grant.used !== undefined && grant.limit !== undefined && grant.used >= grant.limit) return "quota_exhausted";
   return "forbidden";
+}
+
+/** Why opening a tool was denied: a grant on it that has run out of time, or no
+ * grant on it at all. */
+function toolDenial(grants: Grant[], route: RouteAction, now: number): Denial {
+  const onTool = grants.filter((g) => GRANTS[g.action].tool === route.tool);
+  return onTool.length > 0 && !onTool.some((g) => isUnexpired(g, now)) ? "grant_expired" : "no_tool_grant";
 }
 
 async function decide(request: NextRequest, session: Session): Promise<NextResponse> {
@@ -108,7 +126,25 @@ async function decide(request: NextRequest, session: Session): Promise<NextRespo
       console.error("authz: grant read failed", err);
       return deny(request, "authorization_unavailable", route);
     }
-    if (grant) context.grant = { remaining: grant.limit - grant.used, expiresAt: grant.expiresAt };
+    if (grant) context.grant = { remaining: (grant.limit ?? 0) - (grant.used ?? 0), expiresAt: grant.expiresAt };
+  }
+
+  // Opening a grantable tool, or pinning on it, needs an unexpired grant on that
+  // tool. One read serves both the decision and the denial reason.
+  const needsAccess =
+    !session.groups.includes("owner") &&
+    GRANTABLE_TOOLS.includes(route.tool) &&
+    (route.action === "view" || route.action === "newsdesk:pin");
+  let memberGrants: Grant[] = [];
+  if (needsAccess) {
+    try {
+      memberGrants = await getGrantStore().list(session.sub);
+    } catch (err) {
+      console.error("authz: grant read failed", err);
+      return deny(request, "authorization_unavailable", route);
+    }
+    const access = toolAccess(memberGrants, route.tool, context.now);
+    if (access) context.access = access;
   }
 
   let decision;
@@ -119,7 +155,12 @@ async function decide(request: NextRequest, session: Session): Promise<NextRespo
     return deny(request, "authorization_unavailable", route);
   }
   if (decision !== "allow") {
-    return deny(request, isMetered(route.action) ? meteredDenial(grant, context.now) : "forbidden", route);
+    const reason = isMetered(route.action)
+      ? meteredDenial(grant, context.now)
+      : needsAccess
+        ? toolDenial(memberGrants, route, context.now)
+        : "forbidden";
+    return deny(request, reason, route);
   }
 
   if (counted && route.consumes) {

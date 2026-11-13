@@ -103,10 +103,17 @@ identity source. The proxy calls
 `owner` and `friends`; see
 `docs/superpowers/specs/2026-09-29-access-control-design.md`.
 
-Access emails: approve, grant, remove and revoke on the Access page email the
-person from `access@ashutosh-pandey.com` through SESv2 `SendEmail`, about
-$0.10 per 1,000 messages, production only. Mail to `access@` is received by
-Zoho (#403).
+Approval opens only the hub. Every tool needs a grant (time-only for Money
+Planner and News Desk reading, metered for News Desk ask and refresh and BGM
+Looper processing), which the proxy passes to Verified Permissions as
+`context.access`; the design is in
+`docs/superpowers/specs/2026-11-13-grants-for-every-tool-design.md`.
+
+Access emails: the Access page emails the person a welcome on their first
+grant, an update when grants change and an ended notice when access is revoked
+or removed, in the site's look, from `access@ashutosh-pandey.com` through
+SESv2 `SendEmail`, about $0.10 per 1,000 messages, production only. Mail to
+`access@` is received by Zoho (#403).
 
 ## CI/CD
 

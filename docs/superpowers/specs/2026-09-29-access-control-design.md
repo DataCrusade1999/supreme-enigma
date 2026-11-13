@@ -3,6 +3,7 @@
 **Date:** 2026-09-29
 **Status:** Draft, awaiting the owner's review. Brainstormed with the owner on 2026-09-29; §3 records the decisions made there.
 **Issue:** #300
+**Superseded in part by:** `2026-11-13-grants-for-every-tool-design.md` (approval no longer opens any tool; every tool needs a grant).
 **Epic:** #285 (phase 6 of 6). Builds on phase 5 (#290, the Cognito login).
 
 ## 1. Problem

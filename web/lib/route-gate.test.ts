@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { actionFor, isGatedPath, isMetered, toolNameFor, TOOLS } from "./route-gate";
+import {
+  actionFor,
+  GRANT_KEYS,
+  GRANTABLE_TOOLS,
+  GRANTS,
+  isGatedPath,
+  isMetered,
+  toolHref,
+  toolNameFor,
+  TOOLS,
+} from "./route-gate";
 
 describe("isGatedPath", () => {
   it.each([
@@ -187,5 +197,20 @@ describe("TOOLS", () => {
     for (const tool of TOOLS) {
       expect(actionFor("GET", tool.href)).toMatchObject({ tool: tool.id, action: tool.pageAction });
     }
+  });
+});
+
+describe("grant registry", () => {
+  it.each([...GRANT_KEYS])("%s has a GRANTS entry for a listed tool", (key) => {
+    expect(TOOLS.map((t) => t.id)).toContain(GRANTS[key].tool);
+    expect(GRANTS[key].metered).toBe(isMetered(key));
+  });
+
+  it("lists the three grantable tools", () => {
+    expect(GRANTABLE_TOOLS).toEqual(["bgm-looper", "money-planner", "news-desk"]);
+  });
+
+  it("builds a tool href", () => {
+    expect(toolHref("news-desk")).toBe("/tools/news-desk");
   });
 });

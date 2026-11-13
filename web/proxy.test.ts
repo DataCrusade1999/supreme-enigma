@@ -15,8 +15,10 @@ import { proxy } from "./proxy";
 const SECRET = "secret";
 const NOW_S = Math.floor(Date.now() / 1000);
 const isAuthorized = vi.fn();
-const grants = { get: vi.fn(), consume: vi.fn() };
+const grants = { get: vi.fn(), consume: vi.fn(), list: vi.fn() };
 const liveGrant = { sub: "u1", action: "newsdesk:ask", email: "a@x", limit: 5, used: 2, expiresAt: NOW_S + 3600, grantedAt: 0 };
+
+const timeGrant = { sub: "u1", action: "newsdesk:read", email: "a@x", expiresAt: NOW_S + 3600, grantedAt: 0 };
 
 const jwt = (claims: Record<string, unknown>) =>
   `h.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.s`;
@@ -43,6 +45,7 @@ beforeEach(() => {
   vi.mocked(getGrantStore).mockReturnValue(grants as never);
   grants.get.mockResolvedValue(null);
   grants.consume.mockResolvedValue(true);
+  grants.list.mockResolvedValue([timeGrant]);
 });
 
 describe("proxy: ungated and unauthenticated", () => {
@@ -74,7 +77,11 @@ describe("proxy: decisions", () => {
     const res = await proxy(request("/tools/news-desk", { idToken: token(["friends"]) }));
     expect(res.headers.get("x-middleware-next")).toBe("1");
     expect(isAuthorized).toHaveBeenCalledWith(
-      expect.objectContaining({ tool: "news-desk", action: "view", context: { now: expect.any(Number) } }),
+      expect.objectContaining({
+        tool: "news-desk",
+        action: "view",
+        context: { now: expect.any(Number), access: { expiresAt: timeGrant.expiresAt } },
+      }),
     );
   });
 
@@ -234,5 +241,70 @@ describe("proxy: metered grants", () => {
     const res = await proxy(ask());
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "authorization_unavailable" });
+  });
+});
+
+describe("proxy: tool access", () => {
+  const page = (groups = ["friends"]) => request("/tools/money-planner", { idToken: token(groups) });
+  const asJson = (path: string, method: string) => request(path, { method, idToken: token(["friends"]) });
+
+  it("opens a tool page for a member with a live grant", async () => {
+    grants.list.mockResolvedValue([{ ...timeGrant, action: "moneyplanner:use" }]);
+    const res = await proxy(page());
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+    expect(grants.list).toHaveBeenCalledTimes(1);
+    expect(isAuthorized).toHaveBeenCalledWith(
+      expect.objectContaining({ context: { now: expect.any(Number), access: { expiresAt: timeGrant.expiresAt } } }),
+    );
+  });
+
+  it("redirects with no_tool_grant when the member has no grant on the tool", async () => {
+    grants.list.mockResolvedValue([timeGrant]);
+    isAuthorized.mockResolvedValue("deny");
+    expect(location(await proxy(page()))).toBe("/access-denied?reason=no_tool_grant&tool=money-planner&action=view");
+  });
+
+  it("redirects with grant_expired when the member only has expired grants on the tool", async () => {
+    grants.list.mockResolvedValue([{ ...timeGrant, action: "moneyplanner:use", expiresAt: NOW_S - 1 }]);
+    isAuthorized.mockResolvedValue("deny");
+    expect(location(await proxy(page()))).toBe("/access-denied?reason=grant_expired&tool=money-planner&action=view");
+  });
+
+  it("answers a denied pin with 403 no_tool_grant", async () => {
+    grants.list.mockResolvedValue([]);
+    isAuthorized.mockResolvedValue("deny");
+    const res = await proxy(asJson("/api/news-desk/indicators", "POST"));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "no_tool_grant" });
+  });
+
+  it("fails closed when the grants cannot be read", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    grants.list.mockRejectedValue(new Error("throttled"));
+    expect(location(await proxy(page()))).toBe(
+      "/access-denied?reason=authorization_unavailable&tool=money-planner&action=view",
+    );
+    expect(isAuthorized).not.toHaveBeenCalled();
+  });
+
+  it("opens the page for a used-up unexpired newsdesk:ask grant, and refuses the ask", async () => {
+    const used = { ...liveGrant, used: 5 };
+    grants.list.mockResolvedValue([used]);
+    grants.get.mockResolvedValue(used);
+    const open = await proxy(request("/tools/news-desk", { idToken: token(["friends"]) }));
+    expect(open.headers.get("x-middleware-next")).toBe("1");
+
+    isAuthorized.mockResolvedValue("deny");
+    const res = await proxy(asJson("/api/news-desk/ask", "POST"));
+    expect(await res.json()).toEqual({ error: "quota_exhausted" });
+  });
+
+  it("does not read grants for the owner, the hub, an ungrantable tool or a metered call", async () => {
+    await proxy(page(["owner"]));
+    await proxy(request("/tools", { idToken: token(["friends"]) }));
+    await proxy(request("/tools/resume-admin", { idToken: token(["friends"]) }));
+    grants.get.mockResolvedValue(liveGrant);
+    await proxy(asJson("/api/news-desk/ask", "POST"));
+    expect(grants.list).not.toHaveBeenCalled();
   });
 });

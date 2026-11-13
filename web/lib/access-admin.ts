@@ -10,7 +10,9 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { awsCredentials } from "./aws";
 import { getGrantStore, type Grant } from "./authz/grants";
-import type { MeteredAction } from "./route-gate";
+import { isUnexpired } from "./authz/grant-status";
+import { toolAccess } from "./authz/tool-access";
+import { GRANTS, type GrantKey } from "./route-gate";
 
 export type AccessUser = { sub: string; username: string; email: string; createdAt: string; groups: string[] };
 export type AccessStatus = "owner" | "member" | "pending";
@@ -89,13 +91,23 @@ export async function approve(sub: string): Promise<AccessUser> {
   return user;
 }
 
-export async function removeMember(sub: string): Promise<AccessUser> {
+// The reads below only choose which email to send, so a failed one must not
+// block the change.
+export async function removeMember(sub: string): Promise<{ user: AccessUser; hadLive: boolean | "unknown" }> {
   const user = await requireStatus(sub, "member");
+  const now = Math.floor(Date.now() / 1000);
+  let hadLive: boolean | "unknown";
+  try {
+    hadLive = (await getGrantStore().list(user.sub)).some((g) => isUnexpired(g, now));
+  } catch (err) {
+    console.error("access: reading grants before removal failed", err);
+    hadLive = "unknown";
+  }
   await cognito().send(new AdminRemoveUserFromGroupCommand({ UserPoolId: pool(), Username: user.username, GroupName: "friends" }));
   // Revokes their refresh tokens: access ends when the current ID token expires.
   await cognito().send(new AdminUserGlobalSignOutCommand({ UserPoolId: pool(), Username: user.username }));
   await getGrantStore().removeAll(user.sub);
-  return user;
+  return { user, hadLive };
 }
 
 export async function dismiss(sub: string): Promise<AccessUser> {
@@ -106,29 +118,42 @@ export async function dismiss(sub: string): Promise<AccessUser> {
 
 export async function grantAction(p: {
   sub: string;
-  action: MeteredAction;
-  limit: number;
+  action: GrantKey;
+  limit?: number;
   expiresInDays: number;
   note?: string;
   now: number;
-}): Promise<{ user: AccessUser; grant: Grant }> {
+}): Promise<{ user: AccessUser; grant: Grant; opensTool: boolean }> {
   const user = await requireStatus(p.sub, "member");
+  let opensTool = false;
+  try {
+    const before = await getGrantStore().list(user.sub);
+    opensTool = toolAccess(before, GRANTS[p.action].tool, p.now) === undefined;
+  } catch (err) {
+    console.error("access: reading grants before granting failed", err);
+  }
   const grant: Grant = {
     sub: user.sub,
     action: p.action,
     email: user.email,
-    limit: p.limit,
-    used: 0,
+    ...(GRANTS[p.action].metered ? { limit: p.limit ?? 20, used: 0 } : {}),
     expiresAt: p.now + p.expiresInDays * 86400,
     grantedAt: p.now,
     ...(p.note ? { note: p.note } : {}),
   };
   await getGrantStore().put(grant);
-  return { user, grant };
+  return { user, grant, opensTool };
 }
 
-export async function revokeGrant(sub: string, action: MeteredAction): Promise<AccessUser> {
+export async function revokeGrant(sub: string, action: GrantKey): Promise<{ user: AccessUser; removed: Grant | null | "unknown" }> {
   const user = await requireStatus(sub, "member");
+  let removed: Grant | null | "unknown";
+  try {
+    removed = await getGrantStore().get(user.sub, action);
+  } catch (err) {
+    console.error("access: reading the grant before revoking failed", err);
+    removed = "unknown";
+  }
   await getGrantStore().remove(user.sub, action);
-  return user;
+  return { user, removed };
 }
