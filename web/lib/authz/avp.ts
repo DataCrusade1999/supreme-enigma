@@ -23,6 +23,7 @@ function contextMap(context: AuthzContext): Record<string, AttributeValue> {
       record: { remaining: { long: context.grant.remaining }, expiresAt: { long: context.grant.expiresAt } },
     };
   }
+  if (context.access) map.access = { record: { expiresAt: { long: context.access.expiresAt } } };
   return map;
 }
 
