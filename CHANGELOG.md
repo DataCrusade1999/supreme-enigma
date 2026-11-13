@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-11-13
+
 ### Added
 
 - Mail for ashutosh-pandey.com: Zoho Mail receives it (MX), and Zoho can send as
