@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-14
+
 ### Changed
 
 - Approval no longer opens any tool: every tool needs a grant. Money Planner and
