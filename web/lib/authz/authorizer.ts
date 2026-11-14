@@ -3,7 +3,11 @@ import type { ActionId, ToolId } from "../route-gate";
 import { createAvpAuthorizer } from "./avp";
 import { createLocalAuthorizer } from "./local";
 
-export type AuthzContext = { now: number; grant?: { remaining: number; expiresAt: number } };
+export type AuthzContext = {
+  now: number;
+  grant?: { remaining: number; expiresAt: number };
+  access?: { expiresAt: number };
+};
 export type AuthzRequest = { session: Session; tool: ToolId; action: ActionId; context: AuthzContext };
 export type Decision = "allow" | "deny";
 

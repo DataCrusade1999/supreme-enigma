@@ -13,12 +13,6 @@ export type ToolId =
 export const METERED_ACTIONS = ["looper:process", "newsdesk:refresh", "newsdesk:ask"] as const;
 export type MeteredAction = (typeof METERED_ACTIONS)[number];
 
-// What the hub and the Access page call each metered action.
-export const METERED_LABELS: Record<MeteredAction, string> = {
-  "looper:process": "BGM Looper processing",
-  "newsdesk:refresh": "News Desk refresh",
-  "newsdesk:ask": "News Desk ask",
-};
 export type ActionId =
   | "view"
   | "newsdesk:pin"
@@ -30,7 +24,27 @@ export type ActionId =
   | "keystatic:use"
   | "access:manage";
 
-export function isMetered(action: ActionId): action is MeteredAction {
+// What an admin can grant. `newsdesk:read` and `moneyplanner:use` are grant
+// keys only: they are not ActionIds or Cedar actions and never reach the
+// authorizer.
+export const GRANT_KEYS = [
+  "newsdesk:read",
+  "newsdesk:ask",
+  "newsdesk:refresh",
+  "looper:process",
+  "moneyplanner:use",
+] as const;
+export type GrantKey = (typeof GRANT_KEYS)[number];
+
+export const GRANTS: Record<GrantKey, { tool: ToolId; label: string; metered: boolean }> = {
+  "newsdesk:read": { tool: "news-desk", label: "News Desk reading", metered: false },
+  "newsdesk:ask": { tool: "news-desk", label: "News Desk ask", metered: true },
+  "newsdesk:refresh": { tool: "news-desk", label: "News Desk refresh", metered: true },
+  "looper:process": { tool: "bgm-looper", label: "BGM Looper processing", metered: true },
+  "moneyplanner:use": { tool: "money-planner", label: "Money Planner", metered: false },
+};
+
+export function isMetered(action: ActionId | GrantKey): action is MeteredAction {
   return (METERED_ACTIONS as readonly string[]).includes(action);
 }
 
@@ -113,6 +127,13 @@ export const TOOLS: Tool[] = [
     pageAction: "access:manage",
   },
 ];
+
+export function toolHref(tool: ToolId): string {
+  return TOOLS.find((t) => t.id === tool)!.href;
+}
+
+const GRANTED_TOOLS = new Set<ToolId>(Object.values(GRANTS).map((g) => g.tool));
+export const GRANTABLE_TOOLS: ToolId[] = TOOLS.filter((t) => GRANTED_TOOLS.has(t.id)).map((t) => t.id);
 
 export type RouteAction = { tool: ToolId; action: ActionId; consumes: boolean };
 

@@ -78,6 +78,21 @@ describe("ToolsPage", () => {
     expect(screen.queryByRole("link", { name: /Resume admin/ })).not.toBeInTheDocument();
   });
 
+  it("says nothing is open yet, with a way to ask, when no tool is visible", async () => {
+    const { visibleTools } = await import("../../lib/authz/visible-tools");
+    vi.mocked(visibleTools).mockResolvedValueOnce([]);
+    render(await hub());
+    expect(screen.getByText(/Nothing is open to this account yet\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "access@ashutosh-pandey.com" }).getAttribute("href")).toMatch(
+      /^mailto:access@ashutosh-pandey\.com/,
+    );
+  });
+
+  it("does not show the empty line when there are tools", async () => {
+    render(await hub());
+    expect(screen.queryByText(/Nothing is open/)).not.toBeInTheDocument();
+  });
+
   it("lists the viewer's grants when there are any", async () => {
     const { myGrants } = await import("../../lib/authz/my-grants");
     vi.mocked(myGrants).mockResolvedValueOnce([{ action: "newsdesk:ask" } as never]);

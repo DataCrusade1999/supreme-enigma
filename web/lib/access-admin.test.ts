@@ -16,7 +16,7 @@ import { getGrantStore } from "./authz/grants";
 import { AccessError, approve, dismiss, grantAction, listUsers, removeMember, revokeGrant } from "./access-admin";
 
 const cognito = mockClient(CognitoIdentityProviderClient);
-const store = { list: vi.fn(), put: vi.fn(), remove: vi.fn(), removeAll: vi.fn() };
+const store = { list: vi.fn(), get: vi.fn(), put: vi.fn(), remove: vi.fn(), removeAll: vi.fn() };
 
 const cognitoUser = (sub: string, username = `Google_${sub}`) => ({
   Username: username,
@@ -88,10 +88,21 @@ describe("changes", () => {
     only("f", ["friends"]);
     cognito.on(AdminRemoveUserFromGroupCommand).resolves({});
     cognito.on(AdminUserGlobalSignOutCommand).resolves({});
-    await removeMember("f");
+    expect((await removeMember("f")).hadLive).toBe(false);
     expect(cognito.commandCalls(AdminRemoveUserFromGroupCommand)).toHaveLength(1);
     expect(cognito.commandCalls(AdminUserGlobalSignOutCommand)).toHaveLength(1);
     expect(store.removeAll).toHaveBeenCalledWith("f");
+  });
+
+  it("removeMember reports whether any grant was unexpired", async () => {
+    only("f", ["friends"]);
+    cognito.on(AdminRemoveUserFromGroupCommand).resolves({});
+    cognito.on(AdminUserGlobalSignOutCommand).resolves({});
+    const future = Math.floor(Date.now() / 1000) + 3600;
+    store.list.mockResolvedValue([{ action: "moneyplanner:use", expiresAt: 1 }]);
+    expect((await removeMember("f")).hadLive).toBe(false);
+    store.list.mockResolvedValue([{ action: "moneyplanner:use", expiresAt: 1 }, { action: "newsdesk:ask", expiresAt: future }]);
+    expect((await removeMember("f")).hadLive).toBe(true);
   });
 
   it("dismiss deletes a pending user", async () => {
@@ -103,7 +114,8 @@ describe("changes", () => {
 
   it("grantAction writes a fresh row for a member", async () => {
     only("f", ["friends"]);
-    const { grant } = await grantAction({ sub: "f", action: "newsdesk:ask", limit: 20, expiresInDays: 7, note: "emailed", now: 1000 });
+    const { grant, opensTool } = await grantAction({ sub: "f", action: "newsdesk:ask", limit: 20, expiresInDays: 7, note: "emailed", now: 1000 });
+    expect(opensTool).toBe(true);
     expect(grant).toEqual({
       sub: "f",
       action: "newsdesk:ask",
@@ -117,10 +129,69 @@ describe("changes", () => {
     expect(store.put).toHaveBeenCalledWith(grant);
   });
 
-  it("revokeGrant deletes one row", async () => {
+  it("grantAction writes a time-only row without limit or used", async () => {
     only("f", ["friends"]);
-    await revokeGrant("f", "newsdesk:ask");
+    const { grant } = await grantAction({ sub: "f", action: "moneyplanner:use", limit: 5, expiresInDays: 7, now: 1000 });
+    expect(grant).toEqual({ sub: "f", action: "moneyplanner:use", email: "f@example.com", expiresAt: 1000 + 7 * 86400, grantedAt: 1000 });
+  });
+
+  it("grantAction says whether the grant opens the tool, from the grants held before the put", async () => {
+    only("f", ["friends"]);
+    store.list.mockResolvedValue([{ action: "newsdesk:ask", expiresAt: 1000 + 100 }]);
+    const p = { sub: "f", expiresInDays: 7, now: 1000 };
+    expect((await grantAction({ ...p, action: "newsdesk:refresh" })).opensTool).toBe(false);
+    expect((await grantAction({ ...p, action: "looper:process" })).opensTool).toBe(true);
+    store.list.mockResolvedValue([{ action: "newsdesk:ask", expiresAt: 1000 }]);
+    expect((await grantAction({ ...p, action: "newsdesk:refresh" })).opensTool).toBe(true);
+  });
+
+  it("grantAction on a key that is still unexpired does not open the tool again", async () => {
+    only("f", ["friends"]);
+    store.list.mockResolvedValue([{ action: "newsdesk:ask", expiresAt: 1000 + 100 }]);
+    const p = { sub: "f", expiresInDays: 7, now: 1000 };
+    expect((await grantAction({ ...p, action: "newsdesk:ask", limit: 5 })).opensTool).toBe(false);
+  });
+
+  it("revokeGrant deletes one row and returns it", async () => {
+    only("f", ["friends"]);
+    const row = { action: "newsdesk:ask", expiresAt: 5 };
+    store.get.mockResolvedValue(row);
+    expect((await revokeGrant("f", "newsdesk:ask")).removed).toBe(row);
     expect(store.remove).toHaveBeenCalledWith("f", "newsdesk:ask");
+    store.get.mockResolvedValue(null);
+    expect((await revokeGrant("f", "newsdesk:ask")).removed).toBeNull();
+  });
+
+  describe("a failed grants read never blocks the change", () => {
+    beforeEach(() => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    it("revokeGrant still removes and reports removed as unknown", async () => {
+      only("f", ["friends"]);
+      store.get.mockRejectedValue(new Error("ddb down"));
+      expect((await revokeGrant("f", "newsdesk:ask")).removed).toBe("unknown");
+      expect(store.remove).toHaveBeenCalledWith("f", "newsdesk:ask");
+    });
+
+    it("removeMember still removes, signs out and deletes grants, with hadLive unknown", async () => {
+      only("f", ["friends"]);
+      cognito.on(AdminRemoveUserFromGroupCommand).resolves({});
+      cognito.on(AdminUserGlobalSignOutCommand).resolves({});
+      store.list.mockRejectedValue(new Error("ddb down"));
+      expect((await removeMember("f")).hadLive).toBe("unknown");
+      expect(cognito.commandCalls(AdminRemoveUserFromGroupCommand)).toHaveLength(1);
+      expect(cognito.commandCalls(AdminUserGlobalSignOutCommand)).toHaveLength(1);
+      expect(store.removeAll).toHaveBeenCalledWith("f");
+    });
+
+    it("grantAction still puts, with opensTool false", async () => {
+      only("f", ["friends"]);
+      store.list.mockRejectedValue(new Error("ddb down"));
+      const { grant, opensTool } = await grantAction({ sub: "f", action: "newsdesk:ask", limit: 5, expiresInDays: 7, now: 1000 });
+      expect(opensTool).toBe(false);
+      expect(store.put).toHaveBeenCalledWith(grant);
+    });
   });
 
   // The owner can't be locked out from this page.

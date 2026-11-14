@@ -37,6 +37,12 @@ describe("myGrants", () => {
     expect((await myGrants()).map((x) => x.action)).toEqual(["newsdesk:ask"]);
   });
 
+  it("keeps a time-only grant", async () => {
+    signedInAs(["friends"]);
+    list.mockResolvedValue([g({ action: "moneyplanner:use", limit: undefined, used: undefined, expiresAt: LATER })]);
+    expect((await myGrants()).map((x) => x.action)).toEqual(["moneyplanner:use"]);
+  });
+
   it("is empty for the owner, who is never counted", async () => {
     signedInAs(["owner"]);
     expect(await myGrants()).toEqual([]);
@@ -53,6 +59,12 @@ describe("myGrants", () => {
 
 describe("describeGrant", () => {
   it("names the action, what is left and the last day", () => {
-    expect(describeGrant(g({}))).toBe("News Desk ask: 7 of 20 left, until 9 Oct 2026");
+    expect(describeGrant(g({ expiresAt: 1_800_000_000 }))).toBe("News Desk ask: 7 of 20 uses left, until 15 Jan 2027, 1:30 pm IST");
+  });
+
+  it("omits the uses for a time-only grant", () => {
+    expect(describeGrant(g({ action: "moneyplanner:use", limit: undefined, used: undefined, expiresAt: 1_800_000_000 }))).toBe(
+      "Money Planner: until 15 Jan 2027, 1:30 pm IST",
+    );
   });
 });

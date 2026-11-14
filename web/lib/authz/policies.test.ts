@@ -9,14 +9,16 @@ const files = loadCedar(POOL);
 type Grant = { remaining: number; expiresAt: number };
 const NOW = 1_800_000_000;
 
-function decide(groups: string[], action: string, tool: string, grant?: Grant) {
+type Access = { expiresAt: number };
+
+function decide(groups: string[], action: string, tool: string, grant?: Grant, access?: Access) {
   const principal = { type: "Site::User", id: `${POOL}|user-1` };
   const parents = groups.map((g) => ({ type: "Site::Group", id: `${POOL}|${g}` }));
   const answer = cedar.isAuthorized({
     principal,
     action: { type: "Site::Action", id: action },
     resource: { type: "Site::Tool", id: tool },
-    context: grant ? { now: NOW, grant } : { now: NOW },
+    context: { now: NOW, ...(grant && { grant }), ...(access && { access }) },
     schema: files.schema as cedar.Schema,
     validateRequest: true,
     policies: { staticPolicies: files.policies },
@@ -57,10 +59,11 @@ describe("Cedar schema and policies", () => {
     expect(answer).toMatchObject({ type: "success", validationErrors: [] });
   });
 
-  it("are exactly the four the spec names", () => {
+  it("are exactly the five the spec names", () => {
     expect(Object.keys(files.policies)).toEqual([
       "friends-free",
       "friends-metered",
+      "friends-tools",
       "owner-all",
       "owner-only-guard",
     ]);
@@ -76,17 +79,33 @@ describe("owner", () => {
   );
 });
 
+const TOOL_ACTIONS: [string, string][] = [
+  ["view", "bgm-looper"],
+  ["view", "money-planner"],
+  ["view", "news-desk"],
+  ["newsdesk:pin", "news-desk"],
+];
+const LIVE_ACCESS: Access = { expiresAt: NOW + 3600 };
+const EXPIRED_ACCESS: Access = { expiresAt: NOW };
+
 describe("friends", () => {
-  it.each(["hub", "bgm-looper", "money-planner", "news-desk"])("may view %s", (tool) => {
-    expect(decide(["friends"], "view", tool)).toBe("allow");
+  it("may view the hub with no context", () => {
+    expect(decide(["friends"], "view", "hub")).toBe("allow");
   });
 
-  it("may pin News Desk indicators", () => {
-    expect(decide(["friends"], "newsdesk:pin", "news-desk")).toBe("allow");
+  it.each(TOOL_ACTIONS)("%s on %s needs a live access grant", (action, tool) => {
+    expect(decide(["friends"], action, tool)).toBe("deny");
+    expect(decide(["friends"], action, tool, undefined, EXPIRED_ACCESS)).toBe("deny");
+    expect(decide(["friends"], action, tool, undefined, LIVE_ACCESS)).toBe("allow");
+  });
+
+  it("may not pin on the hub even with access", () => {
+    expect(decide(["friends"], "newsdesk:pin", "hub", undefined, LIVE_ACCESS)).toBe("deny");
   });
 
   it.each(["resume-admin", "newsletter-admin", "keystatic", "access-admin"])("may not view %s", (tool) => {
     expect(decide(["friends"], "view", tool)).toBe("deny");
+    expect(decide(["friends"], "view", tool, undefined, LIVE_ACCESS)).toBe("deny");
   });
 
   it.each(METERED)("%s on %s needs a grant", (action, tool) => {

@@ -1,5 +1,5 @@
 import { removeMember } from "@/lib/access-admin";
-import { actingEmail, audit, changed, respond } from "@/lib/access-api";
+import { actingEmail, attempt, audit, changed, respond } from "@/lib/access-api";
 import { sendEnded } from "@/lib/access-mail";
 
 // Three calls: leave the group, sign out everywhere, delete grants. If a later
@@ -8,8 +8,9 @@ import { sendEnded } from "@/lib/access-mail";
 export async function DELETE(_request: Request, { params }: { params: Promise<{ sub: string }> }) {
   const { sub } = await params;
   return respond(async () => {
-    const user = await removeMember(sub);
+    const { user, hadLive } = await removeMember(sub);
     audit({ by: await actingEmail(), op: "remove", target: user.email });
-    return changed(await sendEnded(user, "the tools"));
+    if (hadLive === "unknown") return changed("Couldn't read the member's grants before removing them, so no email was sent.");
+    return changed(hadLive ? await attempt(() => sendEnded(user, "the tools")) : null);
   });
 }

@@ -2,17 +2,29 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AccessStatus, AccessUser } from "../../lib/access-admin";
 import type { Grant } from "../../lib/authz/grants";
-import { METERED_ACTIONS, METERED_LABELS, type MeteredAction } from "../../lib/route-gate";
+import { GRANT_KEYS, GRANTS, type GrantKey } from "../../lib/route-gate";
+import { isUnexpired } from "../../lib/authz/grant-status";
+import { formatDay, formatUntil, formatUses } from "../../lib/access-format";
 
 type Row = AccessUser & { status: AccessStatus; grants: Grant[] };
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-const until = (s: number) => new Date(s * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+
+function grantText(g: Grant, now: number): { text: string; muted: boolean } {
+  const label = GRANTS[g.action].label;
+  if (!isUnexpired(g, now)) return { text: `${label}: expired ${formatDay(g.expiresAt)}`, muted: true };
+  if (!GRANTS[g.action].metered) return { text: `${label}: until ${formatUntil(g.expiresAt)}`, muted: false };
+  const left = (g.limit ?? 0) - (g.used ?? 0);
+  if (left <= 0) return { text: `${label}: used up, until ${formatUntil(g.expiresAt)}`, muted: true };
+  return { text: `${label}: ${left} of ${formatUses(g.limit ?? 0)} left, until ${formatUntil(g.expiresAt)}`, muted: false };
+}
 
 export function AccessAdmin() {
   const [users, setUsers] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Epoch seconds at the last load, so row state is not computed during render.
+  const [now, setNow] = useState(0);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/access/users");
@@ -21,6 +33,7 @@ export function AccessAdmin() {
       return;
     }
     setUsers((await res.json()).users);
+    setNow(Math.floor(Date.now() / 1000));
   }, []);
 
   useEffect(() => {
@@ -29,18 +42,19 @@ export function AccessAdmin() {
     void load();
   }, [load]);
 
-  async function change(url: string, init: RequestInit) {
+  async function change(url: string, init: RequestInit): Promise<boolean> {
     setError(null);
     setNotice(null);
     const res = await fetch(url, { ...init, headers: { "Content-Type": "application/json" } });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(body.error ?? "The change failed.");
-      return;
+      return false;
     }
     // Part 3 fills this in when the change saved but the email didn't send.
     if (body.emailError) setNotice(`Saved, but the email failed: ${body.emailError}`);
     await load();
+    return true;
   }
 
   const by = (status: AccessStatus) => (users ?? []).filter((u) => u.status === status);
@@ -86,19 +100,20 @@ export function AccessAdmin() {
                 </button>
               </div>
               <ul className="mt-2 flex flex-col gap-1 text-sm">
-                {u.grants.map((g) => (
+                {u.grants.map((g) => {
+                  const { text, muted } = grantText(g, now);
+                  return (
                   <li key={g.action} className="flex gap-3">
-                    <span>
-                      {METERED_LABELS[g.action]}: {g.limit - g.used} of {g.limit} left, expires {until(g.expiresAt)}
-                    </span>
-                    <button aria-label={`Revoke ${METERED_LABELS[g.action]} for ${u.email}`} className="text-muted hover:text-fg"
+                    <span className={muted ? "text-muted" : undefined}>{text}</span>
+                    <button aria-label={`Revoke ${GRANTS[g.action].label} for ${u.email}`} className="text-muted hover:text-fg"
                       onClick={() =>
                         change(`/api/access/grants/${encodeURIComponent(u.sub)}/${encodeURIComponent(g.action)}`, { method: "DELETE" })
                       }>
                       Revoke
                     </button>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
               <GrantForm email={u.email} onGrant={(values) => change("/api/access/grants", { method: "PUT", body: JSON.stringify({ sub: u.sub, ...values }) })} />
             </li>
@@ -126,9 +141,9 @@ function GrantForm({
   onGrant,
 }: {
   email: string;
-  onGrant: (values: { action: MeteredAction; limit: number; expiresInDays: number; note: string }) => void;
+  onGrant: (values: { action: GrantKey; limit?: number; expiresInDays: number; note: string }) => Promise<boolean>;
 }) {
-  const [action, setAction] = useState<MeteredAction>("newsdesk:ask");
+  const [action, setAction] = useState<GrantKey>("newsdesk:ask");
   const [limit, setLimit] = useState("20");
   const [days, setDays] = useState("7");
   const [note, setNote] = useState("");
@@ -138,23 +153,32 @@ function GrantForm({
     <form
       aria-label={`Grant to ${email}`}
       className="mt-3 flex flex-wrap items-end gap-3 text-sm"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        onGrant({ action, limit: Number(limit), expiresInDays: Number(days), note });
+        const metered = GRANTS[action].metered;
+        const ok = await onGrant({ action, ...(metered ? { limit: Number(limit) } : {}), expiresInDays: Number(days), note });
+        if (ok) {
+          setAction("newsdesk:ask");
+          setLimit("20");
+          setDays("7");
+          setNote("");
+        }
       }}
     >
       <label className="flex flex-col gap-1" htmlFor={`${id}-action`}>
         <span className="text-muted">Action</span>
-        <select id={`${id}-action`} value={action} onChange={(e) => setAction(e.target.value as MeteredAction)} className="border border-line bg-bg px-2 py-1">
-          {METERED_ACTIONS.map((a) => (
-            <option key={a} value={a}>{METERED_LABELS[a]}</option>
+        <select id={`${id}-action`} value={action} onChange={(e) => setAction(e.target.value as GrantKey)} className="border border-line bg-bg px-2 py-1">
+          {GRANT_KEYS.map((a) => (
+            <option key={a} value={a}>{GRANTS[a].label}</option>
           ))}
         </select>
       </label>
-      <label className="flex flex-col gap-1" htmlFor={`${id}-limit`}>
-        <span className="text-muted">Uses</span>
-        <input id={`${id}-limit`} type="number" min={1} max={1000} value={limit} onChange={(e) => setLimit(e.target.value)} className="w-20 border border-line bg-bg px-2 py-1" />
-      </label>
+      {GRANTS[action].metered ? (
+        <label className="flex flex-col gap-1" htmlFor={`${id}-limit`}>
+          <span className="text-muted">Uses</span>
+          <input id={`${id}-limit`} type="number" min={1} max={1000} value={limit} onChange={(e) => setLimit(e.target.value)} className="w-20 border border-line bg-bg px-2 py-1" />
+        </label>
+      ) : null}
       <label className="flex flex-col gap-1" htmlFor={`${id}-days`}>
         <span className="text-muted">Days</span>
         <input id={`${id}-days`} type="number" min={1} max={90} value={days} onChange={(e) => setDays(e.target.value)} className="w-16 border border-line bg-bg px-2 py-1" />
