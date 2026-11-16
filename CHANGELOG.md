@@ -37,6 +37,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
   page's own request (#523).
 - Access emails on dev and stage reach every address verified in that
   account's SES, not only the owner's (#539).
+- Access emails link to and name the site of the environment that sent
+  them, not always production (#541).
 
 ### Removed
 
