@@ -28,7 +28,8 @@ production.
 ## Prerequisites
 
 - Shared prerequisites in [README.md](README.md#shared-prerequisites).
-- A test inbox you control that is not the owner's address. The Access page
+- A Google account you control, not the owner's, as the test inbox (step 2
+  says why it must be Google). The Access page
   refuses any change to the owner, so the owner can't grant to themselves.
 - The owner signed in on the environment, to use `/tools/access-admin`.
 
@@ -62,9 +63,12 @@ delete the identity and create it again.
 
 ## 2. Make the test account a member
 
-1. Sign in at `https://$ENV.ashutosh-pandey.com/tools` with the test address
-   (Google or an email code). It lands on "Access requested" and shows up as
-   Pending on the Access page.
+1. Sign in at `https://$ENV.ashutosh-pandey.com/tools` with **Google**, using
+   the test address. It lands on "Access requested" and shows up as Pending on
+   the Access page. The email-code option can't create a new account: the
+   pool sets `allow_admin_create_user_only = true` (`infra/modules/auth/main.tf`),
+   so only Google sign-in adds a user to it. A test inbox therefore has to be a
+   Google account.
 2. As the owner, open `https://$ENV.ashutosh-pandey.com/tools/access-admin`
    and click **Approve**. Approving sends no email.
 
