@@ -31,6 +31,13 @@ export function draftJsonKey(draftId: string): string {
   return `resume/drafts/${draftId}/resume.json`;
 }
 
+/** The lock that keeps two extractions of one draft from both paying (#110).
+ * Under `resume/drafts/`, so it expires with the draft. */
+export function draftLockKey(draftId: string): string {
+  assertSafeDraftId(draftId);
+  return `resume/drafts/${draftId}/extract.lock`;
+}
+
 export function archiveKeys(now = new Date()): { pdf: string; json: string } {
   const stamp = now.toISOString().replace(/[:.]/g, "-");
   return {

@@ -14,7 +14,7 @@ import { fetchAllFeeds } from "./feeds";
 import { withId } from "./dedupe";
 import { refreshIndicators } from "./indicators";
 import { readIndicatorDefs, readSnapshot, SnapshotCorruptError, writeSnapshot } from "./store";
-import { runRefresh } from "./refresh";
+import { MAX_TAG_ATTEMPTS, runRefresh } from "./refresh";
 import { tagHeadlines } from "./tagger";
 import type { IndicatorValue, Snapshot } from "./types";
 
@@ -124,6 +124,46 @@ describe("runRefresh", () => {
     expect(byId.get(failedBefore.id)).toBe("Untagged");
     expect(byId.get(stored.id)).toBe("Economy");
     expect(writeSnapshot).toHaveBeenCalledWith(result);
+  });
+
+  it("counts a miss and stops sending an item after MAX_TAG_ATTEMPTS (#263)", async () => {
+    const missedTwice = { ...withId({ title: "Missed twice", url: "https://ft.example/m2", source: "FT", publishedAt: "2026-09-24T11:00:00.000Z", direct: true }), tagAttempts: 2 };
+    const givenUp = { ...withId({ title: "Given up", url: "https://ft.example/gu", source: "FT", publishedAt: "2026-09-24T11:30:00.000Z", direct: true }), tagAttempts: MAX_TAG_ATTEMPTS };
+    vi.mocked(readSnapshot).mockResolvedValue({ version: 1, refreshedAt: "2026-09-24T12:00:00.000Z", headlines: [missedTwice, givenUp], indicators: [], sourceErrors: [] });
+    vi.mocked(tagHeadlines).mockResolvedValue({ tags: new Map([[fresh.id, "Economy"]]), calls: 1, failedCalls: 0, costUsd: 0.001 });
+
+    const result = await runRefresh(NOW);
+
+    const sent = vi.mocked(tagHeadlines).mock.calls[0][0].map((h) => h.id).sort();
+    expect(sent).toEqual([fresh.id, missedTwice.id].sort());
+    const byId = new Map(result.headlines.map((h) => [h.id, h]));
+    expect(byId.get(missedTwice.id)).toMatchObject({ tag: "Untagged", tagAttempts: 3 });
+    expect(byId.get(givenUp.id)).toMatchObject({ tag: "Untagged", tagAttempts: MAX_TAG_ATTEMPTS });
+    expect(byId.get(fresh.id)?.tagAttempts).toBeUndefined();
+  });
+
+  it("does not count an attempt when no tagging call was made", async () => {
+    vi.mocked(readSnapshot).mockResolvedValue(null);
+    const result = await runRefresh(NOW);
+    expect(result.headlines[0].tagAttempts).toBeUndefined();
+  });
+
+  it("retries a failed snapshot write so paid-for tags are kept (#263)", async () => {
+    vi.mocked(readSnapshot).mockResolvedValue(null);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(writeSnapshot).mockRejectedValueOnce(new Error("s3 503"));
+    const result = await runRefresh(NOW);
+    expect(writeSnapshot).toHaveBeenCalledTimes(2);
+    expect(writeSnapshot).toHaveBeenLastCalledWith(result);
+  });
+
+  it("gives up on the write after its retries", async () => {
+    vi.mocked(readSnapshot).mockResolvedValue(null);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    // Once per attempt: clearAllMocks keeps a standing implementation for the next test.
+    for (let i = 0; i < 3; i++) vi.mocked(writeSnapshot).mockRejectedValueOnce(new Error("s3 503"));
+    await expect(runRefresh(NOW)).rejects.toThrow("s3 503");
+    expect(writeSnapshot).toHaveBeenCalledTimes(3);
   });
 
   it("does not send dropped headlines again", async () => {

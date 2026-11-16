@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { isPinId, PIN_PREFIX } from "./chat-types";
+import { withoutTimeFilters } from "./indicators";
 import { readPins, readSnapshot, SnapshotCorruptError, writePins, writeSnapshot } from "./store";
 import type { IndicatorDef, IndicatorValue } from "./types";
 
@@ -26,8 +27,9 @@ export class PinError extends Error {
   }
 }
 
+// An empty `match` is no match, so it cannot give the same query a second id.
 const sorted = (r: Record<string, string> | undefined) =>
-  r ? Object.fromEntries(Object.entries(r).sort(([a], [b]) => a.localeCompare(b))) : null;
+  r && Object.keys(r).length > 0 ? Object.fromEntries(Object.entries(r).sort(([a], [b]) => a.localeCompare(b))) : null;
 
 /** Derived from the query, so the same chart cannot be pinned twice, and
  * prefixed so a pin cannot take a default's id (#269). */
@@ -54,9 +56,17 @@ export async function pinIndicator(input: PinInput): Promise<IndicatorValue> {
   // readPins throws when the file exists but cannot be read. Writing anyway
   // would replace the owner's pins with this one (spec §6.3).
   const pins = await readPins();
-  const id = pinId(input);
+  // Saved without the question's time window, so the row advances on each
+  // Refresh like the defaults do (#272), and two windows of one series are one pin.
+  const { match, ...rest } = input;
+  const query = {
+    ...rest,
+    filters: withoutTimeFilters(input.filters),
+    ...(match && Object.keys(match).length > 0 ? { match } : {}),
+  };
+  const id = pinId(query);
   if (pins.some((p) => p.id === id)) throw new PinError("already pinned", 409);
-  const def: IndicatorDef = { id, ...input };
+  const def: IndicatorDef = { id, ...query };
   await writePins([...pins, def]);
   // Filled on the next Refresh (spec §7.3).
   const row: IndicatorValue = { id, label: def.label, unit: def.unit, period: null, latest: null, prevPeriod: null, prev: null, lastGoodAt: null };

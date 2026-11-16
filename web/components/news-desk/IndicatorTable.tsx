@@ -64,9 +64,17 @@ export function IndicatorTable({
             </td>
             <td className="py-2 pr-2 text-muted">{row.period ?? "—"}</td>
             <td className="py-2 text-right text-fg">{show(row.latest, row.unit)}</td>
-            <td className="py-2 text-right text-muted" title={row.prevPeriod ?? undefined}>
-              {show(row.prev, row.unit)}
-            </td>
+            {/* A latest value with no previous one means the rows MoSPI returned
+              * held a single period, not that the value is unknown (#266). */}
+            {row.latest !== null && row.prev === null ? (
+              <td className="py-2 text-right text-muted" title="MoSPI's latest rows held no earlier period for this series">
+                not found
+              </td>
+            ) : (
+              <td className="py-2 text-right text-muted" title={row.prevPeriod ?? undefined}>
+                {show(row.prev, row.unit)}
+              </td>
+            )}
           </tr>
         ))}
       </tbody>

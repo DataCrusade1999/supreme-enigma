@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getReader } from "../../../lib/keystatic-reader";
-import { isButtondownConfigured, isIssueSent } from "../../../lib/buttondown";
+import { isButtondownConfigured, listEmailSlugs } from "../../../lib/buttondown";
 import { CommandBar } from "../../../components/site/CommandBar";
 import { SendButton } from "../../../components/newsletter/SendButton";
 
@@ -13,33 +13,36 @@ export default async function NewsletterAdminPage() {
     (b.entry.date ?? "").localeCompare(a.entry.date ?? ""),
   );
 
-  // Asked once, before the fan-out. Every per-issue check would throw the same
-  // way on an unset key, and the catch below would render each as "status
-  // unavailable" — which reads as "not sent yet" and hides a broken
-  // integration behind what looks like an empty archive.
+  // Asked once, before the list is read. On an unset key the call would throw,
+  // and the catch below would render every issue as "Buttondown unreachable",
+  // which hides a broken integration behind what looks like an outage.
   const configured = isButtondownConfigured();
 
-  const withStatus = await Promise.all(
-    sorted.map(async ({ slug, entry }) => {
-      let sent: boolean | null = null;
-      let problem: string | null = null;
+  // One walk of Buttondown's list for every issue, not one per issue (#132):
+  // the per-issue fan-out sent issues × pages requests at once, and one 429
+  // left that issue without a Send button.
+  let sentSlugs: Set<string> | null = null;
+  let problem: string | null = null;
+  if (!configured) {
+    problem = "BUTTONDOWN_API_KEY is not set";
+  } else {
+    try {
+      sentSlugs = await listEmailSlugs();
+    } catch {
+      // A configured key that still failed is a different problem —
+      // Buttondown down, key revoked, network. Says so rather than
+      // blaming configuration.
+      problem = "Buttondown unreachable";
+    }
+  }
 
-      if (!configured) {
-        problem = "BUTTONDOWN_API_KEY is not set";
-      } else {
-        try {
-          sent = await isIssueSent(slug);
-        } catch {
-          // A configured key that still failed is a different problem —
-          // Buttondown down, key revoked, network. Says so rather than
-          // blaming configuration.
-          problem = "Buttondown unreachable";
-        }
-      }
-
-      return { slug, title: entry.title, date: entry.date ?? "", sent, problem };
-    }),
-  );
+  const withStatus = sorted.map(({ slug, entry }) => ({
+    slug,
+    title: entry.title,
+    date: entry.date ?? "",
+    sent: sentSlugs === null ? null : sentSlugs.has(slug),
+    problem,
+  }));
 
   return (
     <div className="flex min-h-screen flex-col font-ui">

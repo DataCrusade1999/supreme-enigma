@@ -147,6 +147,13 @@ describe("ask", () => {
     expect(events.at(-1)).toEqual({ type: "answer", text: "Food inflation was 5.66%.", chart: null, pinnable: false, query: null });
   });
 
+  it("shows a one-point chart but does not offer to pin it (#272)", async () => {
+    vi.mocked(fetchSeries).mockResolvedValue([{ period: "Aug 2026", value: 4.82 }]);
+    script(toolReply("answer", { text: "Retail inflation was 4.82% in August.", chart: CHART }));
+    const events = await collect(ask("Retail inflation last month?"));
+    expect(events.at(-1)).toMatchObject({ chart: { points: [{ period: "Aug 2026", value: 4.82 }] }, pinnable: false, query: null });
+  });
+
   it("forces the answer tool once 8 MoSPI calls have been made", async () => {
     script(...Array.from({ length: 8 }, () => toolReply("get_data", { dataset: "CPI", filters: {} })), toolReply("answer", { text: "Best effort.", chart: null }));
     const events = await collect(ask("Everything about CPI"));

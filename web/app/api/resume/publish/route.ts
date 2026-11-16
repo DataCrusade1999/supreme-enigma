@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { copyObject, objectExists } from "@/lib/aws";
+import { copyObject, objectEtag } from "@/lib/aws";
 import {
   CURRENT_JSON_KEY,
   CURRENT_PDF_KEY,
@@ -41,7 +41,9 @@ export async function POST(request: Request) {
   // draft whose extraction 502'd never had a JSON at all. Without this check the
   // first copy lands and the second throws, leaving current.pdf and current.json
   // describing different resumes.
-  if (!(await objectExists(bucket, pdfKey)) || !(await objectExists(bucket, jsonKey))) {
+  const draftPdf = await objectEtag(bucket, pdfKey);
+  const draftJson = await objectEtag(bucket, jsonKey);
+  if (draftPdf === null || draftJson === null) {
     return NextResponse.json(
       { error: "that draft is incomplete or has expired" },
       { status: 404 },
@@ -58,9 +60,20 @@ export async function POST(request: Request) {
   // CURRENT_PDF_KEY that is not there and throw NoSuchKey out of the route;
   // keying it off nothing would let a lone current.pdf be overwritten with no
   // copy kept anywhere.
-  const liveJson = await objectExists(bucket, CURRENT_JSON_KEY);
-  const livePdf = await objectExists(bucket, CURRENT_PDF_KEY);
-  const archived = liveJson || livePdf;
+  const liveJsonEtag = await objectEtag(bucket, CURRENT_JSON_KEY);
+  const liveJson = liveJsonEtag !== null;
+  const livePdf = (await objectEtag(bucket, CURRENT_PDF_KEY)) !== null;
+
+  // No archive when the live JSON already is this draft's (#111). JSON is promoted
+  // first, so that is the state a publish that failed on its PDF leaves behind,
+  // and the attempt that left it archived the pair it replaced. Archiving again
+  // would store this draft's JSON beside the old PDF under one timestamp: a
+  // snapshot that was never live. It is also the state after this draft was
+  // already published in full, where the archive would only duplicate the
+  // draft. A copy keeps a single-part object's ETag, so equal ETags mean equal
+  // bytes, and a false mismatch only archives as before.
+  const repairing = liveJsonEtag !== null && liveJsonEtag === draftJson;
+  const archived = (liveJson || livePdf) && !repairing;
   if (archived) {
     const target = archiveKeys();
     try {

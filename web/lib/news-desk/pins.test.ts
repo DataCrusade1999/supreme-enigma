@@ -26,6 +26,10 @@ describe("pinId", () => {
     expect(pinId(INPUT)).toMatch(/^pin-[0-9a-f]{12}$/);
   });
 
+  it("gives an empty match the same id as none", () => {
+    expect(pinId({ ...INPUT, match: {} })).toBe(pinId(INPUT));
+  });
+
   it("differs when the query differs", () => {
     expect(pinId(INPUT)).not.toBe(pinId({ ...INPUT, valueField: "index" }));
   });
@@ -44,6 +48,24 @@ describe("pinIndicator", () => {
     expect(writePins).toHaveBeenCalledWith([{ id, ...INPUT }]);
     expect(row).toEqual({ id, label: INPUT.label, unit: "%", period: null, latest: null, prevPeriod: null, prev: null, lastGoodAt: null });
     expect(writeSnapshot).toHaveBeenCalledWith({ ...SNAPSHOT, indicators: [row] });
+  });
+
+  it("saves the query without its time window (#272)", async () => {
+    const windowed = { ...INPUT, filters: { ...INPUT.filters, year: "2026", month_code: "8" } };
+    const row = await pinIndicator(windowed);
+    expect(row.id).toBe(pinId(INPUT));
+    expect(writePins).toHaveBeenCalledWith([{ id: pinId(INPUT), ...INPUT }]);
+  });
+
+  it("treats two windows of one series as one pin", async () => {
+    vi.mocked(readPins).mockResolvedValue([{ id: pinId(INPUT), ...INPUT }]);
+    const otherWindow = { ...INPUT, filters: { ...INPUT.filters, year: "2025" } };
+    await expect(pinIndicator(otherWindow)).rejects.toEqual(new PinError("already pinned", 409));
+  });
+
+  it("saves an empty match as no match", async () => {
+    await pinIndicator({ ...INPUT, match: {} });
+    expect(writePins).toHaveBeenCalledWith([{ id: pinId(INPUT), ...INPUT }]);
   });
 
   it("refuses the same chart twice", async () => {
