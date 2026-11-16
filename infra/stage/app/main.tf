@@ -26,6 +26,7 @@ module "env" {
   cognito_client_id    = data.terraform_remote_state.account.outputs.cognito_client_id
   cognito_domain_url   = data.terraform_remote_state.account.outputs.cognito_domain_url
   avp_policy_store_id  = data.terraform_remote_state.account.outputs.avp_policy_store_id
+  openrouter_api_key   = var.openrouter_api_key
 
   # Only read when the function is first created; see the module's variable comment.
   # A placeholder: Task 12 of the nonprod-accounts plan replaces it with a tag stage's

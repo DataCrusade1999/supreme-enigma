@@ -1,3 +1,4 @@
-# Copy to terraform.tfvars (gitignored via *.tfvars). The app stack needs only the
-# Vercel token; every other secret belongs to infra/dev/account.
-vercel_api_token = "..."
+# Copy to terraform.tfvars (gitignored via *.tfvars). The app stack needs the
+# Vercel token and the OpenRouter key; every other secret belongs to infra/dev/account.
+vercel_api_token   = "..."
+openrouter_api_key = "..."

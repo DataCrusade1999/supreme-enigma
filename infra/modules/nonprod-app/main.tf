@@ -1,7 +1,8 @@
 # One nonprod environment in its own account: modules/app's bucket, Lambda,
 # alarm and two Vercel vars, plus what infra/prod/account provides for the prod account's
-# environments: the resume grant and the preview Vercel vars for sign-in, authorization,
-# the role and the resume bucket. The account stack (infra/<env>/account)
+# environments: the resume grant and every preview Vercel var this environment's
+# branch reads (sign-in, authorization, the role, the resume bucket, the cookie
+# secret, the AWS region and the OpenRouter settings). The account stack (infra/<env>/account)
 # creates the role, ECR repo and alerts topic that modules/app finds by name.
 module "environment" {
   source = "../app"
@@ -130,6 +131,65 @@ resource "vercel_project_environment_variable" "cognito_user_pool_id" {
   project_id = data.vercel_project.looper.id
   key        = "COGNITO_USER_POOL_ID"
   value      = var.cognito_user_pool_id
+  target     = ["preview"]
+  git_branch = var.vercel_git_branch
+  sensitive  = false
+}
+
+resource "random_password" "cookie_secret" {
+  length  = 32
+  special = false
+}
+
+resource "vercel_project_environment_variable" "cookie_secret" {
+  project_id = data.vercel_project.looper.id
+  key        = "COOKIE_SECRET"
+  value      = random_password.cookie_secret.result
+  target     = ["preview"]
+  git_branch = var.vercel_git_branch
+  sensitive  = true
+}
+
+resource "vercel_project_environment_variable" "aws_region" {
+  project_id = data.vercel_project.looper.id
+  key        = "APP_AWS_REGION"
+  value      = "us-east-1"
+  target     = ["preview"]
+  git_branch = var.vercel_git_branch
+  sensitive  = false
+}
+
+resource "vercel_project_environment_variable" "openrouter_api_key" {
+  project_id = data.vercel_project.looper.id
+  key        = "OPENROUTER_API_KEY"
+  value      = var.openrouter_api_key
+  target     = ["preview"]
+  git_branch = var.vercel_git_branch
+  sensitive  = true
+}
+
+resource "vercel_project_environment_variable" "openrouter_model" {
+  project_id = data.vercel_project.looper.id
+  key        = "OPENROUTER_MODEL"
+  value      = var.openrouter_model
+  target     = ["preview"]
+  git_branch = var.vercel_git_branch
+  sensitive  = false
+}
+
+resource "vercel_project_environment_variable" "openrouter_base_url" {
+  project_id = data.vercel_project.looper.id
+  key        = "OPENROUTER_BASE_URL"
+  value      = "https://openrouter.ai/api/v1"
+  target     = ["preview"]
+  git_branch = var.vercel_git_branch
+  sensitive  = false
+}
+
+resource "vercel_project_environment_variable" "news_desk_model" {
+  project_id = data.vercel_project.looper.id
+  key        = "NEWS_DESK_MODEL"
+  value      = var.news_desk_model
   target     = ["preview"]
   git_branch = var.vercel_git_branch
   sensitive  = false
