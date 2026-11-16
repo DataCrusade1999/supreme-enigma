@@ -45,8 +45,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
   JSON beside the old PDF as one snapshot (#111).
 - The newsletter admin reads Buttondown's email list once instead of once per
   issue, waits out a 429, and stops after 100 pages (#132).
-- News Desk stops re-sending a headline to the tagger after three refreshes
-  without a tag, and retries a failed snapshot write instead of losing the
+- News Desk stops re-sending a headline to the tagger after three answered
+  calls that left it out (a failed call does not count), and retries a failed snapshot write instead of losing the
   tags it paid for (#263).
 - A pinned News Desk indicator drops the question's time window and follows
   the latest period on each Refresh. A one-point chart can no longer be pinned,

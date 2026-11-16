@@ -6,7 +6,7 @@ import { readIndicatorDefs, readSnapshot, SnapshotCorruptError, writeSnapshot } 
 import { tagHeadlines } from "./tagger";
 import type { Headline, IndicatorDef, Snapshot, SourceError } from "./types";
 
-/** Refreshes an item may go untagged before it stops being sent (#263). An item
+/** Answered calls that may leave an item untagged before it stops being sent (#263). An item
  * the model keeps omitting would otherwise be paid for on every refresh until it
  * ages out after 14 days. One that hits the cap shows only under All. */
 export const MAX_TAG_ATTEMPTS = 3;
@@ -100,7 +100,6 @@ async function refreshHeadlines(
   const merged = mergeHeadlines(existing, headlines, now);
   const sent = merged.filter((h) => h.tag === "Untagged" && (h.tagAttempts ?? 0) < MAX_TAG_ATTEMPTS);
   const tagging = await tagHeadlines(sent);
-  const sentIds = new Set(sent.map((h) => h.id));
   if (tagging.calls > 0) {
     console.log(
       `news-desk: tagged ${tagging.tags.size} headlines in ${tagging.calls} calls ` +
@@ -111,9 +110,10 @@ async function refreshHeadlines(
     headlines: merged.map((h) => {
       const tag = tagging.tags.get(h.id);
       if (tag) return { ...h, tag };
-      // Counted only when a call was made: with tagging unconfigured nothing
-      // was sent, and nothing was paid for.
-      if (tagging.calls > 0 && sentIds.has(h.id)) return { ...h, tagAttempts: (h.tagAttempts ?? 0) + 1 };
+      // Counted only when OpenRouter answered the item's chunk and left it out.
+      // A failed call (an outage, a revoked key, a spend cap) or tagging left
+      // unconfigured does not count, so an outage cannot use up the attempts.
+      if (tagging.answered.has(h.id)) return { ...h, tagAttempts: (h.tagAttempts ?? 0) + 1 };
       return h;
     }),
     sourceErrors: errors,

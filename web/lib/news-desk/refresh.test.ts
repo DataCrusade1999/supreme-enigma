@@ -44,7 +44,7 @@ describe("runRefresh", () => {
       headlines: [fresh],
       errors: [{ source: "SEBI", message: "timed out" }],
     });
-    vi.mocked(tagHeadlines).mockResolvedValue({ tags: new Map(), calls: 0, failedCalls: 0, costUsd: 0 });
+    vi.mocked(tagHeadlines).mockResolvedValue({ tags: new Map(), answered: new Set(), calls: 0, failedCalls: 0, costUsd: 0 });
     vi.mocked(readIndicatorDefs).mockResolvedValue(DEFAULT_INDICATORS);
     vi.mocked(refreshIndicators).mockResolvedValue([]);
   });
@@ -110,6 +110,7 @@ describe("runRefresh", () => {
     });
     vi.mocked(tagHeadlines).mockResolvedValue({
       tags: new Map([[fresh.id, "Reforms"]]),
+      answered: new Set([fresh.id]),
       calls: 1,
       failedCalls: 0,
       costUsd: 0.001,
@@ -130,7 +131,7 @@ describe("runRefresh", () => {
     const missedTwice = { ...withId({ title: "Missed twice", url: "https://ft.example/m2", source: "FT", publishedAt: "2026-09-24T11:00:00.000Z", direct: true }), tagAttempts: 2 };
     const givenUp = { ...withId({ title: "Given up", url: "https://ft.example/gu", source: "FT", publishedAt: "2026-09-24T11:30:00.000Z", direct: true }), tagAttempts: MAX_TAG_ATTEMPTS };
     vi.mocked(readSnapshot).mockResolvedValue({ version: 1, refreshedAt: "2026-09-24T12:00:00.000Z", headlines: [missedTwice, givenUp], indicators: [], sourceErrors: [] });
-    vi.mocked(tagHeadlines).mockResolvedValue({ tags: new Map([[fresh.id, "Economy"]]), calls: 1, failedCalls: 0, costUsd: 0.001 });
+    vi.mocked(tagHeadlines).mockResolvedValue({ tags: new Map([[fresh.id, "Economy"]]), answered: new Set([fresh.id, missedTwice.id]), calls: 1, failedCalls: 0, costUsd: 0.001 });
 
     const result = await runRefresh(NOW);
 
@@ -140,6 +141,14 @@ describe("runRefresh", () => {
     expect(byId.get(missedTwice.id)).toMatchObject({ tag: "Untagged", tagAttempts: 3 });
     expect(byId.get(givenUp.id)).toMatchObject({ tag: "Untagged", tagAttempts: MAX_TAG_ATTEMPTS });
     expect(byId.get(fresh.id)?.tagAttempts).toBeUndefined();
+  });
+
+  it("does not count an attempt when the call failed, so an outage keeps the item (#263)", async () => {
+    const missedTwice = { ...withId({ title: "Missed twice", url: "https://ft.example/m2", source: "FT", publishedAt: "2026-09-24T11:00:00.000Z", direct: true }), tagAttempts: 2 };
+    vi.mocked(readSnapshot).mockResolvedValue({ version: 1, refreshedAt: "2026-09-24T12:00:00.000Z", headlines: [missedTwice], indicators: [], sourceErrors: [] });
+    vi.mocked(tagHeadlines).mockResolvedValue({ tags: new Map(), answered: new Set(), calls: 1, failedCalls: 1, costUsd: 0 });
+    const result = await runRefresh(NOW);
+    expect(result.headlines.find((h) => h.id === missedTwice.id)?.tagAttempts).toBe(2);
   });
 
   it("does not count an attempt when no tagging call was made", async () => {
