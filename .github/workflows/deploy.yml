@@ -355,10 +355,12 @@ jobs:
     # deploy.yml changed: a docs- or lambda-only push cannot change a story,
     # and the build would still bill a minute and spend snapshot budget.
     # Chromatic finds the baseline for the next build by walking git history,
-    # so a skipped commit leaves no gap. PRs are not gated: `changes` does not
-    # run on them, and this job already finishes inside the one minute a gate
-    # job would bill. `!cancelled()` so the skipped `changes` on a PR does not
-    # skip this job too.
+    # so a skipped commit leaves no gap. On a PR the job checks the diff itself
+    # (the `web` step below) rather than through `changes`, which runs only on
+    # pushes: a separate gate job would bill its own minute (#329). A PR that
+    # touches neither path still bills this job's minute but skips the install
+    # and spends no snapshots. `!cancelled()` so the skipped `changes` on a PR
+    # does not skip this job too.
     needs: changes
     if: >-
       !cancelled() && github.actor != 'dependabot[bot]' && (
@@ -372,16 +374,33 @@ jobs:
           # silently falls back to a full build without it.
           fetch-depth: 0
 
+      # Same paths as `changes` uses for pushes. HEAD is the PR's merge commit,
+      # so this is the PR's own diff against its base.
+      - name: Check for web changes
+        id: web
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || ! git diff --quiet "$BASE_SHA" HEAD -- web .github/workflows/deploy.yml; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No change under web/ or to deploy.yml; skipping Chromatic." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Set up Node
+        if: steps.web.outputs.changed == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
 
       - name: Install app dependencies
+        if: steps.web.outputs.changed == 'true'
         working-directory: web
         run: npm install
 
       - name: Publish to Chromatic
+        if: steps.web.outputs.changed == 'true'
         uses: chromaui/action@f305ef908327aee3b80b0e6b3bbb60a742eaa049 # v18.13.6
         with:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}

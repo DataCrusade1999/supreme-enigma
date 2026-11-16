@@ -2,6 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // Runs after webServer is up; see the file for why.
+  globalSetup: "./e2e/warm-up.ts",
   reporter: [["list"], ["json", { outputFile: "playwright-results.json" }]],
   use: {
     baseURL: "http://localhost:3100",

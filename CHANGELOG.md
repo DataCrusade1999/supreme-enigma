@@ -15,6 +15,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
   `access@<env>.ashutosh-pandey.com` (#530).
 - Dev's and stage's SES identities have a custom MAIL FROM, so their mail
   passes DMARC on SPF as well as DKIM (#514).
+- An OpenSSF Scorecard workflow, on pushes to `dev` and weekly, with results
+  under Security > Code scanning (#383).
 
 ### Changed
 
@@ -25,6 +27,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - Lambda logs are kept for 14 days instead of forever (#450).
 - The SES bounce and complaint alarms fire at 2% and 0.05%, well before AWS's
   5% and 0.1% review thresholds (#391).
+- Chromatic skips its install and upload on a PR into `dev` that touches
+  neither `web/` nor `deploy.yml` (#329).
 
 ### Fixed
 
@@ -39,6 +43,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
   account's SES, not only the owner's (#539).
 - Access emails link to and name the site of the environment that sent
   them, not always production (#541).
+- The e2e suite opens every page once before the first spec, so a cold
+  server no longer times out whichever spec runs first (#146).
 
 ### Removed
 
