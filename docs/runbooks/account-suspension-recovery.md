@@ -16,7 +16,7 @@ be checked right now." after sign-in: the proxy treats the failing
 
 | Account | ID | Profile | Stacks | Applied from |
 |---|---|---|---|---|
-| Production | 223376380711 | `personal` | `prod/account`, `prod/app` | `dev`, `main` |
+| Production | 223376380711 | `personal` | `prod/account`, `prod/app` | `main` |
 | Dev | 624586968135 | `personal-dev` | `dev/account`, `dev/app` | `dev` |
 | Stage | 792682047320 | `personal-stage` | `stage/account`, `stage/app` | `stage` |
 

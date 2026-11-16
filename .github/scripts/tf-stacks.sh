@@ -4,8 +4,9 @@
 #   tf-stacks.sh plan     (BASE)                 -> the stacks a PR into BASE plans
 #   tf-stacks.sh drift                           -> the branch:stack pairs the drift job plans
 #   tf-stacks.sh role <stack> <plan|apply>       -> the role ARN tf-as.sh assumes for that stack
-# `prod/account` is applied from dev only (#345): its state is single, so applying it from
-# several branches would revert each other's unpromoted changes.
+# `prod/account` is applied from main only (#524): its state is single, so it is applied from
+# one branch, and main is the one that deploys to production. A PR into dev plans it as an
+# early look at what main will apply.
 # Later tasks add stacks by editing only the tables below.
 set -euo pipefail
 # stdout is $GITHUB_OUTPUT for `resolve`, so ::error:: lines go to stderr.
@@ -13,9 +14,9 @@ set -euo pipefail
 # The stacks a branch applies, in order.
 branch_stacks() {
   case "$1" in
-    dev)   echo "prod/account dev/account dev/app" ;;
+    dev)   echo "dev/account dev/app" ;;
     stage) echo "stage/account stage/app" ;;
-    main)  echo "prod/app" ;;
+    main)  echo "prod/account prod/app" ;;
     *) echo "::error::Terraform applies only from dev, stage or main" >&2; return 1 ;;
   esac
 }
@@ -46,17 +47,18 @@ case "${1:-}" in
     printf 'stacks=%s\n' "$stacks"
     ;;
   plan)
-    # On a promotion, stage's or main's older copy of prod/account would show dev's applied
-    # changes as reverts, so prod/account is planned only on PRs into dev.
+    # prod/account is applied from main, so a PR into dev plans it as an early look at what
+    # main will apply, and a PR into main plans it as the apply. A PR into stage does not: its
+    # older copy of prod/account would show main's applied changes as reverts.
     case "$BASE" in
       dev)   echo "prod/account dev/account dev/app" ;;
       stage) echo "stage/account stage/app" ;;
-      main)  echo "prod/app" ;;
+      main)  echo "prod/account prod/app" ;;
       *) echo "::error::no stacks for PRs into $BASE" >&2; exit 1 ;;
     esac
     ;;
   drift)
-    echo "dev:prod/account main:prod/app dev:dev/account dev:dev/app stage:stage/account stage:stage/app"
+    echo "main:prod/account main:prod/app dev:dev/account dev:dev/app stage:stage/account stage:stage/app"
     ;;
   role) role "${2:?stack}" "${3:?mode}" ;;
   *) echo "usage: tf-stacks.sh resolve|plan|drift|role" >&2; exit 2 ;;
