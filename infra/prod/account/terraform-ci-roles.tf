@@ -25,8 +25,8 @@ locals {
 data "aws_iam_policy_document" "tf_trust" {
   for_each = {
     plan = ["${local.github_sub_prefix}:pull_request", "${local.github_sub_prefix}:ref:refs/heads/dev"]
-    # dev applies `prod/account` (#345); main applies `prod/app`.
-    prod = ["${local.github_sub_prefix}:ref:refs/heads/dev", "${local.github_sub_prefix}:ref:refs/heads/main"]
+    # main applies both production stacks, `prod/account` then `prod/app` (#524).
+    prod = ["${local.github_sub_prefix}:ref:refs/heads/main"]
   }
 
   statement {
@@ -78,10 +78,9 @@ resource "aws_iam_role_policy" "tf_plan" {
   policy = data.aws_iam_policy_document.tf_plan.json
 }
 
-# `prod/account` on pushes to dev and `prod/app` on pushes to main (#345), plus manual runs
-# of either. Trusting dev means code merged to dev changes production's prod/account
-# resources — the owner's call, so a shared change and the env change that depends on
-# it land in one merge. Every service the stacks manage, with IAM limited to this
+# `prod/account` then `prod/app` on pushes to main, plus manual runs of either from main
+# (#524). Only main is trusted, so a `prod/account` change reaches production when it
+# ships, not when it merges to dev. Every service the stacks manage, with IAM limited to this
 # project's names. It can edit its own role — inherent to letting CI manage the roles;
 # a local apply is the way back.
 resource "aws_iam_role" "tf_apply_prod" {

@@ -134,7 +134,7 @@ Actions.
 `infra/bootstrap` (one-time per account, just the TF state S3 bucket, never
 destroyed), then six stacks with one state each:
 - production: `infra/prod/account` (ECR, IAM, Cognito, the Vercel project and the
-  other one-of-each resources, applied from `dev` only) and `infra/prod/app`
+  other one-of-each resources, applied from `main` only) and `infra/prod/app`
   (main's bucket, Lambda, alarm and Vercel env vars, through
   `infra/modules/app`)
 - dev and stage: `infra/<env>/account` (through

@@ -1,6 +1,6 @@
 # The production account's (223376380711) base stack: everything there is one of,
 # which infra/prod/app and the Vercel project depend on. Dev and stage have their own
-# base stacks in their own accounts (infra/<env>/account). Applied from dev only (#345).
+# base stacks in their own accounts (infra/<env>/account). Applied from main only (#524).
 # Values used across this stack's files.
 
 locals {
