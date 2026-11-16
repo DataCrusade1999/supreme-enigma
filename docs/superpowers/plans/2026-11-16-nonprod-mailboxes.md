@@ -41,13 +41,29 @@
 **Interfaces:**
 - Produces: two DKIM strings, `DKIM_DEV` and `DKIM_STAGE`, each `v=DKIM1; k=rsa; p=…`. Also the console's MX hosts and SPF include for each subdomain. Task 2 consumes all of them.
 
-- [ ] **Step 1:** In Admin Console → Domains → +Add, enter `dev.ashutosh-pandey.com`. Expected: it is added without an ownership step, because the parent is verified. If Zoho asks for a TXT or CNAME, record the value and stop: Task 2 then also needs the spec's optional `zoho_verification` input.
+- [ ] **Step 1:** In Admin Console → Domains → +Add, enter `dev.ashutosh-pandey.com`. Expected: it is added without an ownership step, because the parent is verified. If Zoho asks for a TXT or CNAME, record the value as `VERIFY_DEV` (and later `VERIFY_STAGE`), finish whatever steps the console allows, and do Task 1a before the rest.
 - [ ] **Step 2:** Turn **Mail Hosting Status** on for `dev.ashutosh-pandey.com`.
 - [ ] **Step 3:** Email Configuration → DKIM for the subdomain: add selector `zoho`, 2048-bit. Copy the TXT value as one unbroken string, with no surrounding quotes and no breaks inside `p=`. Save it as `DKIM_DEV`.
 - [ ] **Step 4:** Read the MX and SPF pages for the subdomain. Expected: `mx.zoho.in` 10, `mx2.zoho.in` 20, `mx3.zoho.in` 50, and `include:zoho.in`. Note any difference.
 - [ ] **Step 5:** Users → owner → Mailbox Settings → Email Alias → Add: alias `access` on domain `dev.ashutosh-pandey.com`, then alias `no-reply` on the same domain. Expected: both are listed under the owner's aliases.
 - [ ] **Step 6:** Repeat Steps 1–5 for `stage.ashutosh-pandey.com`, saving `DKIM_STAGE`.
 - [ ] **Step 7:** Check: Domains lists both subdomains with mail hosting on, and the owner has 4 new aliases. `DKIM_DEV` and `DKIM_STAGE` differ.
+
+### Task 1a: Ownership records (only if Zoho asked for them in Task 1 Step 1)
+
+Skip this task when both subdomains were added without an ownership step. It is the spec's "Left to the builder" fallback, done the way #403 did it on the apex: publish the record first, then verify, then do the rest.
+
+**Files:**
+- Modify: `infra/modules/nonprod-account/email.tf`, `infra/modules/nonprod-account/variables.tf`, `infra/dev/account/main.tf`, `infra/stage/account/main.tf`
+
+**Interfaces:**
+- Consumes: `VERIFY_DEV`, `VERIFY_STAGE`.
+- Produces: `variable "zoho_verification"` (string, required) and `vercel_dns_record.zoho_verification`. For a TXT: `name = var.env`, `value = var.zoho_verification`. For a CNAME: `name = "<zb code>.${var.env}"`, `value = "zmverify.zoho.in"`. Task 2 keeps both, and production's rule applies: the record stays after verifying.
+
+- [ ] **Step 1:** Branch `feat/nonprod-zoho-verification` from `dev`. Add the variable and the record, and set each stack's value. Run Task 2 Step 8's fmt and validate. Commit as `feat(infra): Zoho verification records for dev and stage (#542)`.
+- [ ] **Step 2:** Open a PR into `dev` (`Part of #542`). Its `dev/account` plan must show `Plan: 1 to add, 0 to change, 0 to destroy.` Merge it through the `merging-a-pr` skill.
+- [ ] **Step 3:** Verify `dev.` in the Zoho console, then finish Task 1 for it.
+- [ ] **Step 4:** Stage's record goes live only with a `dev → stage` promotion, which needs the owner's OK. After it applies, verify `stage.`, then finish Task 1 for it. Task 2 starts once both DKIM keys exist.
 
 ### Task 2: Terraform records, suppression list and docs
 
