@@ -1,0 +1,44 @@
+# OpenSSF Scorecard (#383): grades token permissions, action pinning, branch
+# protection and dangerous workflow patterns, and uploads the results to
+# Security > Code scanning. Gates nothing.
+#
+# Scorecard reads the default branch, so it runs on pushes to dev and weekly.
+# With publish_results the action refuses a workflow that has top-level env or
+# defaults, or steps other than checkout, scorecard and the uploads.
+name: Scorecard
+
+on:
+  push:
+    branches: [dev]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  analysis:
+    runs-on: ubuntu-24.04
+    permissions:
+      # A job-level block replaces the default, so checkout needs this.
+      contents: read
+      # Upload the SARIF to code scanning.
+      security-events: write
+      # Publish the results to the OpenSSF API, which backs the badge.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: results.sarif
