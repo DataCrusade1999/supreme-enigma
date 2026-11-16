@@ -56,13 +56,12 @@
 - Modify: `infra/modules/nonprod-account/variables.tf` (new variable)
 - Modify: `infra/dev/account/main.tf` and `infra/stage/account/main.tf` (`module "account"` argument)
 - Modify: `docs/runbooks/nonprod-email-testing.md`, `.claude/rules/infra.md` (the "apex's mail records belong to Zoho" bullet), `CHANGELOG.md`
-- Add: the spec and this plan, if not already committed
 
 **Interfaces:**
 - Consumes: Task 1's `DKIM_DEV`, `DKIM_STAGE`, and the MX and SPF values.
 - Produces: `variable "zoho_dkim_key"` (string, required, `description` saying it is Zoho's DKIM TXT for selector `zoho` on `<env>`, copied from the console). Resources: `vercel_dns_record.zoho_mx` (`for_each` keyed `"10"`/`"20"`/`"50"`), `vercel_dns_record.zoho_spf`, `vercel_dns_record.zoho_dkim`, `aws_sesv2_account_suppression_attributes.account`, `aws_cloudwatch_metric_alarm.ses_reputation` (`for_each` keyed `bounce`/`complaint`). Task 3 reads these addresses in the plan.
 
-- [ ] **Step 1: Branch.** Run `git switch dev && git pull && git switch -c feat/nonprod-mailboxes`. Commit the spec and plan first: `docs: spec and plan for dev and stage mailboxes (#542)`.
+- [ ] **Step 1: Branch.** The spec and this plan landed in their own docs PR. Run `git switch dev && git pull && git switch -c feat/nonprod-mailboxes-infra`.
 - [ ] **Step 2: Variable.** Add `zoho_dkim_key` to `variables.tf`, with no default.
 - [ ] **Step 3: DNS records.** In `email.tf`, add `local.zoho_mx` (priority to host) and `zoho_mx` with `name = var.env`, `type = "MX"`, `mx_priority = tonumber(each.key)`, copying production's shape. Add `zoho_spf` (`name = var.env`, TXT, the Global Constraints value) and `zoho_dkim` (`name = "zoho._domainkey.${var.env}"`, TXT, `value = var.zoho_dkim_key`). Each gets a one-line comment. On `zoho_spf`, the comment says SES never uses `<env>` as its envelope domain, so Zoho is its only entry.
 - [ ] **Step 4: Safeguards.** Add the suppression attributes and the two alarms with production's values. Use `alarm_name = "${var.project_name}-ses-${each.key}-rate"` and a description that points to the `no-reply@<env>` and `access@<env>` aliases for the notices.
