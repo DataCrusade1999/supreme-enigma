@@ -1,4 +1,4 @@
-# --- Vercel project + the config/secrets that are identical across production and preview ---
+# --- the Vercel project and production's config and secrets ---
 
 resource "random_password" "cookie_secret" {
   length  = 32
@@ -121,15 +121,12 @@ resource "vercel_firewall_config" "looper" {
   }
 }
 
-locals {
-  env_targets = ["production", "preview"]
-}
-
+# Production only: dev's and stage's copies of these vars live in infra/modules/nonprod-app.
 resource "vercel_project_environment_variable" "app_password" {
   project_id = vercel_project.looper.id
   key        = "APP_PASSWORD"
   value      = var.app_password
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = true
 }
 
@@ -137,7 +134,7 @@ resource "vercel_project_environment_variable" "cookie_secret" {
   project_id = vercel_project.looper.id
   key        = "COOKIE_SECRET"
   value      = random_password.cookie_secret.result
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = true
 }
 
@@ -160,7 +157,7 @@ resource "vercel_project_environment_variable" "aws_region" {
   project_id = vercel_project.looper.id
   key        = "APP_AWS_REGION"
   value      = var.aws_region
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
 }
 
@@ -178,7 +175,7 @@ resource "vercel_project_environment_variable" "openrouter_api_key" {
   project_id = vercel_project.looper.id
   key        = "OPENROUTER_API_KEY"
   value      = var.openrouter_api_key
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = true
 }
 
@@ -186,7 +183,7 @@ resource "vercel_project_environment_variable" "openrouter_model" {
   project_id = vercel_project.looper.id
   key        = "OPENROUTER_MODEL"
   value      = var.openrouter_model
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
 }
 
@@ -196,7 +193,7 @@ resource "vercel_project_environment_variable" "openrouter_base_url" {
   project_id = vercel_project.looper.id
   key        = "OPENROUTER_BASE_URL"
   value      = "https://openrouter.ai/api/v1"
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
 }
 
@@ -204,7 +201,7 @@ resource "vercel_project_environment_variable" "news_desk_model" {
   project_id = vercel_project.looper.id
   key        = "NEWS_DESK_MODEL"
   value      = var.news_desk_model
-  target     = local.env_targets
+  target     = ["production"]
   sensitive  = false
 }
 
