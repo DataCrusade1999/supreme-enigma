@@ -266,7 +266,7 @@ Zoho owns the apex MX (`infra/prod/account/email.tf`, #403), and `access@` is a 
   - `cognito-idp:ListUsers`, `AdminListGroupsForUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminUserGlobalSignOut`, `AdminDeleteUser` on the user pool
   - `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem`, `Query` on the table
   - `ses:SendEmail` on the domain identity, with the condition `ses:FromAddress = access@ashutosh-pandey.com`
-- Vercel env vars for production and preview: `AVP_POLICY_STORE_ID`, `ACCESS_GRANTS_TABLE`. `ACCESS_FROM_EMAIL` and the `ses:SendEmail` grant are production only (#511): dev's and stage's accounts are in the SES sandbox, so on dev and stage the Access page saves the change and reports `ACCESS_FROM_EMAIL is not set` instead of sending.
+- Vercel env vars for production and preview: `AVP_POLICY_STORE_ID`, `ACCESS_GRANTS_TABLE`. `ACCESS_FROM_EMAIL` is per environment: `access@ashutosh-pandey.com` on production, `access@<env>.ashutosh-pandey.com` on dev and stage (#530), each with an `ses:SendEmail` grant on its own account's identity. Dev's and stage's accounts are in the SES sandbox, so there only the owner's verified address receives the emails; a send to anyone else fails and the Access page reports the error after saving the change.
 
 ### `infra/prod/account/auth.tf`
 
