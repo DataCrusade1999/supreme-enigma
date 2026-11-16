@@ -45,14 +45,24 @@ export function keyForUpload(filename: string): string {
 // libsndfile reads; M4A, AAC and WebM are not among them.
 export const AUDIO_EXTENSIONS = new Set(["aif", "aiff", "flac", "mp3", "oga", "ogg", "opus", "wav"]);
 
+const OGG_EXTENSIONS = new Set(["oga", "ogg", "opus"]);
+const OGG_CONTAINER_TYPES = new Set(["application/ogg", "video/ogg"]);
+
 // An empty type is allowed: browsers send File.type "" for formats the OS has no
 // MIME mapping for (FLAC and AIFF on Windows, often), and the extension is what
-// the Lambda relies on.
+// the Lambda relies on. Some platforms label Ogg audio by its container type.
 export function isAudioUpload(filename: unknown, contentType: unknown): boolean {
   if (typeof filename !== "string" || typeof contentType !== "string") return false;
-  if (contentType !== "" && !/^audio\/[a-z0-9.+-]+$/i.test(contentType)) return false;
   const dot = filename.lastIndexOf(".");
-  return dot !== -1 && AUDIO_EXTENSIONS.has(filename.slice(dot + 1).toLowerCase());
+  if (dot === -1) return false;
+  const ext = filename.slice(dot + 1).toLowerCase();
+  if (!AUDIO_EXTENSIONS.has(ext)) return false;
+  const type = contentType.toLowerCase();
+  return (
+    type === "" ||
+    /^audio\/[a-z0-9.+-]+$/.test(type) ||
+    (OGG_EXTENSIONS.has(ext) && OGG_CONTAINER_TYPES.has(type))
+  );
 }
 
 // What keyForUpload produces for an accepted upload. /api/looper/process refuses

@@ -37,7 +37,15 @@ describe("/api/looper/upload-url", () => {
     expect(presignUpload).toHaveBeenCalledWith(expect.stringMatching(/\.flac$/), "", 1000);
   });
 
+  it.each(["application/ogg", "video/ogg"])("accepts an .ogg labelled %s", async (contentType) => {
+    const res = await post({ filename: "take.ogg", contentType, size: 1000 });
+
+    expect(res.status).toBe(200);
+  });
+
   it.each([
+    { filename: "clip.mp4", contentType: "video/ogg" },
+    { filename: "song.mp3", contentType: "video/ogg" },
     { filename: "notes.txt", contentType: "audio/mpeg" },
     { filename: "notes.txt", contentType: "" },
     { filename: "voice.m4a", contentType: "audio/mp4" },
