@@ -6,7 +6,14 @@ import { GRANTS, TOOLS, toolHref } from "./route-gate";
 import { formatUntil, formatUses } from "./access-format";
 import { renderEmail, type EmailParts } from "./access-mail-layout";
 
-const SITE = "https://ashutosh-pandey.com";
+/** The host these emails link to and name: production's domain, dev's and stage's
+ * own subdomains, and a feature-branch preview's deployment URL (#541). */
+function siteHost(): string {
+  if (process.env.VERCEL_ENV !== "preview") return "ashutosh-pandey.com";
+  const branch = process.env.VERCEL_GIT_COMMIT_REF;
+  if (branch === "dev" || branch === "stage") return `${branch}.ashutosh-pandey.com`;
+  return process.env.VERCEL_URL ?? "ashutosh-pandey.com";
+}
 
 let client: SESv2Client | null = null;
 const ses = () => (client ??= new SESv2Client({ region: process.env.APP_AWS_REGION!, ...awsCredentials() }));
@@ -47,7 +54,7 @@ function grantRow(g: Grant): EmailParts["rows"][number] {
   const detail = GRANTS[g.action].metered
     ? `${GRANTS[g.action].label} · ${formatUses((g.limit ?? 0) - (g.used ?? 0))} · ${until}`
     : until;
-  return { tool: tool.name, detail, button: { label: `Open ${tool.name}`, href: `${SITE}${toolHref(tool.id)}` } };
+  return { tool: tool.name, detail, button: { label: `Open ${tool.name}`, href: `https://${siteHost()}${toolHref(tool.id)}` } };
 }
 
 export function sendWelcome(user: AccessUser, grant: Grant): Promise<string | null> {
@@ -59,10 +66,10 @@ export function sendWelcome(user: AccessUser, grant: Grant): Promise<string | nu
       intro:
         "Thanks for trying the tools on my site. I've opened the one below for you. Sign in with the same Google account you used before.",
       rows: [grantRow(grant)],
-      after: "Your access is always shown at ashutosh-pandey.com/tools.",
+      after: `Your access is always shown at ${siteHost()}/tools.`,
       footer: [
         "Questions, or want more uses? Reply to this email.",
-        "You're getting this because you signed in at ashutosh-pandey.com and were given access.",
+        `You're getting this because you signed in at ${siteHost()} and were given access.`,
       ],
     }),
   );
@@ -85,9 +92,9 @@ export function sendUpdate(user: AccessUser, grant: Grant, opensTool: boolean): 
 export function sendEnded(user: AccessUser, what: string): Promise<string | null> {
   return deliver(
     user.email,
-    "Your access on ashutosh-pandey.com has ended",
+    `Your access on ${siteHost()} has ended`,
     renderEmail({
-      heading: `Your access to ${what} on ashutosh-pandey.com has ended.`,
+      heading: `Your access to ${what} on ${siteHost()} has ended.`,
       rows: [],
       footer: ["Questions? Reply to this email."],
     }),
