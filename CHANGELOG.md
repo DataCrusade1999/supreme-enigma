@@ -14,8 +14,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ### Changed
 
-- BGM Looper accepts only audio uploads (MP3, WAV, FLAC, OGG, Opus, M4A, AAC,
-  AIFF, WebM) and processes only keys it issued under `uploads/`, in the route
+- BGM Looper accepts only audio uploads (MP3, WAV, FLAC, OGG, Opus, AIFF), the
+  formats the Lambda can decode, and processes only keys it issued under `uploads/`, in the route
   and in the Lambda (#402).
 - The Lambda's role reads only `uploads/` and writes only `outputs/` (#170).
 - Lambda logs are kept for 14 days instead of forever (#450).

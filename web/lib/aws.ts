@@ -40,11 +40,10 @@ export function keyForUpload(filename: string): string {
   return `uploads/${randomUUID()}${ext}`;
 }
 
-// The Lambda writes its output in the input's format, chosen by ffmpeg from the
-// extension, so an upload needs one of these. Each is a format ffmpeg can write.
-export const AUDIO_EXTENSIONS = new Set([
-  "aac", "aif", "aiff", "flac", "m4a", "mp3", "oga", "ogg", "opus", "wav", "webm",
-]);
+// The Lambda decodes with soundfile (libsndfile) and writes its output in the
+// input's format, chosen by ffmpeg from the extension. These are the formats
+// libsndfile reads; M4A, AAC and WebM are not among them.
+export const AUDIO_EXTENSIONS = new Set(["aif", "aiff", "flac", "mp3", "oga", "ogg", "opus", "wav"]);
 
 // An empty type is allowed: browsers send File.type "" for formats the OS has no
 // MIME mapping for (FLAC and AIFF on Windows, often), and the extension is what

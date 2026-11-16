@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
   if (!isAudioUpload(filename, contentType)) {
     return NextResponse.json(
-      { error: "Unsupported file type. Use MP3, WAV, FLAC, OGG, Opus, M4A, AAC, AIFF or WebM." },
+      { error: "Unsupported file type. Use MP3, WAV, FLAC, OGG, Opus or AIFF." },
       { status: 400 },
     );
   }

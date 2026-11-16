@@ -40,6 +40,7 @@ describe("/api/looper/upload-url", () => {
   it.each([
     { filename: "notes.txt", contentType: "audio/mpeg" },
     { filename: "notes.txt", contentType: "" },
+    { filename: "voice.m4a", contentType: "audio/mp4" },
     { filename: "song", contentType: "audio/mpeg" },
     { filename: "song.mp3", contentType: "text/html" },
     { filename: "song.mp3", contentType: undefined },
