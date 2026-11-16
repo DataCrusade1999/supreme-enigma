@@ -65,7 +65,11 @@ export async function pinIndicator(input: PinInput): Promise<IndicatorValue> {
     ...(match && Object.keys(match).length > 0 ? { match } : {}),
   };
   const id = pinId(query);
-  if (pins.some((p) => p.id === id)) throw new PinError("already pinned", 409);
+  // A pin saved before #272 kept its window, and its id came from it, so it is
+  // compared by the query it now refreshes as.
+  if (pins.some((p) => p.id === id || pinId({ ...p, filters: withoutTimeFilters(p.filters) }) === id)) {
+    throw new PinError("already pinned", 409);
+  }
   const def: IndicatorDef = { id, ...query };
   await writePins([...pins, def]);
   // Filled on the next Refresh (spec §7.3).

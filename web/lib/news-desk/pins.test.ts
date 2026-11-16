@@ -63,6 +63,12 @@ describe("pinIndicator", () => {
     await expect(pinIndicator(otherWindow)).rejects.toEqual(new PinError("already pinned", 409));
   });
 
+  it("refuses a series already pinned with a window before #272", async () => {
+    const windowed = { ...INPUT, filters: { ...INPUT.filters, year: "2026" } };
+    vi.mocked(readPins).mockResolvedValue([{ id: pinId(windowed), ...windowed }]);
+    await expect(pinIndicator(INPUT)).rejects.toEqual(new PinError("already pinned", 409));
+  });
+
   it("saves an empty match as no match", async () => {
     await pinIndicator({ ...INPUT, match: {} });
     expect(writePins).toHaveBeenCalledWith([{ id: pinId(INPUT), ...INPUT }]);

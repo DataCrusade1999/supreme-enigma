@@ -41,8 +41,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
   them, not always production (#541).
 - Two concurrent resume extractions of one draft no longer both pay for the
   model call: the second gets a 409 while the first runs (#110).
-- A publish retried after it failed on the PDF no longer archives the draft's
-  JSON beside the old PDF as one snapshot (#111).
+- A publish retried after it failed on the PDF archives only the old PDF,
+  not the draft's JSON beside it as one snapshot that was never live (#111).
 - The newsletter admin reads Buttondown's email list once instead of once per
   issue, waits out a 429, and stops after 100 pages (#132).
 - News Desk stops re-sending a headline to the tagger after three answered

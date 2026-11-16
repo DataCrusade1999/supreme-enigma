@@ -61,24 +61,26 @@ export async function POST(request: Request) {
   // keying it off nothing would let a lone current.pdf be overwritten with no
   // copy kept anywhere.
   const liveJsonEtag = await objectEtag(bucket, CURRENT_JSON_KEY);
-  const liveJson = liveJsonEtag !== null;
-  const livePdf = (await objectEtag(bucket, CURRENT_PDF_KEY)) !== null;
+  const livePdfEtag = await objectEtag(bucket, CURRENT_PDF_KEY);
 
-  // No archive when the live JSON already is this draft's (#111). JSON is promoted
-  // first, so that is the state a publish that failed on its PDF leaves behind,
-  // and the attempt that left it archived the pair it replaced. Archiving again
-  // would store this draft's JSON beside the old PDF under one timestamp: a
-  // snapshot that was never live. It is also the state after this draft was
-  // already published in full, where the archive would only duplicate the
-  // draft. A copy keeps a single-part object's ETag, so equal ETags mean equal
-  // bytes, and a false mismatch only archives as before.
-  const repairing = liveJsonEtag !== null && liveJsonEtag === draftJson;
-  const archived = (liveJson || livePdf) && !repairing;
+  // When the live JSON already is this draft's, only the PDF is archived (#111).
+  // JSON is promoted first, so that is the state a publish that failed on its
+  // PDF leaves behind. Archiving the JSON too would store this draft's JSON
+  // beside the old PDF under one timestamp: a pair that was never live. The
+  // PDF is still kept, alone, because ETags cannot tell that retry from a new
+  // draft whose JSON happens to match the live one byte for byte (a re-exported
+  // PDF with the same content); its JSON is lost by neither, being identical.
+  // A copy keeps a single-part object's ETag, so equal ETags mean equal bytes,
+  // and a false mismatch only archives the pair as before.
+  const jsonIsDrafts = liveJsonEtag !== null && liveJsonEtag === draftJson;
+  const archiveJson = liveJsonEtag !== null && !jsonIsDrafts;
+  const archivePdf = livePdfEtag !== null && livePdfEtag !== draftPdf;
+  const archived = archiveJson || archivePdf;
   if (archived) {
     const target = archiveKeys();
     try {
-      if (livePdf) await copyObject(bucket, CURRENT_PDF_KEY, target.pdf);
-      if (liveJson) await copyObject(bucket, CURRENT_JSON_KEY, target.json);
+      if (archivePdf) await copyObject(bucket, CURRENT_PDF_KEY, target.pdf);
+      if (archiveJson) await copyObject(bucket, CURRENT_JSON_KEY, target.json);
     } catch {
       // Nothing has been overwritten yet at this point, so refusing here keeps
       // the live resume intact rather than replacing it with no copy kept.
