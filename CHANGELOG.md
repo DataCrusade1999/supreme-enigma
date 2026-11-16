@@ -7,6 +7,14 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- Dev and stage previews get their own `COOKIE_SECRET`, region and OpenRouter
+  settings instead of production's. Signed-in users on dev and stage are signed
+  out once.
+- Production's account stack (Cognito, Cedar policies, IAM, the Vercel project)
+  applies when a release reaches `main`, not on merge to `dev` (#524).
+
 ## [1.12.0] - 2026-11-14
 
 ### Changed

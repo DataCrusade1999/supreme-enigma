@@ -169,9 +169,10 @@ Copy each directory's `terraform.tfvars.example` across and fill it in —
 `infra/prod/account` needs all seven inputs (`vercel_api_token`, `app_password`,
 `github_repo`, `alert_email`, `openrouter_api_key`, `google_client_id`,
 `google_client_secret`), each nonprod `account` stack `vercel_api_token`,
-`alert_email`, `google_client_id` and `google_client_secret`, and the env
-stacks only `vercel_api_token`. `terraform plan` fails with `No value for
-required variable` until each is set. Export the stack's profile first
+`alert_email`, `google_client_id` and `google_client_secret`, `infra/prod/app`
+only `vercel_api_token`, and each env stack `vercel_api_token` and
+`openrouter_api_key`. `terraform plan` fails with `No value for required
+variable` until each is set. Export the stack's profile first
 (`AWS_PROFILE=personal` for production's stacks, `personal-dev` or
 `personal-stage` for the nonprod ones); no backend block names a profile. The
 Lambda container image is built and pushed by GitHub Actions, never locally,

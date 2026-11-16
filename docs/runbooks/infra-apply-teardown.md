@@ -14,7 +14,7 @@ Per-resource detail and the reasoning behind each quirk is in
 - Six stacks in three accounts, each with its own state and its own gitignored
   `terraform.tfvars` (copy that directory's `terraform.tfvars.example`):
   - Production, 223376380711, profile `personal`: `infra/prod/account` (the
-    one-of-each resources, applied from `dev` only; seven required variables)
+    one-of-each resources, applied from `main` only; seven required variables)
     and `infra/prod/app` (main's bucket, Lambda, alarm and Vercel env vars;
     only `vercel_api_token`).
   - Dev, 624586968135, profile `personal-dev`, and stage, 792682047320,
@@ -39,9 +39,11 @@ The `Terraform` workflow (`.github/workflows/terraform.yml`) lints and plans
 every PR that touches `infra/`, and posts the plans of the base branch's stacks
 as one PR comment (`.github/scripts/tf-stacks.sh plan`): `prod/account` and
 `dev/*` on a PR into `dev`, `stage/*` into `stage`,
-`prod/app` into `main`. Read it before merging: `No changes`
+`prod/account` and `prod/app` into `main`. Read it before merging: `No changes`
 for a refactor, or exactly the intended diff, and no `⚠ destroys or replaces`
-or `⚠ forgets` line you did not intend.
+or `⚠ forgets` line you did not intend. `prod/account` applies from `main`, so
+its plan on a PR into `dev` also shows everything on `dev` not yet on `main`;
+the plan on the `stage → main` PR is the one that shows what will apply.
 
 When the workflow cannot run, plan the stacks locally against real state, each
 under its own account's profile:
@@ -70,15 +72,25 @@ Two things `plan` will never tell you:
 
 ## Apply
 
-Merging applies. A push to `dev` applies `prod/account`, then `dev/account`,
-then `dev/app`; a push to `stage` applies `stage/account` then
-`stage/app`; a push to `main` applies `prod/app`. `prod/account` is applied
-from `dev` only, so a `prod/account` change reaches production when it merges to
-`dev`. A plan that deletes, replaces or forgets anything stops before applying; once
-you have read it, apply it from the branch that owns the stack:
+Merging applies. A push to `dev` applies `dev/account`, then `dev/app`; a
+push to `stage` applies `stage/account` then `stage/app`; a push to `main`
+applies `prod/account` then `prod/app`. `prod/account` is applied from `main`
+only, so a `prod/account` change reaches production when it ships. A plan that
+deletes, replaces or forgets anything stops before applying, along with the
+stacks after it in that run; once you have read it, apply it from the branch
+that owns the stack:
 
 ```bash
 gh workflow run terraform.yml --ref dev -f stack=dev/app -f confirm=apply-destroys
+```
+
+When the `stage → main` PR's plan shows a `⚠ destroys or replaces` line on
+`prod/account`, the `main` push stops there and does not apply `prod/app`.
+Right after the merge, run:
+
+```bash
+gh workflow run terraform.yml --ref main -f stack=prod/account -f confirm=apply-destroys
+gh workflow run terraform.yml --ref main -f stack=prod/app
 ```
 
 A nonprod stack applies as its own account's `bgm-looper-tf-apply`
