@@ -36,8 +36,32 @@ export function getS3Client(): S3Client {
 }
 
 export function keyForUpload(filename: string): string {
-  const ext = filename.includes(".") ? filename.slice(filename.lastIndexOf(".")) : "";
+  const ext = filename.includes(".") ? filename.slice(filename.lastIndexOf(".")).toLowerCase() : "";
   return `uploads/${randomUUID()}${ext}`;
+}
+
+// The Lambda writes its output in the input's format, chosen by ffmpeg from the
+// extension, so an upload needs one of these. Each is a format ffmpeg can write.
+export const AUDIO_EXTENSIONS = new Set([
+  "aac", "aif", "aiff", "flac", "m4a", "mp3", "oga", "ogg", "opus", "wav", "webm",
+]);
+
+// An empty type is allowed: browsers send File.type "" for formats the OS has no
+// MIME mapping for (FLAC and AIFF on Windows, often), and the extension is what
+// the Lambda relies on.
+export function isAudioUpload(filename: unknown, contentType: unknown): boolean {
+  if (typeof filename !== "string" || typeof contentType !== "string") return false;
+  if (contentType !== "" && !/^audio\/[a-z0-9.+-]+$/i.test(contentType)) return false;
+  const dot = filename.lastIndexOf(".");
+  return dot !== -1 && AUDIO_EXTENSIONS.has(filename.slice(dot + 1).toLowerCase());
+}
+
+// What keyForUpload produces for an accepted upload. /api/looper/process refuses
+// any other key, so a caller can't point the Lambda at resume or News Desk data.
+const UPLOAD_KEY = /^uploads\/[0-9a-f-]{36}\.[a-z0-9]{1,5}$/;
+
+export function isUploadKey(key: unknown): key is string {
+  return typeof key === "string" && UPLOAD_KEY.test(key);
 }
 
 // Signed into the presigned URL rather than checked after the fact. A URL signed

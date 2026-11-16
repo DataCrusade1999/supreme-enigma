@@ -1,4 +1,5 @@
 import boto3
+import pytest
 from moto import mock_aws
 from looper import handler as handler_module
 
@@ -35,3 +36,25 @@ def test_handler_downloads_processes_and_uploads(monkeypatch, tmp_path):
     }
     body = s3.get_object(Bucket=bucket, Key="outputs/song.wav")["Body"].read()
     assert body == b"fake-audio-bytes-processed"
+
+
+@pytest.mark.parametrize(
+    "input_key,output_key",
+    [
+        ("resume/published.json", "outputs/x.mp3"),
+        ("outputs/x.mp3", "outputs/x.mp3"),
+        ("uploads/../resume/current.pdf", "outputs/x.pdf"),
+        ("uploads/x.mp3", "resume/current.pdf"),
+        ("uploads/x.mp3", "uploads/x.mp3"),
+    ],
+)
+def test_handler_refuses_keys_outside_their_prefixes(monkeypatch, input_key, output_key):
+    calls = []
+    monkeypatch.setattr(handler_module.s3, "download_file", lambda *a: calls.append(a))
+    monkeypatch.setattr(handler_module.s3, "upload_file", lambda *a: calls.append(a))
+
+    with pytest.raises(ValueError):
+        handler_module.handler(
+            {"bucket": "b", "input_key": input_key, "output_key": output_key}, None
+        )
+    assert calls == []

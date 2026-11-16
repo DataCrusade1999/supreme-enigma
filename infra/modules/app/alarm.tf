@@ -40,3 +40,26 @@ resource "aws_cloudwatch_metric_alarm" "lambda_invocation_rate" {
 
   alarm_description = "More than 50 invocations of ${local.lambda_function_name} in five minutes. Normal use is one invocation per track processed, so this means a runaway loop. See docs/runbooks/incident-tool-down.md#rollback."
 }
+
+# --- Failure detection (#451) ---
+# Any failed invocation alarms. The invocation-rate alarm above only sees a runaway
+# loop, so a deploy that fails on every track would otherwise be noticed only when
+# someone uses the tool. A rejected (undecodable) upload also counts as an error; at
+# this traffic that is worth an email too. Missing data is not breaching for the same
+# reason as above.
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  alarm_name          = "${local.lambda_function_name}-errors"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = local.lambda_function_name }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [data.aws_sns_topic.budget_alerts.arn]
+  ok_actions          = [data.aws_sns_topic.budget_alerts.arn]
+
+  alarm_description = "${local.lambda_function_name} failed at least once in five minutes. Check its log group, /aws/lambda/${local.lambda_function_name}; see docs/runbooks/incident-tool-down.md."
+}
