@@ -4,11 +4,19 @@ vi.mock("@/lib/aws", () => ({
   getObjectBytes: vi.fn(),
   putObjectJson: vi.fn(),
   objectExists: vi.fn(),
+  getObjectText: vi.fn(),
+  putObjectConditional: vi.fn(),
 }));
 vi.mock("@/lib/openrouter", () => ({ extractResumeFromPdf: vi.fn() }));
 
 import { POST } from "./route";
-import { getObjectBytes, putObjectJson, objectExists } from "@/lib/aws";
+import {
+  getObjectBytes,
+  getObjectText,
+  objectExists,
+  putObjectConditional,
+  putObjectJson,
+} from "@/lib/aws";
 import { extractResumeFromPdf } from "@/lib/openrouter";
 
 const VALID = {
@@ -36,6 +44,55 @@ describe("POST /api/resume/extract", () => {
     );
     vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from("%PDF-1.7 minimal header"));
     vi.mocked(extractResumeFromPdf).mockResolvedValue(VALID);
+    // The extraction lock (#110), with S3's conditional-write semantics.
+    const locks = new Map<string, { text: string; etag: string }>();
+    let n = 0;
+    vi.mocked(putObjectConditional).mockImplementation(async (_b, key, body, ifMatch) => {
+      const existing = locks.get(key);
+      if (ifMatch === undefined ? existing : existing?.etag !== ifMatch) return null;
+      const etag = `"e${++n}"`;
+      locks.set(key, { text: body, etag });
+      return etag;
+    });
+    vi.mocked(getObjectText).mockImplementation(async (_b, key) => locks.get(key) ?? null);
+  });
+
+  it("pays for one model call when two requests for a draft race (#110)", async () => {
+    vi.mocked(extractResumeFromPdf).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(VALID), 30)),
+    );
+
+    const [a, b] = await Promise.all([POST(post({ draftId: "abc" })), POST(post({ draftId: "abc" }))]);
+
+    expect(extractResumeFromPdf).toHaveBeenCalledTimes(1);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+  });
+
+  it("releases the lock so a later re-extraction can run", async () => {
+    await POST(post({ draftId: "abc" }));
+    const res = await POST(post({ draftId: "abc", force: true }));
+    expect(res.status).toBe(200);
+    expect(extractResumeFromPdf).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases the lock when the model call fails", async () => {
+    vi.mocked(extractResumeFromPdf).mockRejectedValueOnce(new Error("upstream 500"));
+    expect((await POST(post({ draftId: "abc" }))).status).toBe(502);
+    expect((await POST(post({ draftId: "abc" }))).status).toBe(200);
+  });
+
+  it("answers from the cache when the lock holder finished first", async () => {
+    // Not there at the first check, there by the time the lock is taken.
+    let jsonChecks = 0;
+    vi.mocked(objectExists).mockImplementation(async (_bucket, key) =>
+      key.endsWith("resume.pdf") || (key.endsWith("resume.json") && ++jsonChecks > 1),
+    );
+    vi.mocked(getObjectBytes).mockResolvedValue(Buffer.from(JSON.stringify(VALID)));
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(await res.json()).toEqual({ draftId: "abc", resume: VALID, cached: true });
+    expect(extractResumeFromPdf).not.toHaveBeenCalled();
   });
 
   it("extracts, validates, and writes the draft JSON", async () => {

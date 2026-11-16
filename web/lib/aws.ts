@@ -152,15 +152,66 @@ export async function putObjectJson(
 }
 
 export async function objectExists(bucket: string, key: string): Promise<boolean> {
+  return (await objectEtag(bucket, key)) !== null;
+}
+
+/** The object's ETag, or null when it isn't there. */
+export async function objectEtag(bucket: string, key: string): Promise<string | null> {
   try {
-    await getS3Client().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-    return true;
+    const res = await getS3Client().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return res.ETag ?? "";
   } catch (err) {
-    // Only "it isn't there" is a false; anything else (credentials, network,
+    // Only "it isn't there" is a null; anything else (credentials, network,
     // a bucket that does not exist) must surface rather than be reported as
     // an absent object, which callers treat as a normal first-publish state.
     const name = (err as { name?: string }).name;
-    if (name === "NotFound" || name === "NoSuchKey") return false;
+    if (name === "NotFound" || name === "NoSuchKey") return null;
+    throw err;
+  }
+}
+
+// S3's answers when a conditional write loses: 412 when the condition is false,
+// 409 when another conditional write to the key is in flight, and 404 for an
+// If-Match on a key that is gone.
+const LOST_CONDITION = new Set(["PreconditionFailed", "ConditionalRequestConflict", "NoSuchKey", "NotFound"]);
+
+/** Writes `body` only if the key does not exist (`If-None-Match: *`), or only if
+ * its ETag is still `ifMatch`. Returns the new ETag, or null when the condition
+ * lost, so two callers can race for the same key and exactly one wins. */
+export async function putObjectConditional(
+  bucket: string,
+  key: string,
+  body: string,
+  ifMatch?: string,
+): Promise<string | null> {
+  try {
+    const res = await getS3Client().send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        ContentType: "application/json",
+        Body: body,
+        ...(ifMatch === undefined ? { IfNoneMatch: "*" } : { IfMatch: ifMatch }),
+      }),
+    );
+    return res.ETag ?? "";
+  } catch (err) {
+    if (LOST_CONDITION.has((err as { name?: string }).name ?? "")) return null;
+    throw err;
+  }
+}
+
+/** The object's text and ETag, or null when it isn't there. */
+export async function getObjectText(
+  bucket: string,
+  key: string,
+): Promise<{ text: string; etag: string } | null> {
+  try {
+    const res = await getS3Client().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    return { text: await res.Body!.transformToString(), etag: res.ETag ?? "" };
+  } catch (err) {
+    const name = (err as { name?: string }).name;
+    if (name === "NotFound" || name === "NoSuchKey") return null;
     throw err;
   }
 }

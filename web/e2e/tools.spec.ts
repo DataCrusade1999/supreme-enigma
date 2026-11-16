@@ -59,8 +59,8 @@ test("the resume admin is reachable from the hub without typing a URL", async ({
   await expect(page.getByRole("heading", { name: "Publish a resume" })).toBeVisible();
 });
 
-// The e2e environment has no BUTTONDOWN_API_KEY, so isIssueSent throws and
-// every row falls back to "Status unknown". Assert on the heading and the row,
+// The e2e environment has no BUTTONDOWN_API_KEY, so the page lists nothing
+// from Buttondown and every row says the key is not set. Assert on the heading and the row,
 // never on a Send button — that would tie the suite to a live Buttondown account.
 test("the newsletter admin is reachable from the hub without typing a URL", async ({ page, baseURL }) => {
   await signIn(page, baseURL!);

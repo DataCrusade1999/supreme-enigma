@@ -71,6 +71,11 @@ describe("IndicatorTable", () => {
     );
   });
 
+  it("says the previous value was not found when only one period came back (#266)", () => {
+    render(<IndicatorTable indicators={[{ ...fresh, prevPeriod: null, prev: null }]} now={NOW} />);
+    expect(screen.getByText("not found")).toBeInTheDocument();
+  });
+
   it("says when there are no indicators yet", () => {
     render(<IndicatorTable indicators={[]} now={NOW} />);
     expect(screen.getByText("Indicators load on the next Refresh.")).toBeInTheDocument();
