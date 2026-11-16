@@ -7,6 +7,26 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- An alarm on BGM Looper Lambda errors in every environment, emailed through
+  that account's alerts topic (#451).
+
+### Changed
+
+- BGM Looper accepts only audio uploads (MP3, WAV, FLAC, OGG, Opus, AIFF), the
+  formats the Lambda can decode, and processes only keys it issued under `uploads/`, in the route
+  and in the Lambda (#402).
+- The Lambda's role reads only `uploads/` and writes only `outputs/` (#170).
+- Lambda logs are kept for 14 days instead of forever (#450).
+- The SES bounce and complaint alarms fire at 2% and 0.05%, well before AWS's
+  5% and 0.1% review thresholds (#391).
+
+### Fixed
+
+- The Lambda image build fails at the ffmpeg download, with a message saying
+  so, when the host returns something other than the archive (#126).
+
 ### Removed
 
 - The unused `APP_PASSWORD` Vercel env var and its Terraform input. Sign-in has

@@ -33,3 +33,10 @@ module "env" {
   # CI has actually pushed to this account's ECR, before the first apply.
   bootstrap_image_tag = "stage-37f1cf03846f10993c2fc7516e47e1d8e8b1664b"
 }
+
+# Lambda created this log group before Terraform managed it (#450). Once applied the
+# block is a no-op and can be deleted.
+import {
+  to = module.env.module.environment.aws_cloudwatch_log_group.lambda
+  id = "/aws/lambda/bgm-looper-processor-stage"
+}

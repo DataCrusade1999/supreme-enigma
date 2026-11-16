@@ -149,13 +149,14 @@ resource "aws_sesv2_account_suppression_attributes" "site" {
   suppressed_reasons = ["BOUNCE", "COMPLAINT"]
 }
 
-# AWS reviews an account at a 5% bounce rate or a 0.1% complaint rate. Both alarms
-# go to the budget-alerts topic, whose policy already lets CloudWatch publish.
+# AWS reviews an account at a 5% bounce rate or a 0.1% complaint rate. The alarms fire
+# well below that, at 2% and 0.05%, so there is time to act before a review (#391).
+# Both go to the budget-alerts topic, whose policy already lets CloudWatch publish.
 # treat_missing_data = "notBreaching" because SES emits nothing while idle.
 locals {
   ses_reputation_alarms = {
-    bounce    = { metric = "Reputation.BounceRate", threshold = 0.05 }
-    complaint = { metric = "Reputation.ComplaintRate", threshold = 0.001 }
+    bounce    = { metric = "Reputation.BounceRate", threshold = 0.02 }
+    complaint = { metric = "Reputation.ComplaintRate", threshold = 0.0005 }
   }
 }
 
@@ -173,5 +174,5 @@ resource "aws_cloudwatch_metric_alarm" "ses_reputation" {
   alarm_actions       = [aws_sns_topic.budget_alerts.arn]
   ok_actions          = [aws_sns_topic.budget_alerts.arn]
 
-  alarm_description = "SES ${each.key} rate at or above AWS's review threshold. Check bounce or complaint notices in the no-reply@ alias and stop the sender before AWS pauses sending."
+  alarm_description = "SES ${each.key} rate at or above its alarm threshold, well below AWS's review threshold. Check bounce or complaint notices in the no-reply@ alias and stop the sender before AWS pauses sending."
 }
