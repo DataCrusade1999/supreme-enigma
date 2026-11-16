@@ -14,6 +14,7 @@ sequence), `.claude/rules/infra.md` (Terraform per-file detail),
 | [infra-apply-teardown.md](infra-apply-teardown.md) | Running `terraform plan`/`apply`, or the kill switch. |
 | [account-suspension-recovery.md](account-suspension-recovery.md) | An AWS account is back after a suspension. |
 | [link-owner-google.md](link-owner-google.md) | Once, after access control ships: make Google sign in as the owner user. |
+| [nonprod-email-testing.md](nonprod-email-testing.md) | Testing an Access email on dev or stage before it reaches production. |
 
 ## Shared prerequisites
 
