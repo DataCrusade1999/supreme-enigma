@@ -48,3 +48,21 @@ variable "avp_policy_store_id" {
   description = "This account's Verified Permissions policy store, the value of AVP_POLICY_STORE_ID."
   type        = string
 }
+
+variable "openrouter_api_key" {
+  description = "OpenRouter key, the value of OPENROUTER_API_KEY."
+  type        = string
+  sensitive   = true
+}
+
+variable "openrouter_model" {
+  description = "Model slug for resume extraction, the value of OPENROUTER_MODEL."
+  type        = string
+  default     = "anthropic/claude-haiku-4.5"
+}
+
+variable "news_desk_model" {
+  description = "Model slug for the News Desk's headline tagging and chat, the value of NEWS_DESK_MODEL."
+  type        = string
+  default     = "anthropic/claude-haiku-4.5"
+}
