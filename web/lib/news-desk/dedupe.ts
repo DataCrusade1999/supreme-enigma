@@ -44,8 +44,12 @@ export function mergeHeadlines(existing: Headline[], incoming: Headline[], now: 
       (k) => k.id === headline.id || Math.abs(Date.parse(k.publishedAt) - at) < SAME_STORY_MS,
     );
     if (i === -1) kept.push(headline);
-    // The tag carries over so a story already tagged is not paid for again.
-    else if (!kept[i].direct && headline.direct) kept[i] = { ...headline, tag: kept[i].tag };
+    // The tag and its attempt count carry over so a story already tagged, or
+    // already given up on, is not paid for again.
+    else if (!kept[i].direct && headline.direct) {
+      const { tagAttempts } = kept[i];
+      kept[i] = { ...headline, tag: kept[i].tag, ...(tagAttempts === undefined ? {} : { tagAttempts }) };
+    }
     // A stored item from before regions has none; take it from the fresh copy.
     else if (!kept[i].region && headline.region) kept[i] = { ...kept[i], region: headline.region };
     byTitle.set(key, kept);

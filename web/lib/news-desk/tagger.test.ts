@@ -119,6 +119,9 @@ describe("tagHeadlines", () => {
     expect(result.tags.has(items[150].id)).toBe(false);
     expect(result.tags.has(items[249].id)).toBe(true);
     expect(result).toMatchObject({ calls: 3, failedCalls: 1 });
+    // The failed chunk's items were not answered, so they cost no attempt (#263).
+    expect(result.answered.size).toBe(150);
+    expect(result.answered.has(items[150].id)).toBe(false);
   });
 
   it("leaves the chunk untagged when the content is not JSON", async () => {
@@ -162,7 +165,7 @@ describe("tagHeadlines", () => {
   it("makes no request when there is nothing to tag", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    expect(await tagHeadlines([])).toEqual({ tags: new Map(), calls: 0, failedCalls: 0, costUsd: 0 });
+    expect(await tagHeadlines([])).toEqual({ tags: new Map(), answered: new Set(), calls: 0, failedCalls: 0, costUsd: 0 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

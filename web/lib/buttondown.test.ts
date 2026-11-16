@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isButtondownConfigured, isIssueSent, sendIssue } from "./buttondown";
+import { isButtondownConfigured, isIssueSent, listEmailSlugs, MAX_PAGES, sendIssue } from "./buttondown";
 
 describe("buttondown", () => {
   beforeEach(() => {
@@ -51,6 +51,65 @@ describe("buttondown", () => {
         vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => "unauthorized" }),
       );
       await expect(isIssueSent("issue-one")).rejects.toThrow();
+    });
+  });
+
+  describe("list paging and back-off (#132)", () => {
+    const page = (slugs: string[], next: string | null) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        results: slugs.map((slug, i) => ({ id: String(i), slug, subject: slug, status: "sent" })),
+        next,
+      }),
+    });
+
+    it("gives up after MAX_PAGES pages of a cursor that never ends", async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => page([], "https://api.buttondown.com/v1/emails?page=n"));
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(isIssueSent("issue-one")).rejects.toThrow(/100 pages/);
+      expect(fetchMock).toHaveBeenCalledTimes(MAX_PAGES);
+    });
+
+    it("waits out a 429 and carries on", async () => {
+      vi.useFakeTimers();
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ "retry-after": "2" }), text: async () => "" })
+        .mockResolvedValueOnce(page(["issue-one"], null));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = isIssueSent("issue-one");
+      await vi.advanceTimersByTimeAsync(2000);
+
+      await expect(result).resolves.toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      vi.useRealTimers();
+    });
+
+    it("reports a 429 that does not clear", async () => {
+      vi.useFakeTimers();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers(), text: async () => "slow down" }),
+      );
+
+      const result = isIssueSent("issue-one");
+      const assertion = expect(result).rejects.toThrow(/429/);
+      await vi.advanceTimersByTimeAsync(1000 + 2000 + 4000);
+
+      await assertion;
+      vi.useRealTimers();
+    });
+
+    it("lists every slug in one walk", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(page(["a", "b"], "https://api.buttondown.com/v1/emails?page=2"))
+        .mockResolvedValueOnce(page(["c"], null));
+      vi.stubGlobal("fetch", fetchMock);
+      expect(await listEmailSlugs()).toEqual(new Set(["a", "b", "c"]));
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 
