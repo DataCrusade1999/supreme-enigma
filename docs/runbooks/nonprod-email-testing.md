@@ -76,10 +76,13 @@ delete the identity and create it again.
 
 | Action on the Access page | Email |
 |---|---|
-| First **Grant** to a member | Welcome ("Welcome. <Tool> is ready for you") |
-| Any later **Grant** | Update ("You can now use <Tool>" or "Your access to <Tool> has changed") |
+| **Grant** to a member with no `_welcomed` row | Welcome ("Welcome. <Tool> is ready for you") |
+| **Grant** to a member with a `_welcomed` row | Update ("You can now use <Tool>" or "Your access to <Tool> has changed") |
 | **Revoke** of an unexpired grant | Ended |
 | **Remove** of a member with an unexpired grant | Ended |
+
+The `_welcomed` row is written only when a welcome actually sends, so after a
+failed welcome the next grant sends the welcome again, not an update.
 
 The change saves even when the email fails. A failed send shows as
 "Saved, but the email failed: …" at the top of the page.
@@ -105,7 +108,12 @@ The change saves even when the email fails. A failed send shows as
 
   Expect `_welcomed` next to the grant keys.
 - **The logs**, when the page showed an error. The deployment URL is on the
-  Vercel dashboard, or in `gh api "repos/DataCrusade1999/supreme-enigma/deployments?sha=<sha>"`:
+  Vercel dashboard, or in the deployment's latest status on GitHub:
+
+  ```bash
+  ID=$(gh api "repos/DataCrusade1999/supreme-enigma/deployments?sha=<sha>" --jq '.[0].id')
+  gh api "repos/DataCrusade1999/supreme-enigma/deployments/$ID/statuses" --jq '.[0].environment_url'
+  ```
 
   ```bash
   vercel logs --project bgm-looper --deployment <deployment-url> \
