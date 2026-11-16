@@ -1,12 +1,12 @@
-# SES for this environment's Cognito sign-in codes. The identity is the branch
-# subdomain, <env>.<dns_domain>, so production's apex identity and its DNS records stay
-# untouched (spec §8). The account stays in the SES sandbox: the only recipient is the
-# owner, a verified identity below.
+# SES for this environment's Cognito sign-in codes and Access emails. The identity is
+# the branch subdomain, <env>.<dns_domain>, so production's apex identity and its DNS
+# records stay untouched (spec §8). The account stays in the SES sandbox: the only
+# recipient is the owner, a verified identity below.
 #
-# No custom MAIL FROM and no DMARC record. DKIM alone aligns this subdomain's mail
-# for DMARC, and the apex _dmarc record (p=quarantine since #508, in infra/prod/account)
-# already covers subdomains that publish none of their own. If this identity's DKIM
-# ever fails, its mail goes to spam.
+# No DMARC record of its own: the apex _dmarc record (p=quarantine since #508, in
+# infra/prod/account) covers subdomains that publish none. A custom MAIL FROM at
+# mail.<env>.<dns_domain> (#514) aligns the mail on SPF as well as DKIM, so a DKIM
+# failure alone no longer sends it to spam.
 
 resource "aws_sesv2_email_identity" "domain" {
   email_identity = local.site_host
@@ -26,6 +26,35 @@ resource "vercel_dns_record" "ses_dkim" {
   name    = "${aws_sesv2_email_identity.domain.dkim_signing_attributes[0].tokens[count.index]}._domainkey.${var.env}"
   type    = "CNAME"
   value   = "${aws_sesv2_email_identity.domain.dkim_signing_attributes[0].tokens[count.index]}.dkim.amazonses.com"
+  ttl     = 1800
+}
+
+# Same as production's in infra/prod/account/email.tf: if the MX record ever goes
+# missing, SES falls back to its own MAIL FROM rather than refusing to send.
+resource "aws_sesv2_email_identity_mail_from_attributes" "domain" {
+  email_identity         = aws_sesv2_email_identity.domain.email_identity
+  mail_from_domain       = "mail.${local.site_host}"
+  behavior_on_mx_failure = "USE_DEFAULT_VALUE"
+
+  depends_on = [vercel_dns_record.mail_from_mx, vercel_dns_record.mail_from_spf]
+}
+
+resource "vercel_dns_record" "mail_from_mx" {
+  team_id     = var.vercel_team_id
+  domain      = var.dns_domain
+  name        = "mail.${var.env}"
+  type        = "MX"
+  value       = "feedback-smtp.${local.region}.amazonses.com"
+  mx_priority = 10
+  ttl         = 1800
+}
+
+resource "vercel_dns_record" "mail_from_spf" {
+  team_id = var.vercel_team_id
+  domain  = var.dns_domain
+  name    = "mail.${var.env}"
+  type    = "TXT"
+  value   = "v=spf1 include:amazonses.com ~all"
   ttl     = 1800
 }
 
