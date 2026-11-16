@@ -59,10 +59,10 @@ resource "vercel_project" "looper" {
   # sub-paths directly, so the bypass token in the test profile's query string is
   # never carried over, and the plan-generation step truncates the token when the
   # agent tries to re-add it itself. Execution 6d2c9593 blocked 12/12 test cases
-  # on this. The gated parts of the app (/tools/bgm-looper, /api/looper,
-  # /keystatic) are protected by APP_PASSWORD in web/lib/route-gate.ts regardless,
-  # so this exposes only the public portfolio pages, which are already public on
-  # production.
+  # on this. The gated parts of the app (/tools, its API routes, /keystatic)
+  # need Cognito sign-in and a Verified Permissions decision (web/lib/route-gate.ts)
+  # regardless, so this exposes only the public portfolio pages, which are already
+  # public on production.
   vercel_authentication = { deployment_type = "none" }
 }
 
@@ -84,7 +84,7 @@ resource "vercel_project_domain" "custom_www" {
 # Branch domains: each serves the latest deployment of its branch, so they pick
 # up the same git_branch-scoped env vars (bucket, Lambda) as the vercel.app
 # branch URLs. Previews have no Vercel Authentication (see above), so these
-# are public; the tools stay behind APP_PASSWORD.
+# are public; the tools stay behind sign-in.
 resource "vercel_project_domain" "custom_branch" {
   for_each   = toset(["dev", "stage"])
   project_id = vercel_project.looper.id
@@ -122,14 +122,6 @@ resource "vercel_firewall_config" "looper" {
 }
 
 # Production only: dev's and stage's copies of these vars live in infra/modules/nonprod-app.
-resource "vercel_project_environment_variable" "app_password" {
-  project_id = vercel_project.looper.id
-  key        = "APP_PASSWORD"
-  value      = var.app_password
-  target     = ["production"]
-  sensitive  = true
-}
-
 resource "vercel_project_environment_variable" "cookie_secret" {
   project_id = vercel_project.looper.id
   key        = "COOKIE_SECRET"

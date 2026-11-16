@@ -7,6 +7,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Removed
+
+- The unused `APP_PASSWORD` Vercel env var and its Terraform input. Sign-in has
+  gone through Cognito since the auth migration; nothing read it.
+
 ## [1.12.1] - 2026-11-16
 
 ### Changed

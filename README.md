@@ -166,8 +166,8 @@ Requires Terraform ≥1.10, three AWS accounts (production, dev, stage), a
 Vercel account + API token, and a gitignored `terraform.tfvars` in each of
 `infra/prod/account`, `infra/prod/app` and `infra/{dev,stage}/{account,app}`.
 Copy each directory's `terraform.tfvars.example` across and fill it in —
-`infra/prod/account` needs all seven inputs (`vercel_api_token`, `app_password`,
-`github_repo`, `alert_email`, `openrouter_api_key`, `google_client_id`,
+`infra/prod/account` needs all six inputs (`vercel_api_token`, `github_repo`,
+`alert_email`, `openrouter_api_key`, `google_client_id`,
 `google_client_secret`), each nonprod `account` stack `vercel_api_token`,
 `alert_email`, `google_client_id` and `google_client_secret`, `infra/prod/app`
 only `vercel_api_token`, and each env stack `vercel_api_token` and
