@@ -1,5 +1,7 @@
 # Ashutosh Pandey — portfolio & personal tools
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DataCrusade1999/supreme-enigma/badge)](https://scorecard.dev/viewer/?uri=github.com/DataCrusade1999/supreme-enigma)
+
 A personal portfolio site with a small workshop of private tools attached.
 The portfolio half (home, about, projects, resume, blog, contact) is public
 and needs no login. The tools half sits behind an owner-only sign-in —
