@@ -35,6 +35,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
   after a reload of every user (#526).
 - The Access e2e test no longer signs the friend out by racing the owner
   page's own request (#523).
+- Access emails on dev and stage reach every address verified in that
+  account's SES, not only the owner's (#539).
 
 ### Removed
 
