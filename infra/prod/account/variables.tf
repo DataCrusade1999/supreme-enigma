@@ -19,11 +19,6 @@ variable "vercel_api_token" {
   sensitive = true
 }
 
-variable "app_password" {
-  type      = string
-  sensitive = true
-}
-
 variable "github_repo" {
   description = "owner/repo of this project on GitHub, for Vercel git integration"
   type        = string
