@@ -39,8 +39,8 @@ export async function respond(run: () => Promise<Response>): Promise<Response> {
 }
 
 /** The change succeeded; say so, and pass on why the email didn't go, if it didn't. */
-export function changed(emailError: string | null): Response {
-  return NextResponse.json(emailError ? { ok: true, emailError } : { ok: true });
+export function changed(emailError: string | null, saved: Record<string, unknown> = {}): Response {
+  return NextResponse.json(emailError ? { ok: true, ...saved, emailError } : { ok: true, ...saved });
 }
 
 /** Run a send; a sender that throws is reported like one that returns an error. */

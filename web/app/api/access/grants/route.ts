@@ -24,7 +24,8 @@ export async function PUT(request: Request) {
     } catch (err) {
       console.error("access: reading the welcome marker failed", err);
     }
-    if (welcomed) return changed(await attempt(() => sendUpdate(user, grant, opensTool)));
+    // The saved grant goes back so the Access page can show it before its reload.
+    if (welcomed) return changed(await attempt(() => sendUpdate(user, grant, opensTool)), { grant });
     const emailError = await attempt(() => sendWelcome(user, grant));
     if (emailError === null) {
       try {
@@ -33,6 +34,6 @@ export async function PUT(request: Request) {
         console.error("access: writing the welcome marker failed", err);
       }
     }
-    return changed(emailError);
+    return changed(emailError, { grant });
   });
 }

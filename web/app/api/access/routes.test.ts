@@ -70,6 +70,8 @@ describe("/api/access", () => {
     vi.mocked(grantAction).mockResolvedValue({ user, grant: { expiresAt: 99 } as never, opensTool: true });
     const res = await grantRoute(json({ sub: "u1", action: "newsdesk:ask" }));
     expect(res.status).toBe(200);
+    // The Access page shows the saved grant without waiting for a reload (#526).
+    expect(await res.json()).toEqual({ ok: true, grant: { expiresAt: 99 } });
     expect(grantAction).toHaveBeenCalledWith(
       expect.objectContaining({ sub: "u1", action: "newsdesk:ask", limit: 20, expiresInDays: 7, now: expect.any(Number) }),
     );
@@ -149,7 +151,7 @@ describe("/api/access emails", () => {
   it("the first grant sends the welcome, then marks the member welcomed", async () => {
     vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool: true });
     const res = await grantFor();
-    expect(await res.json()).toEqual({ ok: true });
+    expect(await res.json()).toEqual({ ok: true, grant: ask });
     expect(sendWelcome).toHaveBeenCalledWith(user, ask);
     expect(marker.markWelcomed).toHaveBeenCalledWith("u1", expect.any(Number));
     expect(sendUpdate).not.toHaveBeenCalled();
@@ -160,7 +162,7 @@ describe("/api/access emails", () => {
     vi.mocked(sendWelcome).mockResolvedValue("MessageRejected: Email address is not verified.");
     const res = await grantFor();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, emailError: "MessageRejected: Email address is not verified." });
+    expect(await res.json()).toEqual({ ok: true, grant: ask, emailError: "MessageRejected: Email address is not verified." });
     expect(marker.markWelcomed).not.toHaveBeenCalled();
   });
 
@@ -170,7 +172,7 @@ describe("/api/access emails", () => {
     vi.mocked(sendWelcome).mockRejectedValue(new Error("boom"));
     const res = await grantFor();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, emailError: "Error: boom" });
+    expect(await res.json()).toEqual({ ok: true, grant: ask, emailError: "Error: boom" });
     expect(marker.markWelcomed).not.toHaveBeenCalled();
   });
 
@@ -181,7 +183,7 @@ describe("/api/access emails", () => {
     vi.mocked(sendUpdate).mockRejectedValue(new Error("boom"));
     const res = await grantFor();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, emailError: "Error: boom" });
+    expect(await res.json()).toEqual({ ok: true, grant: ask, emailError: "Error: boom" });
   });
 
   it.each([true, false])("a welcomed member gets an update with opensTool %s", async (opensTool) => {
@@ -199,7 +201,7 @@ describe("/api/access emails", () => {
     vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool: true });
     const res = await grantFor();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
+    expect(await res.json()).toEqual({ ok: true, grant: ask });
     expect(sendUpdate).toHaveBeenCalledWith(user, ask, true);
     expect(sendWelcome).not.toHaveBeenCalled();
   });
@@ -210,7 +212,7 @@ describe("/api/access emails", () => {
     vi.mocked(grantAction).mockResolvedValue({ user, grant: ask, opensTool: true });
     const res = await grantFor();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
+    expect(await res.json()).toEqual({ ok: true, grant: ask });
     expect(sendWelcome).toHaveBeenCalled();
   });
 

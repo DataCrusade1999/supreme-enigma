@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AccessStatus, AccessUser } from "../../lib/access-admin";
 import type { Grant } from "../../lib/authz/grants";
 import { GRANT_KEYS, GRANTS, type GrantKey } from "../../lib/route-gate";
@@ -25,14 +25,22 @@ export function AccessAdmin() {
   const [notice, setNotice] = useState<string | null>(null);
   // Epoch seconds at the last load, so row state is not computed during render.
   const [now, setNow] = useState(0);
+  // What each row is doing while its change runs, e.g. "Approving…", by sub (#526).
+  const [busy, setBusy] = useState<Record<string, string>>({});
+  // Reloads can return out of order; only the latest one may replace the list.
+  const latestLoad = useRef(0);
 
   const load = useCallback(async () => {
+    const n = ++latestLoad.current;
     const res = await fetch("/api/access/users");
+    if (n !== latestLoad.current) return;
     if (!res.ok) {
       setError("Couldn't load users.");
       return;
     }
-    setUsers((await res.json()).users);
+    const { users } = await res.json();
+    if (n !== latestLoad.current) return;
+    setUsers(users);
     setNow(Math.floor(Date.now() / 1000));
   }, []);
 
@@ -42,20 +50,41 @@ export function AccessAdmin() {
     void load();
   }, [load]);
 
-  async function change(url: string, init: RequestInit): Promise<boolean> {
+  /** Runs one change for one row. On success `apply` updates the list straight away
+   * and the directory reloads in the background, so the row doesn't wait on a
+   * reload of every user (#526). */
+  async function change(
+    sub: string,
+    running: string,
+    url: string,
+    init: RequestInit,
+    apply: (rows: Row[], body: { grant?: Grant }) => Row[],
+  ): Promise<boolean> {
     setError(null);
     setNotice(null);
-    const res = await fetch(url, { ...init, headers: { "Content-Type": "application/json" } });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(body.error ?? "The change failed.");
-      return false;
+    setBusy((b) => ({ ...b, [sub]: running }));
+    try {
+      const res = await fetch(url, { ...init, headers: { "Content-Type": "application/json" } });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body.error ?? "The change failed.");
+        return false;
+      }
+      if (body.emailError) setNotice(`Saved, but the email failed: ${body.emailError}`);
+      setUsers((rows) => (rows ? apply(rows, body) : rows));
+      void load();
+      return true;
+    } finally {
+      setBusy((b) => {
+        const rest = { ...b };
+        delete rest[sub];
+        return rest;
+      });
     }
-    // Part 3 fills this in when the change saved but the email didn't send.
-    if (body.emailError) setNotice(`Saved, but the email failed: ${body.emailError}`);
-    await load();
-    return true;
   }
+
+  const without = (sub: string) => (rows: Row[]) => rows.filter((u) => u.sub !== sub);
+  const edit = (sub: string, f: (u: Row) => Row) => (rows: Row[]) => rows.map((u) => (u.sub === sub ? f(u) : u));
 
   const by = (status: AccessStatus) => (users ?? []).filter((u) => u.status === status);
 
@@ -72,12 +101,16 @@ export function AccessAdmin() {
               <span className="font-medium">{u.email}</span>
               <span className="text-sm text-muted">first signed in {day(u.createdAt)}</span>
               <span className="ml-auto flex gap-3 text-sm">
-                <button aria-label={`Approve ${u.email}`} className="text-accent hover:text-fg"
-                  onClick={() => change("/api/access/members", { method: "POST", body: JSON.stringify({ sub: u.sub }) })}>
+                {busy[u.sub] ? <span className="text-muted">{busy[u.sub]}</span> : null}
+                <button aria-label={`Approve ${u.email}`} className="text-accent hover:text-fg disabled:opacity-50" disabled={!!busy[u.sub]}
+                  onClick={() =>
+                    change(u.sub, "Approving…", "/api/access/members", { method: "POST", body: JSON.stringify({ sub: u.sub }) },
+                      edit(u.sub, (r) => ({ ...r, status: "member" })))
+                  }>
                   Approve
                 </button>
-                <button aria-label={`Dismiss ${u.email}`} className="text-muted hover:text-fg"
-                  onClick={() => change(`/api/access/pending/${encodeURIComponent(u.sub)}`, { method: "DELETE" })}>
+                <button aria-label={`Dismiss ${u.email}`} className="text-muted hover:text-fg disabled:opacity-50" disabled={!!busy[u.sub]}
+                  onClick={() => change(u.sub, "Dismissing…", `/api/access/pending/${encodeURIComponent(u.sub)}`, { method: "DELETE" }, without(u.sub))}>
                   Dismiss
                 </button>
               </span>
@@ -94,8 +127,10 @@ export function AccessAdmin() {
             <li key={u.sub} className="border-b border-line py-5">
               <div className="flex flex-wrap items-baseline gap-x-4">
                 <span className="font-medium">{u.email}</span>
-                <button aria-label={`Remove ${u.email}`} className="ml-auto text-sm text-muted hover:text-fg"
-                  onClick={() => change(`/api/access/members/${encodeURIComponent(u.sub)}`, { method: "DELETE" })}>
+                {busy[u.sub] ? <span className="ml-auto text-sm text-muted">{busy[u.sub]}</span> : null}
+                <button aria-label={`Remove ${u.email}`} className={`${busy[u.sub] ? "" : "ml-auto "}text-sm text-muted hover:text-fg disabled:opacity-50`}
+                  disabled={!!busy[u.sub]}
+                  onClick={() => change(u.sub, "Removing…", `/api/access/members/${encodeURIComponent(u.sub)}`, { method: "DELETE" }, without(u.sub))}>
                   Remove
                 </button>
               </div>
@@ -105,9 +140,11 @@ export function AccessAdmin() {
                   return (
                   <li key={g.action} className="flex gap-3">
                     <span className={muted ? "text-muted" : undefined}>{text}</span>
-                    <button aria-label={`Revoke ${GRANTS[g.action].label} for ${u.email}`} className="text-muted hover:text-fg"
+                    <button aria-label={`Revoke ${GRANTS[g.action].label} for ${u.email}`} className="text-muted hover:text-fg disabled:opacity-50"
+                      disabled={!!busy[u.sub]}
                       onClick={() =>
-                        change(`/api/access/grants/${encodeURIComponent(u.sub)}/${encodeURIComponent(g.action)}`, { method: "DELETE" })
+                        change(u.sub, "Revoking…", `/api/access/grants/${encodeURIComponent(u.sub)}/${encodeURIComponent(g.action)}`, { method: "DELETE" },
+                          edit(u.sub, (r) => ({ ...r, grants: r.grants.filter((x) => x.action !== g.action) })))
                       }>
                       Revoke
                     </button>
@@ -115,7 +152,12 @@ export function AccessAdmin() {
                   );
                 })}
               </ul>
-              <GrantForm email={u.email} onGrant={(values) => change("/api/access/grants", { method: "PUT", body: JSON.stringify({ sub: u.sub, ...values }) })} />
+              <GrantForm email={u.email} disabled={!!busy[u.sub]}
+                onGrant={(values) =>
+                  change(u.sub, "Granting…", "/api/access/grants", { method: "PUT", body: JSON.stringify({ sub: u.sub, ...values }) },
+                    (rows, { grant }) =>
+                      grant ? edit(u.sub, (r) => ({ ...r, grants: [...r.grants.filter((x) => x.action !== grant.action), grant] }))(rows) : rows)
+                } />
             </li>
           ))}
           {users && by("member").length === 0 ? <li className="py-4 text-sm text-muted">No members yet.</li> : null}
@@ -138,9 +180,11 @@ export function AccessAdmin() {
 
 function GrantForm({
   email,
+  disabled,
   onGrant,
 }: {
   email: string;
+  disabled: boolean;
   onGrant: (values: { action: GrantKey; limit?: number; expiresInDays: number; note: string }) => Promise<boolean>;
 }) {
   const [action, setAction] = useState<GrantKey>("newsdesk:ask");
@@ -187,7 +231,7 @@ function GrantForm({
         <span className="text-muted">Note</span>
         <input id={`${id}-note`} maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} className="border border-line bg-bg px-2 py-1" />
       </label>
-      <button type="submit" className="text-accent hover:text-fg">Grant</button>
+      <button type="submit" className="text-accent hover:text-fg disabled:opacity-50" disabled={disabled}>Grant</button>
     </form>
   );
 }

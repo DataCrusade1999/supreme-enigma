@@ -11,6 +11,10 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 - An alarm on BGM Looper Lambda errors in every environment, emailed through
   that account's alerts topic (#451).
+- Dev and stage send the Access welcome, update and ended emails, from
+  `access@<env>.ashutosh-pandey.com` (#530).
+- Dev's and stage's SES identities have a custom MAIL FROM, so their mail
+  passes DMARC on SPF as well as DKIM (#514).
 
 ### Changed
 
@@ -26,6 +30,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 - The Lambda image build fails at the ffmpeg download, with a message saying
   so, when the host returns something other than the archive (#126).
+- The Access page shows each change running on its row ("Approving…", buttons
+  disabled) and updates the row as soon as the change returns, instead of
+  after a reload of every user (#526).
+- The Access e2e test no longer signs the friend out by racing the owner
+  page's own request (#523).
 
 ### Removed
 
