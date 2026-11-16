@@ -41,15 +41,21 @@ test("the owner's hub lists every tool", async ({ page, baseURL }) => {
   }
 });
 
-test("the owner can open the Access page; a friend can't", async ({ page, baseURL }) => {
+test("the owner can open the Access page; a friend can't", async ({ page, browser, baseURL }) => {
   await signIn(page, baseURL!);
   await page.goto("/tools/access-admin");
   await expect(page.getByRole("heading", { level: 1, name: "Access" })).toBeVisible();
 
-  await page.context().clearCookies();
-  await signIn(page, baseURL!, "friends");
-  await page.goto("/tools/access-admin");
-  await expect(page).toHaveURL(/\/access-denied\?reason=forbidden&tool=access-admin&action=access%3Amanage$/);
-  const api = await page.request.get("/api/access/users");
+  // The friend gets a browser context of their own (#523). Clearing the owner's
+  // cookies in this one raced the owner page's own /api/access/users fetch: sent
+  // without a cookie, it came back from the proxy with a Set-Cookie that expired the
+  // session, which landed after the friend's sign-in and signed them out.
+  const context = await browser.newContext({ baseURL });
+  const friend = await context.newPage();
+  await signIn(friend, baseURL!, "friends");
+  await friend.goto("/tools/access-admin");
+  await expect(friend).toHaveURL(/\/access-denied\?reason=forbidden&tool=access-admin&action=access%3Amanage$/);
+  const api = await friend.request.get("/api/access/users");
   expect(api.status()).toBe(403);
+  await context.close();
 });
