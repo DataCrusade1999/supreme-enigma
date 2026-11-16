@@ -145,11 +145,14 @@ resource "aws_iam_role_policy" "vercel_preview_access" {
       },
       {
         # In the sandbox SES also authorizes the send against the recipient's
-        # verified identity, so the owner's address is listed beside the domain.
+        # verified identity (#539), so every identity in the account is listed:
+        # the domain, the owner, and any test address verified by hand. The
+        # sandbox still delivers only to verified addresses, and the condition
+        # keeps the sender to the one Access address.
         Sid      = "SendAccessEmail"
         Effect   = "Allow"
         Action   = ["ses:SendEmail"]
-        Resource = [aws_sesv2_email_identity.domain.arn, aws_sesv2_email_identity.owner.arn]
+        Resource = ["arn:aws:ses:${local.region}:${local.account_id}:identity/*"]
         Condition = {
           StringEquals = { "ses:FromAddress" = "access@${local.site_host}" }
         }
