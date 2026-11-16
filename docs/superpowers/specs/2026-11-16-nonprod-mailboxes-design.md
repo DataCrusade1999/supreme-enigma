@@ -1,4 +1,4 @@
-# Mailboxes and SES safeguards for dev and stage — design
+# Mailboxes for dev and stage — design
 
 Issue #542. Research findings are in the issue's first comment.
 
@@ -10,21 +10,22 @@ Dev and stage send email from addresses nobody receives:
 - Cognito's sign-in codes go out from `no-reply@<env>.ashutosh-pandey.com` (`infra/modules/nonprod-account/auth.tf`).
 - SES forwards bounce and complaint notices to the sending address (`FeedbackForwardingStatus: true` on both identities, checked 2026-11-16), so those notices go nowhere either.
 
-`<env>` has no MX record today, so all of this mail is undeliverable. Production has none of these gaps: Zoho receives `access@` and `no-reply@` as aliases of the owner's mailbox (#403), and SES has a suppression list and bounce and complaint alarms (#510).
+`<env>` has no MX record today, so all of this mail is undeliverable. Production doesn't have this gap: Zoho receives `access@` and `no-reply@` as aliases of the owner's mailbox (#403).
 
-The owner may later ask AWS for SES production access in the dev and stage accounts. Real people would then receive these emails, reply to them, and bounce them. This design makes dev and stage handle that the way production does, so the request can go in without another infra change.
+Dev and stage stay in the SES sandbox. Only production has SES production access, so only verified test addresses receive these emails. The fix is still worth making: replies from testers, and SES's notices about test mail, should reach the owner the way they do on production.
 
 ## Goals
 
 - Mail to `access@<env>` and `no-reply@<env>` lands in the owner's Zoho inbox, for `dev` and `stage`.
 - The owner can reply from Zoho as `access@<env>` and pass DMARC (aligned SPF and DKIM).
 - SES bounce and complaint notices from dev and stage reach the owner.
-- Each nonprod account has production's SES safeguards: the account suppression list for bounces and complaints, and the two reputation alarms.
+- Each nonprod account's suppression list (BOUNCE and COMPLAINT) is in Terraform. It is already on in both accounts (checked 2026-11-16), so a rebuild must not silently drop it.
 - SES's own records at `<env>` (DKIM CNAMEs, `mail.<env>` MAIL FROM) are unchanged.
 
 ## Non-goals
 
-- Filing the SES production-access request. The owner does that if and when they decide to.
+- SES production access for dev or stage. Only production gets it.
+- Production's bounce and complaint rate alarms (#510). In the sandbox only verified test addresses receive mail, so the rates have nothing to warn about.
 - Any change to the web app or to how emails are sent.
 - A separate `_dmarc.<env>` record. The apex `p=quarantine` already covers subdomains.
 - Subdomain stripping or domain aliasing in Zoho (approach B below).
@@ -56,7 +57,7 @@ The owner may later ask AWS for SES production access in the dev and stage accou
 
 ## Approaches
 
-- **A. One alias per address, on each subdomain (chosen).** In the Zoho console, add `dev.` and `stage.` as domains with mail hosting on, plus four aliases of the owner's mailbox: `access@` and `no-reply@` on each. Terraform adds Zoho's MX, SPF and DKIM records and the SES safeguards. Zoho documents every step, and it matches how the apex works. The cost is two console aliases per new address.
+- **A. One alias per address, on each subdomain (chosen).** In the Zoho console, add `dev.` and `stage.` as domains with mail hosting on, plus four aliases of the owner's mailbox: `access@` and `no-reply@` on each. Terraform adds Zoho's MX, SPF and DKIM records, and the suppression list. Zoho documents every step, and it matches how the apex works. The cost is two console aliases per new address.
 - **B. Subdomain stripping.** Zoho would deliver `x@<env>` to `x@ashutosh-pandey.com`, with no aliases per subdomain. Rejected: Zoho doesn't document whether stripping resolves to an alias, and `access@` and `no-reply@` on the apex are aliases. Replying as `access@<env>` would probably still need the alias, since Zoho sends only from addresses the mailbox owns.
 - **C. SES inbound into S3, plus a forwarding Lambda.** Rejected: new code to maintain, and #403 already dropped it for production.
 
@@ -78,9 +79,8 @@ After the records are live, verify each subdomain's MX, SPF and DKIM in the cons
 - `vercel_dns_record.zoho_mx`: `for_each` over a priority-to-host map, `name = var.env`, `type = "MX"`. Same shape as production's `zoho_mx`.
 - `vercel_dns_record.zoho_spf`: `name = var.env`, `type = "TXT"`, `value = "v=spf1 include:zoho.in -all"`. `-all` from the start, because the apex already showed `spf=pass` with this include (#403, #508). Zoho is the only sender that uses `<env>` as its envelope domain.
 - `vercel_dns_record.zoho_dkim`: `name = "zoho._domainkey.${var.env}"`, `type = "TXT"`, `value = var.zoho_dkim_key`.
-- `aws_sesv2_account_suppression_attributes`: `suppressed_reasons = ["BOUNCE", "COMPLAINT"]`, as on production.
-- `aws_cloudwatch_metric_alarm.ses_reputation`: production's two alarms (bounce ≥ 2%, complaint ≥ 0.05%, hourly maximum, `treat_missing_data = "notBreaching"`), with alarm and OK actions on the account's `budget_alerts` topic. That topic's policy already allows CloudWatch to publish.
-- Rewrite the file's header comment. Zoho now receives `<env>` mail and can send as it, `no-reply@` and `access@` are Zoho aliases, and the safeguards hold whether or not the account is in the sandbox.
+- `aws_sesv2_account_suppression_attributes`: `suppressed_reasons = ["BOUNCE", "COMPLAINT"]`, as on production. It matches what is already set, so the apply changes nothing live.
+- Rewrite the file's header comment. Zoho now receives `<env>` mail and can send as it, and `no-reply@` and `access@` are Zoho aliases. The account stays in the SES sandbox.
 
 ### Terraform: inputs
 
@@ -98,15 +98,13 @@ After the records are live, verify each subdomain's MX, SPF and DKIM in the cons
 
 ### Verification
 
-- **Plan:** `dev/account` adds 3 MX, 1 SPF TXT, 1 DKIM TXT, 1 suppression attributes resource and 2 alarms, and nothing else. No other stack changes.
+- **Plan:** `dev/account` adds 3 MX, 1 SPF TXT, 1 DKIM TXT and 1 suppression attributes resource, and nothing else. No other stack changes.
 - **DNS:** after the merge, `nslookup -type=MX dev.ashutosh-pandey.com` returns the three Zoho hosts. TXT returns exactly one `v=spf1`. `zoho._domainkey.dev` returns the key.
 - **Zoho console:** shows MX, SPF and DKIM verified for `dev.`.
 - **Mail:**
   - From an outside account, mail to `access@dev.` and `no-reply@dev.` lands in the owner's inbox.
   - A reply from Zoho as `access@dev.` shows `spf=pass`, `dkim=pass` and `dmarc=pass` in the received headers.
-- **SES:**
-  - `aws sesv2 get-account --profile personal-dev-ro --region us-east-1` shows `SuppressionAttributes` with both reasons.
-  - Both alarms exist and are `OK` (idle).
+- **SES:** `aws sesv2 get-account --profile personal-dev-ro --region us-east-1` shows `SuppressionAttributes` with both reasons.
 - Repeat for stage after the promotion.
 
 ## Rollout
