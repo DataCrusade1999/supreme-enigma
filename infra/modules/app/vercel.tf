@@ -67,7 +67,7 @@ resource "aws_iam_role_policy" "vercel" {
         # ListBucket, S3 answers a GetObject for a missing key with 403, not 404. The
         # News Desk's first page load reads a snapshot that does not exist yet, and
         # would report that as a permissions failure. Grants listing key names in this
-        # environment's bucket.
+        # environment's bucket; a prefix condition can't narrow that (#173).
         Sid      = "NewsDeskMissingSnapshotIs404"
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]

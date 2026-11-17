@@ -27,6 +27,7 @@ variable "github_repo" {
 variable "alert_email" {
   description = "Address that receives budget threshold notifications. The SNS email subscription must be confirmed manually from the inbox after the first apply."
   type        = string
+  sensitive   = true
 }
 
 variable "openrouter_api_key" {

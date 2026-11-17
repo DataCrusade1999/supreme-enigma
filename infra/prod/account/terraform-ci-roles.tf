@@ -25,8 +25,11 @@ locals {
 data "aws_iam_policy_document" "tf_trust" {
   for_each = {
     plan = ["${local.github_sub_prefix}:pull_request", "${local.github_sub_prefix}:ref:refs/heads/dev"]
-    # main applies both production stacks, `prod/account` then `prod/app` (#524).
-    prod = ["${local.github_sub_prefix}:ref:refs/heads/main"]
+    # main applies both production stacks, `prod/account` then `prod/app` (#524), from
+    # terraform.yml's apply-prod job. A job in an environment gets the environment's
+    # subject instead of the branch's, and terraform-prod needs the owner's approval
+    # and allows only main, so nothing applies to production unattended (#399).
+    prod = ["${local.github_sub_prefix}:environment:terraform-prod"]
   }
 
   statement {
@@ -79,10 +82,11 @@ resource "aws_iam_role_policy" "tf_plan" {
 }
 
 # `prod/account` then `prod/app` on pushes to main, plus manual runs of either from main
-# (#524). Only main is trusted, so a `prod/account` change reaches production when it
-# ships, not when it merges to dev. Every service the stacks manage, with IAM limited to this
-# project's names. It can edit its own role — inherent to letting CI manage the roles;
-# a local apply is the way back.
+# (#524), each approved by the owner in the terraform-prod environment (#399). Only that
+# environment is trusted, so a `prod/account` change reaches production when it ships,
+# not when it merges to dev. Every service the stacks manage, with IAM limited to this
+# project's names. It can edit its own role, which is why the approval matters; a local
+# apply is the way back.
 resource "aws_iam_role" "tf_apply_prod" {
   name               = "${var.project_name}-tf-apply-prod"
   assume_role_policy = data.aws_iam_policy_document.tf_trust["prod"].json
@@ -99,12 +103,42 @@ data "aws_iam_policy_document" "tf_apply_prod" {
     actions   = ["s3:PutObject", "s3:DeleteObject"]
     resources = ["${local.tf_state_bucket_arn}/shared/*", "${local.tf_state_bucket_arn}/envs/main/*"]
   }
+  # The services the stacks manage, each limited to this project's resources (#401):
+  # by name where the stacks name them, and to this account where AWS picks the ID
+  # (user pool, certificate, policy store, SES identities).
   statement {
-    sid = "Services"
+    sid = "ProjectNamedResources"
     actions = [
-      "lambda:*", "cloudwatch:*", "sns:*", "budgets:*", "ecr:*",
-      "cognito-idp:*", "ses:*", "acm:*", "logs:*",
-      "verifiedpermissions:*", "dynamodb:*",
+      "lambda:*", "logs:*", "sns:*", "ecr:*", "cloudwatch:*", "budgets:*", "dynamodb:*",
+    ]
+    resources = [
+      "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${var.project_name}-*",
+      "arn:aws:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/${var.project_name}-*",
+      "arn:aws:sns:${var.aws_region}:${local.account_id}:${var.project_name}-*",
+      "arn:aws:ecr:${var.aws_region}:${local.account_id}:repository/${var.project_name}-*",
+      "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:alarm:${var.project_name}-*",
+      "arn:aws:budgets::${local.account_id}:budget/${var.project_name}-*",
+      "arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/site-access-grants",
+    ]
+  }
+  statement {
+    sid     = "ProjectAccountResources"
+    actions = ["cognito-idp:*", "acm:*", "ses:*", "verifiedpermissions:*"]
+    resources = [
+      "arn:aws:cognito-idp:${var.aws_region}:${local.account_id}:userpool/*",
+      "arn:aws:acm:${var.aws_region}:${local.account_id}:certificate/*",
+      "arn:aws:ses:${var.aws_region}:${local.account_id}:identity/*",
+      "arn:aws:ses:${var.aws_region}:${local.account_id}:configuration-set/*",
+      "arn:aws:verifiedpermissions::${local.account_id}:policy-store/*",
+    ]
+  }
+  statement {
+    # Creates that take no resource ARN, and SES's account-level settings.
+    sid = "ArnlessCreates"
+    actions = [
+      "cognito-idp:CreateUserPool", "acm:RequestCertificate",
+      "verifiedpermissions:CreatePolicyStore",
+      "ses:PutAccountSuppressionAttributes", "ses:PutAccountDetails",
     ]
     resources = ["*"]
   }
