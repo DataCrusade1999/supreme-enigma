@@ -276,11 +276,15 @@ A bare `terraform apply` will not work. The order:
    apply with these records out of state creates a second `v=spf1` TXT at the
    apex, a permerror that gets the domain's mail rejected, plus duplicate MX
    records and a second `_dmarc` TXT, which receivers treat as no DMARC policy.
-   Then apply the rest of `infra/prod/account`; it should show `No changes` for
-   the imported records.
-2. Dev and stage: `infra/<env>/account`, locally, in two passes:
-   first `-var webauthn_enabled=false`, then a plain apply (the
-   `RelyingPartyId` failure in `.claude/rules/infra.md`).
+   Then apply the rest of `infra/prod/account` in two passes, first
+   `-var webauthn_enabled=false`, then a plain apply (the `RelyingPartyId`
+   failure in `.claude/rules/infra.md`); it should show `No changes` for the
+   imported records.
+2. Dev and stage: `infra/<env>/account`, locally, in the same two passes.
+
+   In any of the three, the first pass can stop at `SES identity … is not
+   verified for sending yet` while DKIM verifies. Wait a few minutes and run
+   the same pass again.
 3. Push each branch so CI builds and pushes an image into that account's ECR.
 4. `infra/prod/app`, `infra/dev/app`, `infra/stage/app`.
 

@@ -9,13 +9,31 @@ beforeEach(() => {
   process.env.COOKIE_SECRET = "secret";
 });
 
-function get(next?: string) {
+function get(next?: string, as?: string) {
   const url = new URL("https://site.example/api/auth/login");
   if (next !== undefined) url.searchParams.set("next", next);
+  if (as !== undefined) url.searchParams.set("as", as);
   return GET(new NextRequest(url));
 }
 
 describe("GET /api/auth/login", () => {
+  it("sends a visitor straight to Google, skipping Cognito's own sign-in page", async () => {
+    const location = new URL((await get("/tools")).headers.get("location")!);
+    expect(location.pathname).toBe("/oauth2/authorize");
+    expect(location.searchParams.get("identity_provider")).toBe("Google");
+  });
+
+  it("opens Cognito's full sign-in page for the owner entry", async () => {
+    const location = new URL((await get("/tools", "owner")).headers.get("location")!);
+    expect(location.pathname).toBe("/oauth2/authorize");
+    expect(location.searchParams.has("identity_provider")).toBe(false);
+  });
+
+  it.each(["", "admin", "OWNER"])("treats as=%j as a visitor", async (as) => {
+    const location = new URL((await get("/tools", as)).headers.get("location")!);
+    expect(location.searchParams.get("identity_provider")).toBe("Google");
+  });
+
   it("redirects to Cognito with a state that matches the cookie", async () => {
     const res = await get("/tools/news-desk");
     expect(res.status).toBe(307);

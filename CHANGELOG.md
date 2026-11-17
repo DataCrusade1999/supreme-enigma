@@ -29,6 +29,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
   5% and 0.1% review thresholds (#391).
 - Chromatic skips its install and upload on a PR into `dev` that touches
   neither `web/` nor `deploy.yml` (#329).
+- Sign-in goes straight to Google. Cognito's page with email code and passkey,
+  which only the owner can use, opens from `/api/auth/login?as=owner`, and the
+  hub's "Add a passkey" link uses it (#546).
+- Rebuilding sign-in from scratch needs no code edits: it stops with a clear
+  "wait and retry" message while the email domain is still verifying, and
+  production can turn passkeys off for the first run with a flag, like dev and
+  stage (#293).
 
 ### Fixed
 
