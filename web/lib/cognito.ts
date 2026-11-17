@@ -32,15 +32,17 @@ export function pkcePair(): { verifier: string; challenge: string } {
 }
 
 /** `path` is the managed-login page: sign-in by default, or /passkeys/add, which
- * takes the same parameters. */
+ * takes the same parameters. `identityProvider` skips Cognito's own page and goes
+ * straight to that provider. */
 export function authorizeUrl(p: {
   redirectUri: string;
   state: string;
   challenge: string;
   path?: "/oauth2/authorize" | "/passkeys/add";
+  identityProvider?: "Google";
 }): string {
   const url = new URL(`${process.env.COGNITO_DOMAIN}${p.path ?? "/oauth2/authorize"}`);
-  url.search = new URLSearchParams({
+  const params = new URLSearchParams({
     response_type: "code",
     client_id: process.env.COGNITO_CLIENT_ID!,
     redirect_uri: p.redirectUri,
@@ -48,7 +50,9 @@ export function authorizeUrl(p: {
     state: p.state,
     code_challenge: p.challenge,
     code_challenge_method: "S256",
-  }).toString();
+  });
+  if (p.identityProvider) params.set("identity_provider", p.identityProvider);
+  url.search = params.toString();
   return url.toString();
 }
 

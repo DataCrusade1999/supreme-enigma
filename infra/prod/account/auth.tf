@@ -22,12 +22,14 @@ module "auth" {
   callback_urls        = local.login_callback_urls
   ses_identity         = aws_sesv2_email_identity.domain.email_identity
   ses_identity_arn     = aws_sesv2_email_identity.domain.arn
+  ses_verified         = aws_sesv2_email_identity.domain.verified_for_sending_status
   from_email_address   = "Sign-in <no-reply@${aws_sesv2_email_identity.domain.email_identity}>"
   google_client_id     = var.google_client_id
   google_client_secret = var.google_client_secret
   owner_email          = var.alert_email
   account_id           = data.aws_caller_identity.current.account_id
   region               = var.aws_region
+  webauthn_enabled     = var.webauthn_enabled
 
   # The certificate validation needs the CAA record below. The module has no data
   # sources, so this defers nothing to apply time.

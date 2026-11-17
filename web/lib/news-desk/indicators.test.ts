@@ -9,7 +9,7 @@ vi.mock("./mospi", async () => {
 });
 
 import { DEFAULT_INDICATORS } from "./defaults";
-import { fetchSeries, refreshIndicators } from "./indicators";
+import { fetchSeries, refreshIndicators, withoutTimeFilters } from "./indicators";
 import { callTool, MospiError } from "./mospi";
 import type { IndicatorDef, IndicatorValue } from "./types";
 
@@ -155,10 +155,40 @@ describe("refreshIndicators", () => {
     expect(value).toMatchObject({ period: "Jul 2026", latest: 6.7, prevPeriod: null, prev: null });
   });
 
+  it("drops a pin's time window so the row follows the latest period (#272)", async () => {
+    vi.mocked(callTool).mockImplementation(async (name, args) => recordedMospi(name, args));
+    const windowed: IndicatorDef = {
+      ...byId("iip"),
+      id: "pin-abc",
+      filters: { ...byId("iip").filters, year: "2025,2026", month_code: "9,10,11,12,1,2,3,4,5,6,7,8" },
+    };
+    await refreshIndicators([windowed], [], NOW);
+    expect(vi.mocked(callTool).mock.calls[0][1]).toEqual({
+      dataset: "IIP",
+      filters: { ...byId("iip").filters, limit: "100", page: "1" },
+    });
+  });
+
   it("takes the label and unit from the current definition, not the previous value", async () => {
     vi.mocked(callTool).mockImplementation(async (name, args) => recordedMospi(name, args));
     const renamed: IndicatorDef = { ...byId("iip"), label: "Industrial output growth" };
     const [value] = await refreshIndicators([renamed], [], NOW);
     expect(value.label).toBe("Industrial output growth");
+  });
+});
+
+describe("withoutTimeFilters", () => {
+  it("drops every dataset's time-window filters and keeps the rest", () => {
+    expect(
+      withoutTimeFilters({
+        base_year: "2022-23",
+        frequency_code: "Quarterly",
+        year: "2026",
+        month_code: "8",
+        financial_year: "2025-26",
+        quarterly_code: "1",
+        quarter_code: "2",
+      }),
+    ).toEqual({ base_year: "2022-23", frequency_code: "Quarterly" });
   });
 });

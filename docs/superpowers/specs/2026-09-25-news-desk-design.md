@@ -111,7 +111,9 @@ After the merge, every headline still tagged `Untagged` is sent: new items, and 
 
 Chunking matters on the first refresh, when every headline is new: about 600 items in one call would need roughly 12,000 output tokens, which would exceed the output cap and take longer than the route's 60 s. Truncated JSON would save everything as `Untagged`, and the retry on the next refresh would fail the same way. At 100 per chunk, each call needs about 1,500 output tokens. `Drop` hides off-topic items (PIB congratulating athletes, for example). They stay in the snapshot with that tag so the next refresh does not tag them again while they are still in the feeds. The page lists them under a Hidden tab, so a real story the model got wrong can still be found. The prompt defines each tag in one or two sentences: Legislation covers bills, Acts, ordinances, amendments and committee reports; Reforms covers policy and regulatory changes by government, RBI, SEBI or the GST Council; Economy is everything else about the Indian economy.
 
-If a chunk's call fails or returns invalid JSON, that chunk's items are saved with tag `Untagged`; other chunks are unaffected. Untagged items appear only under All, and the next refresh retries them because they are not yet tagged. `max_tokens` is 3,000 per chunk.
+If a chunk's call fails or returns invalid JSON, that chunk's items are saved with tag `Untagged`; other chunks are unaffected. Untagged items appear only under All, and the next refresh retries them because they are not yet tagged. Each item counts the refreshes where OpenRouter answered its chunk and left it out (`tagAttempts`), and after three it is no longer sent (#263): an item the model keeps omitting would otherwise be paid for on every refresh until it ages out. A failed call (an outage, a revoked key, a spend cap) costs no attempt, so an outage does not use them up. `max_tokens` is 3,000 per chunk.
+
+A failed snapshot write is retried twice, after 250 ms and 1 s, because the tags in it are already paid for.
 
 ## 6. Indicators
 
@@ -155,7 +157,7 @@ Defaults, verified against MoSPI on 2026-09-26 and pinned by fixture tests again
 
 `series.ts` turns `get_data` rows into `[{period, value}]` sorted by time. It recognizes calendar year + month name, fiscal year + quarter (`Q1`–`Q4`), and a bare fiscal year (`2025-26`). A month inside a fiscal-year label is not placed (#268): `2025-26` is April–March for NAS but July–June for other surveys, nothing in the row says which, and a guess would label every point of the wrong kind a year off. No recorded response uses that shape. A row whose value is null is skipped: base-2024 CPI returns 2025 months with an index but no inflation figure. Two rows for one period make the series invalid, since the filters then match more than one series and either number could be the wrong one. Rows it cannot place in time also make the series invalid, which is what makes a chat answer unpinnable (§7.3). The same function serves the table (last two points) and chat charts (all points), so a pinned row always matches the chart it came from.
 
-A definition with `match` pages through `get_data` (100 rows a page) until it holds two points or reaches the last page, at most 4 pages; the previous month's food row was on page 3 on 2026-09-26. A definition without `match` makes one call.
+A definition with `match` pages through `get_data` (100 rows a page) until it holds two points or reaches the last page, at most 4 pages; the previous month's food row was on page 3 on 2026-09-26. A definition without `match` makes one call. Both rely on MoSPI returning the newest periods first: `get_data` takes no sort or order filter and rejects `sort`, `order`, `sort_by` and `sort_order` as invalid parameters (checked 2026-11-16, #266). A row that ends with one point shows its latest value and "not found" for Prev.
 
 A refresh runs every indicator query in parallel. A failed query keeps the previous values and sets `error` and leaves `lastGoodAt` unchanged.
 
@@ -182,7 +184,7 @@ Errors (MoSPI unreachable, OpenRouter failure, the model refusing to call `answe
 
 `pinnable` is true when the chart query re-ran and `series.ts` produced a valid series. The client shows a Pin button, and the label is editable before saving (default: chart title). `POST /api/news-desk/indicators` appends `{id, label, dataset, filters, valueField, unit, match?}` to `indicators.json`; `DELETE /api/news-desk/indicators/:id` removes one. Both also update the saved snapshot, so a new pin appears in the table at once (with dashes) and a removed one disappears without a Refresh; the new row's values fill on the next Refresh. A duplicate pin gets 409, a default's id 400, an id that is not pinned 404. When `indicators.json` exists but cannot be read, pin and unpin write nothing and answer 500.
 
-Known gap, found measuring on 2026-09-26: the model puts the question's time window into the chart query (`year: "2026", month_code: "8"`, or a twelve-month list), so a pinned row re-runs that window on every Refresh and stops advancing. A pinned IIP chart showed Mar 2026 beside the default IIP row's Jul 2026. A fix has to drop time filters from a pinned query, which depends on whether MoSPI's first page holds the latest rows without them; that has not been checked. Until then a pin is a snapshot of the question's window, not a live row.
+A pin is saved without the question's time window (#272): `year`, `month_code`, `financial_year` (IIP), `quarterly_code` (NAS) and `quarter_code` (PLFS) are dropped, and the refresh drops them again from pins saved before this. Without them, CPI, IIP, NAS and PLFS all return their newest periods on page 1 (checked against MoSPI on 2026-11-16), so a pinned row advances on each Refresh like the defaults. PLFS without `year` returns only the latest year, so a PLFS row has no previous value in January. The id is computed after the drop, so two windows of one series are one pin, and an empty `match` counts as none. A chart with one point is shown but not pinnable.
 
 ## 8. Storage
 
@@ -208,7 +210,7 @@ The bucket lifecycle deliberately has no catch-all expiry rule (`infra/main/envi
 
 The page itself reads the snapshot on the server for the first render.
 
-Indicators do not depend on the headlines, so the refresh runs them concurrently with the feed-and-tag chain. One after the other, feeds (8 s) + tagging (40 s cap) + a paged indicator (up to 4 calls of 10 s) could exceed 60 s. Measured on 2026-09-26 from a local `next dev` against the dev bucket: 10.4 s for a refresh that read 912 headlines, tagged 26 new ones in one call and loaded all five indicators.
+Indicators do not depend on the headlines, so the refresh runs them concurrently with the feed-and-tag chain. One after the other, feeds (8 s) + tagging (40 s cap) + a paged indicator (up to 4 calls of 10 s) could exceed 60 s. Measured on 2026-09-26 from a local `next dev` against the dev bucket: 10.4 s for a refresh that read 912 headlines, tagged 26 new ones in one call and loaded all five indicators. With MoSPI and OpenRouter both held until their timeouts (measured 2026-11-16, #267: S3 in memory, real feeds), the refresh took 41.7 s: the feeds, then tagging stopped at its 40 s cap, with every indicator failing at its 10 s timeout alongside. The feed-and-tag chain is the long pole (at most 8 s + 40 s); a paged indicator at its worst (4 calls just under 10 s) finishes inside it. That leaves about 10 s of the 60 s for the S3 reads, the write and its retries, so no extra deadline was added. Single MoSPI calls took from 0.2 s to 29.7 s that day.
 
 ## 10. Cost
 
@@ -246,7 +248,7 @@ One Terraform change, in Phase 1:
 | Failure | Behaviour |
 |---|---|
 | Feed timeout (8 s) or parse error | Skipped, listed in `sourceErrors`; other feeds still saved |
-| Tagging call fails | New items saved as `Untagged`, retried next refresh |
+| Tagging call fails | New items saved as `Untagged`, retried on the next three refreshes |
 | MoSPI down during refresh | Indicator keeps last good values, `error` set |
 | MoSPI unreachable (HTTP error, timeout, network), or model never calls `answer`, in chat | `error` event; earlier steps stay visible |
 | MoSPI rejects a chat call (bad filter, wrong type) | The rejection goes back to the model as the tool result |

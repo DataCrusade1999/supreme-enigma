@@ -1,5 +1,7 @@
 # Ashutosh Pandey — portfolio & personal tools
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DataCrusade1999/supreme-enigma/badge)](https://scorecard.dev/viewer/?uri=github.com/DataCrusade1999/supreme-enigma)
+
 A personal portfolio site with a small workshop of private tools attached.
 The portfolio half (home, about, projects, resume, blog, contact) is public
 and needs no login. The tools half sits behind an owner-only sign-in —
@@ -143,10 +145,10 @@ COOKIE_SECRET=devsecret COGNITO_DOMAIN=https://auth.ashutosh-pandey.com COGNITO_
 cd lambda
 python -m venv .venv
 # Windows
-.venv/Scripts/python -m pip install -r requirements.txt pytest moto
+.venv/Scripts/python -m pip install --require-hashes -r requirements-dev.txt
 .venv/Scripts/python -m pytest -q
 # macOS/Linux
-# .venv/bin/python -m pip install -r requirements.txt pytest moto
+# .venv/bin/python -m pip install --require-hashes -r requirements-dev.txt
 # .venv/bin/python -m pytest -q
 ```
 
@@ -166,8 +168,8 @@ Requires Terraform ≥1.10, three AWS accounts (production, dev, stage), a
 Vercel account + API token, and a gitignored `terraform.tfvars` in each of
 `infra/prod/account`, `infra/prod/app` and `infra/{dev,stage}/{account,app}`.
 Copy each directory's `terraform.tfvars.example` across and fill it in —
-`infra/prod/account` needs all seven inputs (`vercel_api_token`, `app_password`,
-`github_repo`, `alert_email`, `openrouter_api_key`, `google_client_id`,
+`infra/prod/account` needs all six inputs (`vercel_api_token`, `github_repo`,
+`alert_email`, `openrouter_api_key`, `google_client_id`,
 `google_client_secret`), each nonprod `account` stack `vercel_api_token`,
 `alert_email`, `google_client_id` and `google_client_secret`, `infra/prod/app`
 only `vercel_api_token`, and each env stack `vercel_api_token` and

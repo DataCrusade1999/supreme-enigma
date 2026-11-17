@@ -6,7 +6,7 @@
 # and a customer-managed key would add ~$1/month per key plus per-request
 # charges for no real gain. Accepted 2026-09-18.
 # Deferred for the Terraform state bucket (infra/bootstrap/main.tf), tracked
-# in #217: it holds infra/prod/account's remote state with app_password,
+# in #217: it holds infra/prod/account's remote state with
 # openrouter_api_key and vercel_api_token in plaintext, so an AWS-managed key
 # lets any s3:GetObject principal read them; a CMK would add a KMS-grant
 # layer and CloudTrail auditability. Deferred, not accepted, since it needs

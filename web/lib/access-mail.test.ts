@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { sendEnded, sendUpdate, sendWelcome } from "./access-mail";
@@ -16,6 +16,60 @@ beforeEach(() => {
   ses.reset();
   process.env.ACCESS_FROM_EMAIL = "access@ashutosh-pandey.com";
   process.env.APP_AWS_REGION = "us-east-1";
+  delete process.env.VERCEL_ENV;
+  delete process.env.VERCEL_GIT_COMMIT_REF;
+  delete process.env.VERCEL_URL;
+});
+
+// Other files in the same worker read VERCEL_ENV (e.g. the resume publish route).
+afterEach(() => {
+  delete process.env.VERCEL_ENV;
+  delete process.env.VERCEL_GIT_COMMIT_REF;
+  delete process.env.VERCEL_URL;
+});
+
+describe("access emails name the environment's own site (#541)", () => {
+  const preview = (branch: string) => {
+    process.env.VERCEL_ENV = "preview";
+    process.env.VERCEL_GIT_COMMIT_REF = branch;
+    process.env.VERCEL_URL = "bgm-looper-abc123-team.vercel.app";
+  };
+
+  it.each(["dev", "stage"])("%s links to and names its own subdomain", async (branch) => {
+    preview(branch);
+    ses.on(SendEmailCommand).resolves({ MessageId: "m" });
+    await sendWelcome(user, newsdesk);
+    const text = sent().Content?.Simple?.Body?.Text?.Data;
+    expect(text).toContain(`https://${branch}.ashutosh-pandey.com/tools/news-desk`);
+    expect(text).toContain(`Your access is always shown at ${branch}.ashutosh-pandey.com/tools.`);
+    expect(text).toContain(`signed in at ${branch}.ashutosh-pandey.com`);
+    expect(text).not.toMatch(/(?<![.\w])ashutosh-pandey\.com/);
+  });
+
+  it("names dev in the ended email's subject and heading", async () => {
+    preview("dev");
+    ses.on(SendEmailCommand).resolves({ MessageId: "m" });
+    await sendEnded(user, "News Desk ask");
+    const input = sent();
+    expect(input.Content?.Simple?.Subject?.Data).toBe("Your access on dev.ashutosh-pandey.com has ended");
+    expect(input.Content?.Simple?.Body?.Text?.Data).toContain("Your access to News Desk ask on dev.ashutosh-pandey.com has ended.");
+  });
+
+  it("links any other preview to its own deployment URL", async () => {
+    preview("fix/something");
+    ses.on(SendEmailCommand).resolves({ MessageId: "m" });
+    await sendWelcome(user, newsdesk);
+    expect(sent().Content?.Simple?.Body?.Text?.Data).toContain("https://bgm-looper-abc123-team.vercel.app/tools/news-desk");
+  });
+
+  it("links production to ashutosh-pandey.com whatever the branch", async () => {
+    process.env.VERCEL_ENV = "production";
+    process.env.VERCEL_GIT_COMMIT_REF = "main";
+    process.env.VERCEL_URL = "bgm-looper-abc123-team.vercel.app";
+    ses.on(SendEmailCommand).resolves({ MessageId: "m" });
+    await sendWelcome(user, newsdesk);
+    expect(sent().Content?.Simple?.Body?.Text?.Data).toContain("https://ashutosh-pandey.com/tools/news-desk");
+  });
 });
 
 describe("access emails", () => {
