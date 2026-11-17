@@ -668,16 +668,23 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Committed locally, then published through the API rather than `git push`,
+      # so GitHub signs it and main's signed-commits rule accepts it (#373).
       - name: Commit CHANGELOG.md to main
         id: changelog_commit
         if: steps.changelog.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
           git commit -m "chore(changelog): release ${{ steps.version.outputs.tag }}"
-          git push origin HEAD:main
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          # Its own statement: inside an echo argument, set -e ignores a failed
+          # substitution and the step would pass with no commit on main (#572).
+          SHA=$(python3 .github/scripts/push-signed.py main)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       # Opens the PR that puts this release's heading back on dev, and does it
       # BEFORE the tag exists. It merges main into a branch off dev instead of
@@ -695,6 +702,10 @@ jobs:
       # changelog commit and no tag, and re-running the job is the recovery
       # path, so nothing is ever published that has no reconciliation behind
       # it. Every step in that path is idempotent by version, not by date.
+      #
+      # The branch is published through the API, not `git push`, so GitHub signs
+      # the merge commit and dev's signed-commits rule accepts it once the PR
+      # merges (#373). It keeps both parents.
       - name: Open changelog-sync PR to dev
         # Not `changed == 'true'`: that is false on a re-run, because main
         # already carries the heading by then. The version output is set
@@ -709,6 +720,7 @@ jobs:
           # The branch below is cut from dev, whose tree need not carry this
           # script yet, so stash a copy outside the work tree first.
           cp .github/scripts/changelog-sync.py "$RUNNER_TEMP/changelog-sync.py"
+          cp .github/scripts/push-signed.py "$RUNNER_TEMP/push-signed.py"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin dev main
@@ -822,13 +834,13 @@ jobs:
             if [ "$(git log -1 --format=%s "$TIP")" = "chore(changelog): sync $TAG heading to dev" ] \
                && [ "$(git log -1 --format=%an "$TIP")" = "github-actions[bot]" ]; then
               echo "$BRANCH is left over from an attempt that died before opening the PR - replacing it."
-              git push --force origin "$BRANCH"
+              python3 "$RUNNER_TEMP/push-signed.py" "$BRANCH" --force
             else
               echo "::error::$BRANCH exists on the remote with no pull request, and its tip $TIP (\"$(git log -1 --format=%s "$TIP")\" by $(git log -1 --format=%an "$TIP")) is not a commit this step created. Refusing to overwrite it. Inspect that branch, then delete it to let a re-run rebuild the sync from scratch."
               exit 1
             fi
           else
-            git push origin "$BRANCH"
+            python3 "$RUNNER_TEMP/push-signed.py" "$BRANCH"
           fi
           gh pr create --base dev --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
 

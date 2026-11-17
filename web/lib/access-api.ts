@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { readSession } from "./auth";
 import { AccessError } from "./access-admin";
 import { GRANT_KEYS, GRANTS } from "./route-gate";

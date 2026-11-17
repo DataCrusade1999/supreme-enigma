@@ -12,6 +12,7 @@ variable "vercel_api_token" {
 variable "alert_email" {
   description = "Receives the invocation alarm, is the SES sandbox recipient and the Cognito owner user. The SNS subscription and the SES identity each need one click from the inbox after the first apply."
   type        = string
+  sensitive   = true
 }
 
 variable "google_client_id" {

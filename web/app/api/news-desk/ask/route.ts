@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { ask, isAskConfigured } from "@/lib/news-desk/ask";
 
 // A question's tool loop ends itself before 55 s; see lib/news-desk/ask.ts.

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans, Instrument_Serif } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { THEME_INIT_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
 // Self-hosted at build time by next/font, so there is no render-blocking
@@ -36,16 +37,6 @@ export const metadata: Metadata = {
   title: "Ashutosh Pandey",
   description: "Portfolio — projects, resume, and the BGM Looper tool.",
 };
-
-const THEME_INIT_SCRIPT = `
-(function () {
-  try {
-    var stored = localStorage.getItem("theme");
-    var theme = stored === "light" || stored === "dark" ? stored : "dark";
-    document.documentElement.classList.toggle("dark", theme === "dark");
-  } catch (e) {}
-})();
-`;
 
 export default function RootLayout({
   children,

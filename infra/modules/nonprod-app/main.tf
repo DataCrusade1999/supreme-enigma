@@ -55,6 +55,9 @@ resource "aws_iam_role_policy" "vercel_resume" {
         # s3:prefix-scoped grant does not restore the 404. Bucket ARN only, so this
         # grants listing key names in this environment's bucket and nothing else —
         # GetObject stays scoped to resume/ above and to modules/app's prefixes.
+        # StringLikeIfExists on s3:prefix was tested on dev (#173) and doesn't help
+        # either: a list call with no prefix carries no s3:prefix, so the condition
+        # passes and the whole bucket still lists.
         Sid      = "ResumeHeadObjectNotFound"
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]

@@ -63,8 +63,12 @@ resource "aws_lambda_function" "this" {
   role          = aws_iam_role.lambda_exec.arn
   package_type  = "Image"
   image_uri     = "${data.aws_ecr_repository.looper.repository_url}:${var.bootstrap_image_tag}"
-  timeout       = 60
-  memory_size   = 1024
+  # Init (librosa and numba imports) ran past Lambda's 10s init limit on every cold
+  # start at 1024 MB, and the retried init counted against a 60s timeout (#567).
+  # CPU scales with memory, so 2048 MB shortens init; 120s covers a slow cold run.
+  # The route's own limit is Vercel's 300s default (Fluid compute, no project timeout).
+  timeout     = 120
+  memory_size = 2048
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic,

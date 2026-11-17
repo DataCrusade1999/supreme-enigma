@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "@/lib/zod";
 
 // Trimmed-and-non-empty rather than plain string(): the model returning " "
 // is valid JSON and valid `string`, but renders as a blank line on the page.
