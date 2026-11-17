@@ -1,12 +1,9 @@
 # Copy to terraform.tfvars (gitignored via *.tfvars) and fill in real values.
 # Every variable here is required — none has a default, so `terraform plan` fails
-# with "No value for required variable" until all seven are set.
+# with "No value for required variable" until all six are set.
 
 # Vercel API token with access to the project.
 vercel_api_token = "..."
-
-# The shared password gating /tools/bgm-looper, /api/looper/* and /keystatic.
-app_password = "..."
 
 # owner/repo for the Vercel git integration.
 github_repo = "DataCrusade1999/supreme-enigma"
@@ -31,3 +28,6 @@ openrouter_api_key = "sk-or-v1-..."
 # https://auth.stage.ashutosh-pandey.com/oauth2/idpresponse.
 google_client_id     = "....apps.googleusercontent.com"
 google_client_secret = "..."
+
+# Optional — defaults to true. Set false for the pool's first apply only.
+# webauthn_enabled = false

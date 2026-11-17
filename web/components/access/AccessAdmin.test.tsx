@@ -158,6 +158,93 @@ describe("AccessAdmin", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("expected a pending user, found a member one");
   });
 
+  /** Answers the first directory load, holds every later one and every change
+   * until released. */
+  function held() {
+    const releases: Array<(body?: object) => void> = [];
+    let loads = 0;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      const isLoad = url === "/api/access/users" && !init?.method;
+      if (isLoad && loads++ === 0) return Promise.resolve({ ok: true, json: async () => directory });
+      return new Promise((resolve) => {
+        releases.push((body) =>
+          resolve({
+            ok: true,
+            json: async () =>
+              body ?? (isLoad ? directory : init?.method === "PUT" ? { ok: true, grant: g({ action: "moneyplanner:use", ...JSON.parse(String(init.body)) }) } : { ok: true }),
+          }),
+        );
+      });
+    });
+    return { release: (i: number, body?: object) => releases[i](body) };
+  }
+
+  it("shows the change running on its row and disables that row's buttons", async () => {
+    const { release } = held();
+    render(<AccessAdmin />);
+    await userEvent.click(await screen.findByRole("button", { name: "Approve pending@example.com" }));
+    expect(screen.getByText("Approving…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve pending@example.com" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Dismiss pending@example.com" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove friend@example.com" })).toBeEnabled();
+    release(0);
+    await waitFor(() => expect(screen.queryByText("Approving…")).not.toBeInTheDocument());
+  });
+
+  it("moves an approved user to Members as soon as the change returns, before the reload", async () => {
+    const { release } = held();
+    render(<AccessAdmin />);
+    await userEvent.click(await screen.findByRole("button", { name: "Approve pending@example.com" }));
+    release(0); // the change; the reload stays held
+    const members = screen.getByRole("region", { name: "Members" });
+    expect(await within(members).findByText("pending@example.com")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Pending" })).queryByText("pending@example.com")).not.toBeInTheDocument();
+  });
+
+  it("drops a dismissed or removed user and a revoked grant before the reload", async () => {
+    const { release } = held();
+    render(<AccessAdmin />);
+    await userEvent.click(await screen.findByRole("button", { name: "Dismiss pending@example.com" }));
+    release(0);
+    await waitFor(() => expect(screen.queryByText("pending@example.com")).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "Revoke News Desk ask for friend@example.com" }));
+    release(2);
+    await waitFor(() => expect(screen.queryByText(/News Desk ask: 7 of 20/)).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "Remove other@example.com" }));
+    release(4);
+    await waitFor(() => expect(screen.queryByText("other@example.com")).not.toBeInTheDocument());
+  });
+
+  it("shows a new grant as soon as the change returns, before the reload", async () => {
+    const { release } = held();
+    render(<AccessAdmin />);
+    const form = await screen.findByRole("form", { name: "Grant to other@example.com" });
+    await userEvent.selectOptions(within(form).getByLabelText("Action"), "moneyplanner:use");
+    await userEvent.click(within(form).getByRole("button", { name: "Grant" }));
+    expect(screen.getByText("Granting…")).toBeInTheDocument();
+    expect(within(form).getByRole("button", { name: "Grant" })).toBeDisabled();
+    release(0);
+    expect(await screen.findByText("Money Planner: until 9 Oct 2026, 5:30 am IST")).toBeInTheDocument();
+  });
+
+  it("ignores a reload that returns after a newer one", async () => {
+    const { release } = held();
+    render(<AccessAdmin />);
+    await userEvent.click(await screen.findByRole("button", { name: "Dismiss pending@example.com" }));
+    release(0); // dismiss returns; reload 1 starts (held)
+    await waitFor(() => expect(screen.queryByText("pending@example.com")).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "Remove other@example.com" }));
+    release(2); // remove returns; reload 2 starts (held)
+    await waitFor(() => expect(screen.queryByText("other@example.com")).not.toBeInTheDocument());
+    // Reload 2 answers first with both changes in it; then reload 1 answers with a
+    // directory read before the remove. It must not bring other@ back.
+    release(3, { users: directory.users.filter((u) => u.sub !== "p" && u.sub !== "g") });
+    await screen.findByText("friend@example.com");
+    release(1, { users: directory.users.filter((u) => u.sub !== "p") });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText("other@example.com")).not.toBeInTheDocument();
+  });
+
   it("says so when the directory can't be loaded", async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: "the change failed; nothing was changed" }) });
     render(<AccessAdmin />);

@@ -34,11 +34,10 @@ env:
   TF_INPUT: "0"
   TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugin-cache
   TF_VAR_vercel_api_token: ${{ secrets.TF_VAR_VERCEL_API_TOKEN }}
-  TF_VAR_app_password: ${{ secrets.TF_VAR_APP_PASSWORD }}
   TF_VAR_openrouter_api_key: ${{ secrets.TF_VAR_OPENROUTER_API_KEY }}
   TF_VAR_google_client_secret: ${{ secrets.TF_VAR_GOOGLE_CLIENT_SECRET }}
   TF_VAR_github_repo: ${{ vars.TF_VAR_GITHUB_REPO }}
-  TF_VAR_alert_email: ${{ vars.TF_VAR_ALERT_EMAIL }}
+  TF_VAR_alert_email: ${{ secrets.TF_VAR_ALERT_EMAIL }}
   TF_VAR_google_client_id: ${{ vars.TF_VAR_GOOGLE_CLIENT_ID }}
 
 jobs:
@@ -117,6 +116,9 @@ jobs:
           fi
           mkdir -p plans
           node .github/scripts/tf-summary.mjs comment plans "$title" > comment.md
+          # The owner's address is the ID of the SES identity, the SNS subscription and the
+          # Cognito owner user, and Actions masking doesn't reach comment bodies (#563).
+          python3 -c 'import os,sys; p=sys.argv[1]; e=os.environ.get("TF_VAR_alert_email",""); s=open(p).read(); open(p,"w").write(s.replace(e,"<alert_email>") if e else s)' comment.md
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq '[.[] | select(.body | startswith("<!-- terraform-plan -->"))][0].id // empty')
           if [ -n "$id" ]; then
@@ -125,8 +127,9 @@ jobs:
             gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@comment.md >/dev/null
           fi
 
+  # dev and stage. main has its own job below, the same steps behind an approval.
   apply:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.stack != 'drift')
+    if: github.ref_name != 'main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.stack != 'drift'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -139,6 +142,47 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Stacks run in the order tf-stacks.sh gives (on main, `prod/account` then `prod/app`), each
       # under its own role via tf-as.sh. Routing and its tests: .github/scripts/tf-stacks.*
+      - name: Resolve stacks
+        id: stacks
+        env:
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
+          INPUT: ${{ inputs.stack }}
+        run: bash .github/scripts/tf-stacks.sh resolve >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.1
+          terraform_wrapper: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
+      - name: Apply ${{ steps.stacks.outputs.stacks }}
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          STACKS: ${{ steps.stacks.outputs.stacks }}
+        run: |
+          for s in $STACKS; do
+            bash .github/scripts/tf-as.sh "$s" apply bash .github/scripts/tf-apply.sh "$s"
+          done
+
+  # Production (#399). The job waits in the terraform-prod environment until the owner
+  # approves it, and bgm-looper-tf-apply-prod trusts only that environment's OIDC
+  # subject, so a push to main, or a workflow edited to drop this line, can't apply to
+  # production unattended. The steps are the same as `apply`'s; keep them in step.
+  apply-prod:
+    if: github.ref_name == 'main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.stack != 'drift'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: terraform-prod
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-apply-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Resolve stacks
         id: stacks
         env:
@@ -228,6 +272,9 @@ jobs:
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           node dev/.github/scripts/tf-summary.mjs comment plans "Drift check — $RUN" > drift.md
+          # The owner's address is the ID of the SES identity, the SNS subscription and the
+          # Cognito owner user, and Actions masking doesn't reach comment bodies (#563).
+          python3 -c 'import os,sys; p=sys.argv[1]; e=os.environ.get("TF_VAR_alert_email",""); s=open(p).read(); open(p,"w").write(s.replace(e,"<alert_email>") if e else s)' drift.md
           issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift --state open --json number --jq '.[0].number // empty')
           if [ "$drift" = 1 ]; then
             if [ -n "$issue" ]; then gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body-file drift.md

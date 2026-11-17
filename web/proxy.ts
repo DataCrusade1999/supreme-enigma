@@ -9,6 +9,7 @@ import {
   type Session,
 } from "./lib/auth";
 import { refreshIdToken, verifyIdToken } from "./lib/cognito";
+import { isToolsPage, newNonce, toolsCsp } from "./lib/csp";
 import { getAuthorizer, type AuthzContext } from "./lib/authz/authorizer";
 import { getGrantStore, type Grant } from "./lib/authz/grants";
 import { isUnexpired } from "./lib/authz/grant-status";
@@ -196,18 +197,24 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return response;
   }
 
-  if (!current.refreshed) return decide(request, current.session);
+  const csp = isToolsPage(request.nextUrl.pathname) ? toolsCsp(newNonce()) : null;
+  if (!current.refreshed && !csp) return decide(request, current.session);
 
   // Pages and route handlers read cookies() from the request, after this runs,
   // so the new token goes into the request's cookie header as well as the
   // response's Set-Cookie.
-  request.cookies.set(ID_COOKIE, seal(current.session.idToken, secret));
+  if (current.refreshed) request.cookies.set(ID_COOKIE, seal(current.session.idToken, secret));
   const decided = await decide(request, current.session);
-  const response =
-    decided.headers.get("x-middleware-next") === "1"
-      ? NextResponse.next({ request: { headers: request.headers } })
-      : decided;
-  setSessionCookies(response, { idToken: current.session.idToken }, secret);
+  if (decided.headers.get("x-middleware-next") !== "1") {
+    if (current.refreshed) setSessionCookies(decided, { idToken: current.session.idToken }, secret);
+    return decided;
+  }
+  const headers = new Headers(request.headers);
+  // Next.js reads the nonce from the request's copy when it renders the page.
+  if (csp) headers.set("content-security-policy", csp);
+  const response = NextResponse.next({ request: { headers } });
+  if (csp) response.headers.set("content-security-policy", csp);
+  if (current.refreshed) setSessionCookies(response, { idToken: current.session.idToken }, secret);
   return response;
 }
 

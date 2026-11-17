@@ -7,6 +7,107 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- An alarm on BGM Looper Lambda errors in every environment, emailed through
+  that account's alerts topic (#451).
+- Dev and stage send the Access welcome, update and ended emails, from
+  `access@<env>.ashutosh-pandey.com` (#530).
+- Dev's and stage's SES identities have a custom MAIL FROM, so their mail
+  passes DMARC on SPF as well as DKIM (#514).
+- An OpenSSF Scorecard workflow, on pushes to `dev` and weekly, with results
+  under Security > Code scanning (#383).
+
+### Changed
+
+- BGM Looper accepts only audio uploads (MP3, WAV, FLAC, OGG, Opus, AIFF), the
+  formats the Lambda can decode, and processes only keys it issued under `uploads/`, in the route
+  and in the Lambda (#402).
+- The Lambda's role reads only `uploads/` and writes only `outputs/` (#170).
+- Lambda logs are kept for 14 days instead of forever (#450).
+- The SES bounce and complaint alarms fire at 2% and 0.05%, well before AWS's
+  5% and 0.1% review thresholds (#391).
+- Chromatic skips its install and upload on a PR into `dev` that touches
+  neither `web/` nor `deploy.yml` (#329).
+- CI installs `web/` with `npm ci`, and the Lambda's Python dependencies from
+  hash-locked `requirements.txt`/`requirements-dev.txt` compiled from `.in`
+  files. The Lambda base image is pinned by digest, kept current by Dependabot
+  (#551).
+- The release-tests workflow grants `checks: write` to its one job instead of
+  the whole workflow (#550).
+- `web/` no longer installs glob 13.x or minimatch 10.x: Keystatic 0.6.10 and
+  typescript-eslint 8.73 take minimatch 11, and an override moves Storybook's
+  docgen plugin to glob 14 (#553, #503).
+- Sign-in goes straight to Google. Cognito's page with email code and passkey,
+  which only the owner can use, opens from `/api/auth/login?as=owner`, and the
+  hub's "Add a passkey" link uses it (#546).
+- Rebuilding sign-in from scratch needs no code edits: it stops with a clear
+  "wait and retry" message while the email domain is still verifying, and
+  production can turn passkeys off for the first run with a flag, like dev and
+  stage (#293).
+- Dependencies: jsdom 31, Next 16.4.6 and the rest of November's npm minor and
+  patch bumps, `hashicorp/aws` 6.73.0 and `vercel/vercel` in every Terraform
+  stack, and `chromaui/action` 18.14.4 (#564).
+- ESLint 10. `eslint-config-next`'s React, import and jsx-a11y plugins don't
+  declare ESLint 10 support yet, but lint runs clean on it (#79).
+
+### Fixed
+
+- The first BGM Looper track after the Lambda was idle could time out: init ran
+  past Lambda's 10s limit at 1024 MB and its retry counted against the 60s
+  timeout. The function now has 2048 MB and 120s (#567).
+
+- The Lambda image build fails at the ffmpeg download, with a message saying
+  so, when the host returns something other than the archive (#126).
+- The Access page shows each change running on its row ("Approving…", buttons
+  disabled) and updates the row as soon as the change returns, instead of
+  after a reload of every user (#526).
+- The Access e2e test no longer signs the friend out by racing the owner
+  page's own request (#523).
+- Access emails on dev and stage reach every address verified in that
+  account's SES, not only the owner's (#539).
+- Access emails link to and name the site of the environment that sent
+  them, not always production (#541).
+- Two concurrent resume extractions of one draft no longer both pay for the
+  model call: the second gets a 409 while the first runs (#110).
+- A publish retried after it failed on the PDF archives only the old PDF,
+  not the draft's JSON beside it as one snapshot that was never live (#111).
+- The newsletter admin reads Buttondown's email list once instead of once per
+  issue, waits out a 429, and stops after 100 pages (#132).
+- News Desk stops re-sending a headline to the tagger after three answered
+  calls that left it out (a failed call does not count), and retries a failed snapshot write instead of losing the
+  tags it paid for (#263).
+- A pinned News Desk indicator drops the question's time window and follows
+  the latest period on each Refresh. A one-point chart can no longer be pinned,
+  and an empty `match` no longer gives the same query a second id (#272).
+- The News Desk table says "not found" when MoSPI's latest rows held no
+  previous period, instead of a blank Prev (#266).
+- The e2e suite opens every page once before the first spec, so a cold
+  server no longer times out whichever spec runs first (#146).
+
+### Removed
+
+- The unused `APP_PASSWORD` Vercel env var and its Terraform input. Sign-in has
+  gone through Cognito since the auth migration; nothing read it.
+
+### Security
+
+- The `/tools` pages enforce a `script-src` with a per-request nonce and
+  `'strict-dynamic'`, so an injected script can't run there. Public pages keep
+  the old policy and stay static (#385).
+- Production Terraform applies wait for the owner's approval in the
+  `terraform-prod` GitHub Environment, and `bgm-looper-tf-apply-prod` trusts only
+  that environment, so a push to `main` can't apply to production unattended
+  (#399).
+- `bgm-looper-tf-apply-prod`'s service grants cover only this project's
+  resources instead of every resource of each service (#401).
+- The owner's email is masked in Terraform run logs: it is a repository secret
+  and `alert_email` is sensitive (#563).
+- Only the Terraform roles and the admin role can read the Terraform state
+  buckets, which hold secrets in plain text (#568).
+- The release job's changelog commit and sync merge commit are signed by GitHub,
+  so the permanent branches can require signed commits (#373).
+
 ## [1.12.1] - 2026-11-16
 
 ### Changed

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { keyForUpload, presignUpload, MAX_AUDIO_UPLOAD_BYTES } from "@/lib/aws";
+import { isAudioUpload, keyForUpload, presignUpload, MAX_AUDIO_UPLOAD_BYTES } from "@/lib/aws";
 
 export async function POST(request: NextRequest) {
   const { filename, contentType, size } = await request.json();
@@ -14,6 +14,13 @@ export async function POST(request: NextRequest) {
   }
   if (size > MAX_AUDIO_UPLOAD_BYTES) {
     return NextResponse.json({ error: "file too large" }, { status: 413 });
+  }
+
+  if (!isAudioUpload(filename, contentType)) {
+    return NextResponse.json(
+      { error: "Unsupported file type. Use MP3, WAV, FLAC, OGG, Opus or AIFF." },
+      { status: 400 },
+    );
   }
 
   const key = keyForUpload(filename);

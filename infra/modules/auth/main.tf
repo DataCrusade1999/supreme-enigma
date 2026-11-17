@@ -22,8 +22,13 @@ resource "aws_cognito_user_pool" "owner" {
     allow_admin_create_user_only = true
   }
 
-  # PASSWORD is listed so the pool accepts the policy even if AWS requires it; the
-  # owner's password is random and never used.
+  # Cognito requires PASSWORD here: a policy without it fails with "Password should
+  # be configured as one of the allowed first auth factors" (tested 2026-11-17).
+  # MFA can't close it either: once a user has MFA in an OPTIONAL pool, it can sign
+  # in only with a password, not an email code or passkey, and ON disables email
+  # codes for everyone. So a password sign-in stays possible, as a single factor
+  # (#495). The owner's password is random_password.owner_cognito below, 32
+  # characters known to no one; its only copy is this stack's state.
   sign_in_policy {
     allowed_first_auth_factors = ["PASSWORD", "EMAIL_OTP", "WEB_AUTHN"]
   }
@@ -62,6 +67,13 @@ resource "aws_cognito_user_pool" "owner" {
     email_sending_account = "DEVELOPER"
     source_arn            = var.ses_identity_arn
     from_email_address    = var.from_email_address
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.ses_verified
+      error_message = "SES identity ${var.ses_identity} is not verified for sending yet, so Cognito would refuse it. DKIM verification takes a few minutes after its DNS records land: wait, then apply again."
+    }
   }
 
   depends_on = [aws_sesv2_email_identity_policy.cognito]

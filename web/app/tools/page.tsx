@@ -114,8 +114,10 @@ export default async function ToolsPage({
 
         <p className="mt-9 text-[0.8125rem] text-muted">
           {/* Through sign-in first: Cognito only adds a passkey for a user with
-           * a live managed-login session, which outlasts ours by far less. */}
-          <a href="/api/auth/login?next=%2Fapi%2Fauth%2Fpasskey" className="text-accent hover:text-fg">
+           * a live managed-login session, which outlasts ours by far less. The
+           * owner entry, because /passkeys/add needs the native user's session,
+           * not a Google one. */}
+          <a href="/api/auth/login?as=owner&next=%2Fapi%2Fauth%2Fpasskey" className="text-accent hover:text-fg">
             Add a passkey
           </a>{" "}
           for this device.

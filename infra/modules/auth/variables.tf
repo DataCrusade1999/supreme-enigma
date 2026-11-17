@@ -31,6 +31,14 @@ variable "ses_identity_arn" {
   type = string
 }
 
+# The identity's verified_for_sending_status. Cognito refuses an unverified
+# source_arn, and DKIM verification takes minutes after the DNS records land,
+# so a from-scratch apply creates the identity, then stops at the pool's
+# precondition until it verifies (#293).
+variable "ses_verified" {
+  type = bool
+}
+
 variable "from_email_address" {
   description = "From header of the pool's emails. Must be an address at ses_identity."
   type        = string

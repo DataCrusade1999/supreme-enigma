@@ -1,5 +1,5 @@
 import { getObjectBytes, putObjectJson } from "@/lib/aws";
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { DEFAULT_INDICATORS } from "./defaults";
 import { indicatorDefSchema, snapshotSchema, type IndicatorDef, type Snapshot } from "./types";
 

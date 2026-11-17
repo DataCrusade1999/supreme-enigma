@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { MODEL_TAGS, type Headline, type ModelTag } from "./types";
 
 // 100 items need about 1,500 output tokens; the first refresh has ~600 new items,
@@ -40,6 +40,10 @@ const entrySchema = z.object({ n: z.number().int(), tag: z.enum(MODEL_TAGS) });
 
 export type TagResult = {
   tags: Map<string, ModelTag>;
+  /** Ids sent in a chunk OpenRouter answered, tagged or not. An item missing
+   * from `tags` but in here was omitted by the model; one in neither was in a
+   * failed call. */
+  answered: Set<string>;
   calls: number;
   failedCalls: number;
   costUsd: number;
@@ -48,7 +52,7 @@ export type TagResult = {
 /** Tags headlines by topic. Never throws: an id missing from `tags` stays Untagged
  * and is retried on the next refresh. */
 export async function tagHeadlines(items: Headline[]): Promise<TagResult> {
-  const result: TagResult = { tags: new Map(), calls: 0, failedCalls: 0, costUsd: 0 };
+  const result: TagResult = { tags: new Map(), answered: new Set(), calls: 0, failedCalls: 0, costUsd: 0 };
   if (items.length === 0) return result;
   // Unset in local dev, Playwright and CI. Without this check the request would
   // go to "undefined/chat/completions" and every chunk would log a failure.
@@ -67,6 +71,7 @@ export async function tagHeadlines(items: Headline[]): Promise<TagResult> {
       return;
     }
     result.costUsd += outcome.value.costUsd;
+    for (const h of chunks[c]) result.answered.add(h.id);
     outcome.value.tags.forEach((tag, n) => result.tags.set(chunks[c][n].id, tag));
   });
   return result;

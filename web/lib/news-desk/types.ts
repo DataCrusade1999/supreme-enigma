@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { STORED_TAGS } from "./tags";
 
 export * from "./tags";
@@ -34,6 +34,9 @@ export const headlineSchema = z.object({
   // Optional so a snapshot saved before regions still reads; readers go through
   // regionOf, and the next refresh fills it on any item a feed still carries.
   region: z.enum(REGIONS).optional(),
+  // Refreshes that sent this item to the tagger and got no tag back (#263).
+  // Absent until the first miss.
+  tagAttempts: z.number().int().nonnegative().optional(),
 });
 export type Headline = z.infer<typeof headlineSchema>;
 

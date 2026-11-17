@@ -19,11 +19,6 @@ variable "vercel_api_token" {
   sensitive = true
 }
 
-variable "app_password" {
-  type      = string
-  sensitive = true
-}
-
 variable "github_repo" {
   description = "owner/repo of this project on GitHub, for Vercel git integration"
   type        = string
@@ -32,6 +27,7 @@ variable "github_repo" {
 variable "alert_email" {
   description = "Address that receives budget threshold notifications. The SNS email subscription must be confirmed manually from the inbox after the first apply."
   type        = string
+  sensitive   = true
 }
 
 variable "openrouter_api_key" {
@@ -61,4 +57,11 @@ variable "google_client_id" {
 variable "google_client_secret" {
   type      = string
   sensitive = true
+}
+
+# false only for the first apply of the pool, then back to true:
+# .claude/rules/infra.md ("Cognito WebAuthn on a from-scratch apply").
+variable "webauthn_enabled" {
+  type    = bool
+  default = true
 }

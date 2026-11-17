@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/aws", () => ({ copyObject: vi.fn(), objectExists: vi.fn() }));
+vi.mock("@/lib/aws", () => ({ copyObject: vi.fn(), objectEtag: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidateTag: vi.fn() }));
 
 import { POST } from "./route";
-import { copyObject, objectExists } from "@/lib/aws";
+import { copyObject, objectEtag } from "@/lib/aws";
 import { revalidateTag } from "next/cache";
 
 function post(body: unknown) {
@@ -21,7 +21,8 @@ describe("POST /api/resume/publish", () => {
     vi.clearAllMocks();
     process.env.RESUME_BUCKET_NAME = "resume-bucket";
     process.env.VERCEL_ENV = "production";
-    vi.mocked(objectExists).mockResolvedValue(true);
+    // Every object present, each with its own bytes.
+    vi.mocked(objectEtag).mockImplementation(async (_bucket, key) => `"${key}"`);
     // clearAllMocks resets calls but keeps implementations, so a test that makes
     // a copy throw would leak that into every test after it.
     vi.mocked(copyObject).mockReset();
@@ -31,8 +32,8 @@ describe("POST /api/resume/publish", () => {
   // The draft keys are checked before anything is overwritten, so a test that
   // wants "nothing to archive" has to answer per key rather than blanket-false.
   function existsExcept(...absent: string[]) {
-    vi.mocked(objectExists).mockImplementation(async (_bucket, key) =>
-      !absent.includes(key),
+    vi.mocked(objectEtag).mockImplementation(async (_bucket, key) =>
+      absent.includes(key) ? null : `"${key}"`,
     );
   }
 
@@ -98,7 +99,7 @@ describe("POST /api/resume/publish", () => {
     const buckets = vi.mocked(copyObject).mock.calls.map(([bucket]) => bucket);
     expect(buckets.length).toBeGreaterThan(0);
     expect(new Set(buckets)).toEqual(new Set(["resume-bucket"]));
-    for (const [bucket] of vi.mocked(objectExists).mock.calls) {
+    for (const [bucket] of vi.mocked(objectEtag).mock.calls) {
       expect(bucket).toBe("resume-bucket");
     }
   });
@@ -219,6 +220,57 @@ describe("POST /api/resume/publish", () => {
     expect(await res.json()).toEqual({ ok: true, archived: true });
     const calls = vi.mocked(copyObject).mock.calls.map(([, from, to]) => [from, to]);
     expect(calls).toContainEqual(["resume/drafts/abc/resume.pdf", "resume/current.pdf"]);
+  });
+
+  it("archives only the old PDF on the retry of a half-published pair (#111)", async () => {
+    // The failed attempt promoted the draft's JSON; the live PDF is still the
+    // old one. Archiving both would store a pair that was never live.
+    vi.mocked(objectEtag).mockImplementation(async (_bucket, key) =>
+      key === "resume/current.json" ? `"resume/drafts/abc/resume.json"` : `"${key}"`,
+    );
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, archived: true });
+    const calls = vi.mocked(copyObject).mock.calls.map(([, from, to]) => [from, to]);
+    expect(calls[0][0]).toBe("resume/current.pdf");
+    expect(calls[0][1]).toMatch(/^resume\/archive\/.*\.pdf$/);
+    expect(calls.slice(1)).toEqual([
+      ["resume/drafts/abc/resume.json", "resume/current.json"],
+      ["resume/drafts/abc/resume.pdf", "resume/current.pdf"],
+    ]);
+  });
+
+  it("keeps the old PDF when a new draft's JSON matches the live one", async () => {
+    // A re-exported PDF with the same content: same JSON bytes, new PDF. The
+    // ETags look like a retry, and the old PDF must not be overwritten uncopied.
+    vi.mocked(objectEtag).mockImplementation(async (_bucket, key) =>
+      key === "resume/current.json" ? `"resume/drafts/abc/resume.json"` : `"${key}"`,
+    );
+    await POST(post({ draftId: "abc" }));
+    const archivedFrom = vi.mocked(copyObject).mock.calls.filter(([, , to]) => to.startsWith("resume/archive/")).map(([, from]) => from);
+    expect(archivedFrom).toEqual(["resume/current.pdf"]);
+  });
+
+  it("archives nothing when the live pair already is this draft", async () => {
+    vi.mocked(objectEtag).mockImplementation(async (_bucket, key) =>
+      key.startsWith("resume/current.") ? `"resume/drafts/abc/resume.${key.split(".").pop()}"` : `"${key}"`,
+    );
+    const res = await POST(post({ draftId: "abc" }));
+    expect(await res.json()).toEqual({ ok: true, archived: false });
+  });
+
+  it("archives the live pair when only its PDF matches the draft", async () => {
+    // Re-publishing a draft whose JSON was edited since: the live JSON is an
+    // earlier edit that was really live, so it is kept.
+    vi.mocked(objectEtag).mockImplementation(async (_bucket, key) =>
+      key === "resume/current.pdf" ? `"resume/drafts/abc/resume.pdf"` : `"${key}"`,
+    );
+
+    const res = await POST(post({ draftId: "abc" }));
+
+    expect(await res.json()).toEqual({ ok: true, archived: true });
   });
 
   it("rejects an unsafe draft id", async () => {

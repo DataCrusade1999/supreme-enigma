@@ -108,8 +108,10 @@ resource "aws_iam_role" "vercel_preview" {
 }
 
 # Verified Permissions decides every gated request from the Cedar files under
-# infra/modules/auth/cedar/; this lets the app ask this account's store, and lets the
-# Access page read and write grants and manage the pool's users and groups.
+# infra/modules/auth/cedar/; this lets the app ask this account's store, lets the
+# Access page read and write grants and manage the pool's users and groups, and lets
+# it send the Access emails (#530) from one address on this environment's identity.
+# ACCESS_FROM_EMAIL in infra/modules/nonprod-app names the same address.
 resource "aws_iam_role_policy" "vercel_preview_access" {
   name = "${var.project_name}-vercel-preview-access"
   role = aws_iam_role.vercel_preview.id
@@ -140,6 +142,20 @@ resource "aws_iam_role_policy" "vercel_preview_access" {
           "cognito-idp:AdminDeleteUser",
         ]
         Resource = [module.auth.user_pool_arn]
+      },
+      {
+        # In the sandbox SES also authorizes the send against the recipient's
+        # verified identity (#539), so every identity in the account is listed:
+        # the domain, the owner, and any test address verified by hand. The
+        # sandbox still delivers only to verified addresses, and the condition
+        # keeps the sender to the one Access address.
+        Sid      = "SendAccessEmail"
+        Effect   = "Allow"
+        Action   = ["ses:SendEmail"]
+        Resource = ["arn:aws:ses:${local.region}:${local.account_id}:identity/*"]
+        Condition = {
+          StringEquals = { "ses:FromAddress" = "access@${local.site_host}" }
+        }
       },
     ]
   })

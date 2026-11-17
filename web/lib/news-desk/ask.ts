@@ -162,8 +162,10 @@ export async function* ask(question: string, clock: () => number = Date.now): As
           // Several series, no rows, or out of time: the text answer still stands.
           console.warn("news-desk: chart query gave no series", err);
         }
+        // A one-point chart still shows, but a row made from it would have no
+        // previous value (#272).
         yield points
-          ? { type: "answer", text, chart: { title: query.title, unit: query.unit, points }, pinnable: true, query }
+          ? { type: "answer", text, chart: { title: query.title, unit: query.unit, points }, pinnable: points.length >= 2, query: points.length >= 2 ? query : null }
           : { type: "answer", text, chart: null, pinnable: false, query: null };
         return;
       }

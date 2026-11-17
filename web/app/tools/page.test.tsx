@@ -53,7 +53,7 @@ describe("ToolsPage", () => {
     render(await hub());
     expect(screen.getByRole("link", { name: "Add a passkey" })).toHaveAttribute(
       "href",
-      "/api/auth/login?next=%2Fapi%2Fauth%2Fpasskey",
+      "/api/auth/login?as=owner&next=%2Fapi%2Fauth%2Fpasskey",
     );
   });
 

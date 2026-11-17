@@ -9,6 +9,7 @@ export function redirectToCognito(
   request: NextRequest,
   next: string,
   path?: "/oauth2/authorize" | "/passkeys/add",
+  identityProvider?: "Google",
 ) {
   const secret = process.env.COOKIE_SECRET;
   if (!secret) {
@@ -22,7 +23,7 @@ export function redirectToCognito(
 
   let target: string;
   try {
-    target = authorizeUrl({ redirectUri, state, challenge, path });
+    target = authorizeUrl({ redirectUri, state, challenge, path, identityProvider });
   } catch (err) {
     // COGNITO_DOMAIN missing or malformed: the URL constructor throws.
     console.error("auth: cannot build the Cognito sign-in URL", err);

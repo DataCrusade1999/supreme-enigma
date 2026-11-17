@@ -55,6 +55,9 @@ resource "aws_iam_role_policy" "vercel_resume" {
         # s3:prefix-scoped grant does not restore the 404. Bucket ARN only, so this
         # grants listing key names in this environment's bucket and nothing else —
         # GetObject stays scoped to resume/ above and to modules/app's prefixes.
+        # StringLikeIfExists on s3:prefix was tested on dev (#173) and doesn't help
+        # either: a list call with no prefix carries no s3:prefix, so the condition
+        # passes and the whole bucket still lists.
         Sid      = "ResumeHeadObjectNotFound"
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]
@@ -104,6 +107,19 @@ resource "vercel_project_environment_variable" "access_grants_table" {
   project_id = data.vercel_project.looper.id
   key        = "ACCESS_GRANTS_TABLE"
   value      = "site-access-grants"
+  target     = ["preview"]
+  git_branch = var.vercel_git_branch
+  sensitive  = false
+}
+
+# Access emails (#530) go out from this address on the account's SES identity,
+# <env>.ashutosh-pandey.com. A literal for the same reason as the table name above;
+# the preview role's SendAccessEmail grant in infra/modules/nonprod-account names the
+# same address. The account is in the SES sandbox, so only the owner receives them.
+resource "vercel_project_environment_variable" "access_from_email" {
+  project_id = data.vercel_project.looper.id
+  key        = "ACCESS_FROM_EMAIL"
+  value      = "access@${var.env}.ashutosh-pandey.com"
   target     = ["preview"]
   git_branch = var.vercel_git_branch
   sensitive  = false

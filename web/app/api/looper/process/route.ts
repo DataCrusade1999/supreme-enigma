@@ -3,6 +3,7 @@ import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import {
   awsCredentials,
   deriveOutputKey,
+  isUploadKey,
   presignDownload,
   DOWNLOAD_URL_TTL_SECONDS,
 } from "@/lib/aws";
@@ -10,6 +11,9 @@ import { parseLambdaPayload, toLoopResult } from "@/lib/looper";
 
 export async function POST(request: NextRequest) {
   const { key } = await request.json();
+  if (!isUploadKey(key)) {
+    return NextResponse.json({ error: "invalid key" }, { status: 400 });
+  }
   const outputKey = deriveOutputKey(key);
 
   const client = new LambdaClient({ region: process.env.APP_AWS_REGION!, ...awsCredentials() });
