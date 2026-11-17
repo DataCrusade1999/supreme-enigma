@@ -681,7 +681,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
           git commit -m "chore(changelog): release ${{ steps.version.outputs.tag }}"
-          echo "sha=$(python3 .github/scripts/push-signed.py main)" >> "$GITHUB_OUTPUT"
+          # Its own statement: inside an echo argument, set -e ignores a failed
+          # substitution and the step would pass with no commit on main (#572).
+          SHA=$(python3 .github/scripts/push-signed.py main)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       # Opens the PR that puts this release's heading back on dev, and does it
       # BEFORE the tag exists. It merges main into a branch off dev instead of
