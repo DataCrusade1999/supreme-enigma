@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-11-17
+
 ### Added
 
 - An alarm on BGM Looper Lambda errors in every environment, emailed through
