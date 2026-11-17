@@ -45,6 +45,9 @@ git tags / GitHub Releases cut automatically by the `release` job in
   "wait and retry" message while the email domain is still verifying, and
   production can turn passkeys off for the first run with a flag, like dev and
   stage (#293).
+- Dependencies: jsdom 31, Next 16.4.6 and the rest of November's npm minor and
+  patch bumps, `hashicorp/aws` 6.73.0 and `vercel/vercel` in every Terraform
+  stack, and `chromaui/action` 18.14.4 (#564).
 
 ### Fixed
 

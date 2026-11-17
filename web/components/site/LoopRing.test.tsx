@@ -24,7 +24,9 @@ describe("LoopRing", () => {
 
     expect(bars(container)[0].style.transform).toContain("rotate(-90deg)");
     expect(bars(container)[0].style.transform).toContain("translateX(100px)");
-    expect(bars(container)[1].style.transform).toContain(`rotate(${-90 + step}deg)`);
+    // jsdom 31 serializes CSS numbers to 4 decimal places, so compare the angle numerically.
+    const angle = Number(bars(container)[1].style.transform.match(/rotate\((-?[\d.]+)deg\)/)?.[1]);
+    expect(angle).toBeCloseTo(-90 + step, 3);
     // The wrapper shrink-wraps its bar, so without this the rotation would be
     // about each bar's own midpoint rather than the ring's centre.
     expect(bars(container)[0]).toHaveClass("origin-top-left");
