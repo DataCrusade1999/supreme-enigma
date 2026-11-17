@@ -12,13 +12,18 @@ on:
         type: string
 
 permissions:
-  checks: write
   contents: read
   pull-requests: read
 
 jobs:
   ui-tests:
     runs-on: ubuntu-24.04
+    # The action reports its verdict as a Check Run. Job-level, so a job added
+    # later doesn't inherit the write grant (#550).
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: read
     steps:
       - name: Trigger release testing
         uses: aws-actions/devops-agent-qa@3e6e4ff02bf14e05936b19c7369e299a6eb5c0f8 # v1
