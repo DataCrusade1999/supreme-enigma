@@ -35,6 +35,7 @@ variable "dns_domain" {
 variable "alert_email" {
   description = "Receives the alarm emails and is the SES sandbox recipient and Cognito owner user. The SNS subscription and the SES identity each need one click from the inbox after the first apply."
   type        = string
+  sensitive   = true
 }
 
 variable "google_client_id" {

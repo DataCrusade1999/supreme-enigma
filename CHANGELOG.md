@@ -95,6 +95,18 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - The `/tools` pages enforce a `script-src` with a per-request nonce and
   `'strict-dynamic'`, so an injected script can't run there. Public pages keep
   the old policy and stay static (#385).
+- Production Terraform applies wait for the owner's approval in the
+  `terraform-prod` GitHub Environment, and `bgm-looper-tf-apply-prod` trusts only
+  that environment, so a push to `main` can't apply to production unattended
+  (#399).
+- `bgm-looper-tf-apply-prod`'s service grants cover only this project's
+  resources instead of every resource of each service (#401).
+- The owner's email is masked in Terraform run logs: it is a repository secret
+  and `alert_email` is sensitive (#563).
+- Only the Terraform roles and the admin role can read the Terraform state
+  buckets, which hold secrets in plain text (#568).
+- The release job's changelog commit and sync merge commit are signed by GitHub,
+  so the permanent branches can require signed commits (#373).
 
 ## [1.12.1] - 2026-11-16
 
