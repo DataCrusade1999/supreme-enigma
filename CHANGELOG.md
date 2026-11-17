@@ -29,6 +29,15 @@ git tags / GitHub Releases cut automatically by the `release` job in
   5% and 0.1% review thresholds (#391).
 - Chromatic skips its install and upload on a PR into `dev` that touches
   neither `web/` nor `deploy.yml` (#329).
+- CI installs `web/` with `npm ci`, and the Lambda's Python dependencies from
+  hash-locked `requirements.txt`/`requirements-dev.txt` compiled from `.in`
+  files. The Lambda base image is pinned by digest, kept current by Dependabot
+  (#551).
+- The release-tests workflow grants `checks: write` to its one job instead of
+  the whole workflow (#550).
+- `web/` no longer installs glob 13.x or minimatch 10.x: Keystatic 0.6.10 and
+  typescript-eslint 8.73 take minimatch 11, and an override moves Storybook's
+  docgen plugin to glob 14 (#553, #503).
 - Sign-in goes straight to Google. Cognito's page with email code and passkey,
   which only the owner can use, opens from `/api/auth/login?as=owner`, and the
   hub's "Add a passkey" link uses it (#546).

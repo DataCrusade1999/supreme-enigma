@@ -20,7 +20,7 @@
     "@aws-sdk/client-verifiedpermissions": "^3.1159.0",
     "@aws-sdk/lib-dynamodb": "^3.1160.0",
     "@aws-sdk/s3-request-presigner": "^3.1159.0",
-    "@keystatic/core": "^0.6.9",
+    "@keystatic/core": "^0.6.10",
     "@keystatic/next": "^5.0.5",
     "@markdoc/markdoc": "^0.5.11",
     "@vercel/analytics": "^2.0.1",
@@ -63,6 +63,9 @@
   "overrides": {
     "@vercel/cli-config": {
       "zod": "$zod"
+    },
+    "@joshwooding/vite-plugin-react-docgen-typescript": {
+      "glob": "^14.0.6"
     }
   }
 }

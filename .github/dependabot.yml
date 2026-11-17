@@ -44,6 +44,9 @@ updates:
       - dependency-name: eslint
         versions: [">=10"]
 
+  # requirements.txt and requirements-dev.txt are hash-locked pip-compile
+  # output from the .in files (#551). Dependabot reruns pip-compile with the
+  # Python version in each header, so keep that at 3.12.
   - package-ecosystem: pip
     directory: /lambda
     schedule:
@@ -56,6 +59,15 @@ updates:
       pip:
         patterns: ["*"]
         update-types: [minor, patch]
+
+  # The Lambda base image is pinned by digest (#551); this keeps the digest current.
+  - package-ecosystem: docker
+    directory: /lambda
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore
+      include: scope
 
   - package-ecosystem: github-actions
     directory: /
