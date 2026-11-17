@@ -116,6 +116,9 @@ jobs:
           fi
           mkdir -p plans
           node .github/scripts/tf-summary.mjs comment plans "$title" > comment.md
+          # The owner's address is the ID of the SES identity, the SNS subscription and the
+          # Cognito owner user, and Actions masking doesn't reach comment bodies (#563).
+          python3 -c 'import os,sys; p=sys.argv[1]; e=os.environ.get("TF_VAR_alert_email",""); s=open(p).read(); open(p,"w").write(s.replace(e,"<alert_email>") if e else s)' comment.md
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq '[.[] | select(.body | startswith("<!-- terraform-plan -->"))][0].id // empty')
           if [ -n "$id" ]; then
@@ -269,6 +272,9 @@ jobs:
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           node dev/.github/scripts/tf-summary.mjs comment plans "Drift check — $RUN" > drift.md
+          # The owner's address is the ID of the SES identity, the SNS subscription and the
+          # Cognito owner user, and Actions masking doesn't reach comment bodies (#563).
+          python3 -c 'import os,sys; p=sys.argv[1]; e=os.environ.get("TF_VAR_alert_email",""); s=open(p).read(); open(p,"w").write(s.replace(e,"<alert_email>") if e else s)' drift.md
           issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift --state open --json number --jq '.[0].number // empty')
           if [ "$drift" = 1 ]; then
             if [ -n "$issue" ]; then gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body-file drift.md
