@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { isPinId, PIN_PREFIX } from "./chat-types";
 import { withoutTimeFilters } from "./indicators";
 import { readPins, readSnapshot, SnapshotCorruptError, writePins, writeSnapshot } from "./store";

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import recorded from "./mospi-tools.json";
 
 // MoSPI's own tool schemas, recorded from tools/list on 2026-09-26. Recorded

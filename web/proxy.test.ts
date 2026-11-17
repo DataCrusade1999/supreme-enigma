@@ -138,6 +138,43 @@ describe("proxy: decisions", () => {
   });
 });
 
+describe("proxy: /tools CSP", () => {
+  const scriptSrc = (csp: string | null) => csp?.split(";").map((d) => d.trim()).find((d) => d.startsWith("script-src "));
+  const nonceOf = (csp: string | null) => /'nonce-([^']+)'/.exec(csp ?? "")?.[1];
+
+  it("sends an allowed /tools page a nonce-based script-src, and hands the same policy to the page", async () => {
+    const res = await proxy(request("/tools/news-desk", { idToken: token(["owner"]) }));
+    const csp = res.headers.get("content-security-policy");
+    expect(scriptSrc(csp)).toMatch(/^script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic' 'sha256-[A-Za-z0-9+/=]+'/);
+    // Next.js reads the nonce from the request's CSP header when it renders the page.
+    expect(res.headers.get("x-middleware-request-content-security-policy")).toBe(csp);
+    expect(csp).toContain("frame-ancestors 'none'");
+  });
+
+  it("uses a new nonce on every request", async () => {
+    const a = await proxy(request("/tools", { idToken: token(["owner"]) }));
+    const b = await proxy(request("/tools", { idToken: token(["owner"]) }));
+    expect(nonceOf(a.headers.get("content-security-policy"))).not.toBe(nonceOf(b.headers.get("content-security-policy")));
+  });
+
+  it("keeps the refreshed token in the request alongside the policy", async () => {
+    vi.mocked(refreshIdToken).mockResolvedValue(token(["owner"], NOW_S + 900));
+    vi.mocked(verifyIdToken).mockResolvedValue(true);
+    const res = await proxy(request("/tools", { idToken: token(["owner"], NOW_S + 30), refreshToken: "rt" }));
+    expect(res.headers.get("x-middleware-request-cookie")).toContain(`${ID_COOKIE}=`);
+    expect(res.headers.get("x-middleware-request-content-security-policy")).toBe(res.headers.get("content-security-policy"));
+    expect(nonceOf(res.headers.get("content-security-policy"))).toBeTruthy();
+  });
+
+  it.each([
+    ["an API route", "/api/news-desk/ask", "POST"],
+    ["a public page", "/about", "GET"],
+  ])("leaves %s to the site-wide header", async (_label, path, method) => {
+    const res = await proxy(request(path, { method, idToken: token(["owner"]) }));
+    expect(res.headers.get("content-security-policy")).toBeNull();
+  });
+});
+
 describe("proxy: refresh", () => {
   it("refreshes a token about to expire, decides with the new one, and hands it to the page", async () => {
     const fresh = token(["friends"], NOW_S + 900);

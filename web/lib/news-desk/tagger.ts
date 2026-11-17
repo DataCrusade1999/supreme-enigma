@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { MODEL_TAGS, type Headline, type ModelTag } from "./types";
 
 // 100 items need about 1,500 output tokens; the first refresh has ~600 new items,

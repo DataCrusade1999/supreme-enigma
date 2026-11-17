@@ -48,8 +48,14 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - Dependencies: jsdom 31, Next 16.4.6 and the rest of November's npm minor and
   patch bumps, `hashicorp/aws` 6.73.0 and `vercel/vercel` in every Terraform
   stack, and `chromaui/action` 18.14.4 (#564).
+- ESLint 10. `eslint-config-next`'s React, import and jsx-a11y plugins don't
+  declare ESLint 10 support yet, but lint runs clean on it (#79).
 
 ### Fixed
+
+- The first BGM Looper track after the Lambda was idle could time out: init ran
+  past Lambda's 10s limit at 1024 MB and its retry counted against the 60s
+  timeout. The function now has 2048 MB and 120s (#567).
 
 - The Lambda image build fails at the ffmpeg download, with a message saying
   so, when the host returns something other than the archive (#126).
@@ -83,6 +89,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 - The unused `APP_PASSWORD` Vercel env var and its Terraform input. Sign-in has
   gone through Cognito since the auth migration; nothing read it.
+
+### Security
+
+- The `/tools` pages enforce a `script-src` with a per-request nonce and
+  `'strict-dynamic'`, so an injected script can't run there. Public pages keep
+  the old policy and stay static (#385).
 
 ## [1.12.1] - 2026-11-16
 
