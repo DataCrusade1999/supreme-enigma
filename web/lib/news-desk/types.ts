@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { STORED_TAGS } from "./tags";
 
 export * from "./tags";

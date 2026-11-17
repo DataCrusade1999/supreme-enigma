@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "@/lib/zod";
 import { callTool } from "./mospi";
 import { toSeries, type Point } from "./series";
 import type { IndicatorDef, IndicatorValue } from "./types";
