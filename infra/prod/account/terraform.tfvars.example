@@ -28,3 +28,6 @@ openrouter_api_key = "sk-or-v1-..."
 # https://auth.stage.ashutosh-pandey.com/oauth2/idpresponse.
 google_client_id     = "....apps.googleusercontent.com"
 google_client_secret = "..."
+
+# Optional — defaults to true. Set false for the pool's first apply only.
+# webauthn_enabled = false

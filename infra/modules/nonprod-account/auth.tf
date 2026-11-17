@@ -12,6 +12,7 @@ module "auth" {
   callback_urls        = local.login_callback_urls
   ses_identity         = aws_sesv2_email_identity.domain.email_identity
   ses_identity_arn     = aws_sesv2_email_identity.domain.arn
+  ses_verified         = aws_sesv2_email_identity.domain.verified_for_sending_status
   from_email_address   = "Sign-in <no-reply@${aws_sesv2_email_identity.domain.email_identity}>"
   google_client_id     = var.google_client_id
   google_client_secret = var.google_client_secret

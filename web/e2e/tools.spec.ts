@@ -28,6 +28,7 @@ test("the sign-in route sends the browser to Cognito with PKCE", async ({ reques
   const location = new URL(res.headers()["location"]);
   expect(location.origin).toBe("https://login.invalid");
   expect(location.searchParams.get("code_challenge_method")).toBe("S256");
+  expect(location.searchParams.get("identity_provider")).toBe("Google");
 });
 
 test("the hub links to every gated tool", async ({ page, baseURL }) => {

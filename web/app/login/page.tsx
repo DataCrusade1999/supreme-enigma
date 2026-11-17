@@ -80,8 +80,8 @@ function LoginForm() {
 
       <p className="mt-[18px] max-w-[46ch] text-base leading-relaxed text-muted">
         {destination
-          ? "These tools are for the site's owner. Sign in with Google, an email code or a passkey to continue."
-          : "These tools are for the site's owner. Sign in with Google, an email code or a passkey, and every tool on this site opens for the session."}
+          ? "Sign in with Google to continue."
+          : "Sign in with Google to open the tools you have access to."}
       </p>
 
       <div className="mt-9 flex flex-col gap-3.5">

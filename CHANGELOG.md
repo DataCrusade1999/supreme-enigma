@@ -38,6 +38,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
 - `web/` no longer installs glob 13.x or minimatch 10.x: Keystatic 0.6.10 and
   typescript-eslint 8.73 take minimatch 11, and an override moves Storybook's
   docgen plugin to glob 14 (#553, #503).
+- Sign-in goes straight to Google. Cognito's page with email code and passkey,
+  which only the owner can use, opens from `/api/auth/login?as=owner`, and the
+  hub's "Add a passkey" link uses it (#546).
+- Rebuilding sign-in from scratch needs no code edits: it stops with a clear
+  "wait and retry" message while the email domain is still verifying, and
+  production can turn passkeys off for the first run with a flag, like dev and
+  stage (#293).
 
 ### Fixed
 

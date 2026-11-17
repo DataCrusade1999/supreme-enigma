@@ -57,3 +57,10 @@ variable "google_client_secret" {
   type      = string
   sensitive = true
 }
+
+# false only for the first apply of the pool, then back to true:
+# .claude/rules/infra.md ("Cognito WebAuthn on a from-scratch apply").
+variable "webauthn_enabled" {
+  type    = bool
+  default = true
+}
