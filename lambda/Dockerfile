@@ -1,4 +1,5 @@
-FROM public.ecr.aws/lambda/python:3.12
+# Pinned by digest (#551); Dependabot's docker ecosystem moves it when AWS updates the 3.12 tag.
+FROM public.ecr.aws/lambda/python:3.12@sha256:ca6bfddec7726813ba7251ac1a14c8aefbcc76b18343267c3b5f339c8db2c758
 
 # The host has answered 200 with a 7 KB body instead of the ~40 MB archive (#126),
 # which curl -f counts as success and tar reports as a format error. Check the xz
@@ -13,7 +14,7 @@ RUN dnf install -y tar xz && \
     dnf clean all
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --require-hashes -r requirements.txt
 
 COPY src/looper ${LAMBDA_TASK_ROOT}/looper
 

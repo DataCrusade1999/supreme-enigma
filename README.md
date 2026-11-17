@@ -145,10 +145,10 @@ COOKIE_SECRET=devsecret COGNITO_DOMAIN=https://auth.ashutosh-pandey.com COGNITO_
 cd lambda
 python -m venv .venv
 # Windows
-.venv/Scripts/python -m pip install -r requirements.txt pytest moto
+.venv/Scripts/python -m pip install --require-hashes -r requirements-dev.txt
 .venv/Scripts/python -m pytest -q
 # macOS/Linux
-# .venv/bin/python -m pip install -r requirements.txt pytest moto
+# .venv/bin/python -m pip install --require-hashes -r requirements-dev.txt
 # .venv/bin/python -m pytest -q
 ```
 
