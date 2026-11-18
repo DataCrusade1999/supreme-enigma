@@ -619,6 +619,10 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # Sigstore signing of the release archive (#576): the OIDC token is the
+      # signing identity, and attestations: write stores the attestation.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -846,14 +850,59 @@ jobs:
 
       # Last, and only once the sync PR above exists. Idempotent so the re-run
       # that recovers a failed sync does not trip over its own earlier release.
-      - name: Create tag and release
+      #
+      # Every release carries a source archive and its Sigstore bundle (#576).
+      # Releases are immutable (#371), so assets cannot be added after
+      # publishing: the release is created as a draft, given its assets, then
+      # published. A draft left by a run that died part-way is deleted and
+      # rebuilt; a draft has no tag yet, so nothing published is touched.
+      - name: Prepare release archive
+        id: archive
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "$TAG is already released - nothing to do."
-            exit 0
-          fi
-          gh release create "$TAG" --target main --generate-notes
+          DRAFT=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo "none")
+          case "$DRAFT" in
+            false)
+              echo "$TAG is already released - nothing to do."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+            true)
+              echo "Deleting the draft $TAG left by an earlier attempt."
+              gh release delete "$TAG" --yes
+              ;;
+          esac
+          # main as it is now, after the changelog commit above: that commit was
+          # published through the API, so its SHA differs from the local HEAD.
+          git fetch --quiet origin main
+          SHA=$(git rev-parse origin/main)
+          ARCHIVE="$RUNNER_TEMP/supreme-enigma-$TAG.tar.gz"
+          git archive --format=tar.gz --prefix="supreme-enigma-$TAG/" -o "$ARCHIVE" "$SHA"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "path=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Attest release archive
+        id: attest
+        if: steps.archive.outputs.skip == 'false'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ steps.archive.outputs.path }}
+
+      - name: Create tag and release
+        if: steps.archive.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ steps.archive.outputs.sha }}
+          ARCHIVE: ${{ steps.archive.outputs.path }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          # .sigstore.json is the extension OpenSSF Scorecard counts as a signature.
+          cp "$BUNDLE" "$ARCHIVE.sigstore.json"
+          gh release create "$TAG" --draft --target "$SHA" --generate-notes "$ARCHIVE" "$ARCHIVE.sigstore.json"
+          gh release edit "$TAG" --draft=false

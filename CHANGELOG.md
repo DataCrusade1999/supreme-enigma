@@ -7,6 +7,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Each GitHub Release carries a source archive and its Sigstore-signed build
+  provenance, verifiable with `gh attestation verify` (#576).
+
 ## [1.13.0] - 2026-11-17
 
 ### Added
