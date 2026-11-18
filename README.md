@@ -1,6 +1,7 @@
 # Ashutosh Pandey — portfolio & personal tools
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DataCrusade1999/supreme-enigma/badge)](https://scorecard.dev/viewer/?uri=github.com/DataCrusade1999/supreme-enigma)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16878/badge)](https://www.bestpractices.dev/projects/16878)
 
 A personal portfolio site with a small workshop of private tools attached.
 The portfolio half (home, about, projects, resume, blog, contact) is public
@@ -263,6 +264,16 @@ compute, no database, no queue. Measured numbers and the breakdown are in
 Work is tracked as GitHub issues on the
 [BGM Looper Roadmap](https://github.com/users/DataCrusade1999/projects/4)
 board, labeled by `area:` and `priority:`. See `CLAUDE.md` for conventions.
+
+## Feedback and contributing
+
+- **Bugs and suggestions:** send them through the [contact page](https://ashutosh-pandey.com/contact).
+  GitHub issues and pull requests are limited to collaborators until 2027-04-02.
+- **Security issues:** report them privately as described in [SECURITY.md](SECURITY.md).
+- **Code:** get in touch first. Pull requests target `dev`, fill in the
+  [PR template](.github/pull_request_template.md) (test plan, `CHANGELOG.md`
+  entry), and need a green CI run. New behaviour comes with tests: Vitest or
+  Playwright for `web/`, pytest for `lambda/`.
 
 ## Changelog & License
 
