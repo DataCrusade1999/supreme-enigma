@@ -264,6 +264,16 @@ Work is tracked as GitHub issues on the
 [BGM Looper Roadmap](https://github.com/users/DataCrusade1999/projects/4)
 board, labeled by `area:` and `priority:`. See `CLAUDE.md` for conventions.
 
+## Feedback and contributing
+
+- **Bugs and suggestions:** send them through the [contact page](https://ashutosh-pandey.com/contact).
+  GitHub issues and pull requests are limited to collaborators until 2027-04-02.
+- **Security issues:** report them privately as described in [SECURITY.md](SECURITY.md).
+- **Code:** get in touch first. Pull requests target `dev`, fill in the
+  [PR template](.github/pull_request_template.md) (test plan, `CHANGELOG.md`
+  entry), and need a green CI run. New behaviour comes with tests: Vitest or
+  Playwright for `web/`, pytest for `lambda/`.
+
 ## Changelog & License
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and [LICENSE](LICENSE) (MIT).
