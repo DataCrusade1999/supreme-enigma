@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BGM Looper — case study</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',sans-serif;background:#F4F1EA;color:#16181D}
+a{color:#B53A17}a:hover{color:#8E2C10}
+</style>
+</helmet>
+<div style="width: 1440px; height: 2240px; box-sizing: border-box; background: #F4F1EA; color: #16181D; font-family: 'IBM Plex Sans', sans-serif; display: flex; flex-direction: column">
+
+<nav aria-label="Main" style="display: flex; justify-content: space-between; align-items: center; padding: 28px 80px; border-bottom: 1px solid #D9D4C8">
+<a href="Main.dc.html" style="display: flex; align-items: center; gap: 12px; color: #16181D; text-decoration: none">
+<svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="{{accent}}" stroke-width="2.2"><path d="M2 14c3-8 6-8 8 0s5 8 8 0 5-8 8 0"></path></svg>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 20px">ashutosh.pandey</span>
+</a>
+<div style="display: flex; gap: 36px; align-items: center; font-size: 15px">
+<a href="#" style="color: #16181D; text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 2px; padding: 12px 0">Projects</a>
+<a href="#" style="color: #16181D; text-decoration: none; padding: 12px 0">Writing</a>
+<a href="#" style="color: #16181D; text-decoration: none; padding: 12px 0">Resume</a>
+<a href="#" style="color: #16181D; text-decoration: none; padding: 12px 0">About</a>
+<a href="#" style="display: inline-flex; align-items: center; height: 44px; padding: 0 18px; background: #16181D; color: #F4F1EA; text-decoration: none; font-weight: 500">Contact</a>
+</div>
+</nav>
+
+<header style="padding: 72px 80px 56px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 28px; border-bottom: 2px solid #16181D; margin: 0 80px; padding-left: 0; padding-right: 0">
+<div style="grid-column: span 12; display: flex; gap: 16px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase"><a href="Main.dc.html" style="color: #5A5F6A; text-decoration: none">Projects</a><span style="color: #5A5F6A">/</span><span style="color: {{accent}}">P-01</span></div>
+<h1 style="grid-column: span 8; margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 120px; line-height: 0.9; letter-spacing: -0.04em">BGM Looper</h1>
+<div style="grid-column: 9 / span 4; display: flex; flex-direction: column; gap: 16px; justify-content: flex-end">
+<a href="#" style="display: inline-flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 24px; background: #16181D; color: #F4F1EA; text-decoration: none; font-weight: 500; font-size: 16px">Open the tool
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></a>
+<a href="#" style="display: inline-flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 24px; border: 1.5px solid #16181D; color: #16181D; text-decoration: none; font-weight: 500; font-size: 16px">Source on GitHub
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h7v7M13 3 4 12"></path></svg></a>
+</div>
+<p style="grid-column: span 7; margin: 0; font-size: 22px; line-height: 1.5; color: #3A3E47">Upload a background-music track and get back a seamlessly looping, loudness-normalized version — beat-aligned loop point, equal-power crossfade, computed by a Python DSP pipeline on AWS Lambda.</p>
+</header>
+
+<section style="padding: 64px 80px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0">
+<sc-for list="{{specs}}" as="s" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 0 24px 0 0; border-right: 1px solid #D9D4C8; margin-right: 24px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A">{{s.label}}</div>
+<div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 48px; letter-spacing: -0.02em">{{s.value}}</div>
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #5A5F6A">{{s.src}}</div>
+</div>
+</sc-for>
+</section>
+
+<section style="padding: 96px 80px 0; display: flex; flex-direction: column; gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: {{accent}}">01 — Signal path</div>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 56px; letter-spacing: -0.02em">From upload to loop</h2>
+</div>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1.5px solid #16181D; background: #FBFAF6">
+<sc-for list="{{stages}}" as="st" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; gap: 12px; padding: 28px 24px; border-right: 1px solid #D9D4C8; min-height: 220px; box-sizing: border-box">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: {{accent}}">{{st.n}}</div>
+<div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 500; font-size: 26px">{{st.title}}</div>
+<div style="font-size: 15px; line-height: 1.55; color: #3A3E47">{{st.body}}</div>
+<div style="margin-top: auto; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #5A5F6A">{{st.where}}</div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="margin: 96px 80px 0; background: #16181D; color: #F4F1EA; padding: 40px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 24px">
+<div style="grid-column: span 12; display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #B9BCC4"><span>02 — The crossfade, drawn</span><span style="color: #FF8A5B">50 ms · equal power</span></div>
+<svg viewBox="0 0 700 240" width="100%" height="240" style="grid-column: span 8; display: block">
+<defs><pattern id="g3" width="35" height="40" patternUnits="userSpaceOnUse"><path d="M35 0H0V40" fill="none" stroke="#2A2E36" stroke-width="1"></path></pattern></defs>
+<rect width="700" height="240" fill="url(#g3)"></rect>
+<path d="M0 30 L 280 30 C 350 30, 400 120, 420 210 L 700 210" fill="none" stroke="#F4F1EA" stroke-width="2"></path>
+<path d="M0 210 L 280 210 C 300 120, 350 30, 420 30 L 700 30" fill="none" stroke="{{accent}}" stroke-width="2.5"></path>
+<rect x="280" y="0" width="140" height="240" fill="{{accent}}" fill-opacity="0.12"></rect>
+<text x="10" y="22" fill="#B9BCC4" font-family="IBM Plex Mono, monospace" font-size="12">tail out</text>
+<text x="10" y="232" fill="#FF8A5B" font-family="IBM Plex Mono, monospace" font-size="12">head in</text>
+</svg>
+<div style="grid-column: span 4; display: flex; flex-direction: column; gap: 16px; justify-content: center">
+<p style="margin: 0; font-size: 17px; line-height: 1.6; color: #D8DAE0">A linear crossfade dips in loudness halfway through. The equal-power curve keeps the summed energy flat, so the seam has no audible hole.</p>
+<p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #B9BCC4">lambda/src/looper/crossfade.py · fade_sec=0.05</p>
+</div>
+</section>
+
+<section style="padding: 96px 80px 80px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px">
+<div style="grid-column: span 4; display: flex; flex-direction: column; gap: 10px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: {{accent}}">03 — Delivery</div>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 56px; letter-spacing: -0.02em">Three full backends</h2>
+</div>
+<div style="grid-column: 6 / span 7; display: flex; flex-direction: column; border-top: 2px solid #16181D">
+<div style="display: grid; grid-template-columns: 120px 1fr 1fr; gap: 24px; padding: 14px 0; border-bottom: 1px solid #16181D; font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5A5F6A"><span>Branch</span><span>Lambda</span><span>ECR tag</span></div>
+<sc-for list="{{envs}}" as="e" hint-placeholder-count="3">
+<div style="display: grid; grid-template-columns: 120px 1fr 1fr; gap: 24px; padding: 18px 0; border-bottom: 1px solid #D9D4C8; font-family: 'IBM Plex Mono', monospace; font-size: 15px"><span style="font-weight: 500">{{e.branch}}</span><span>{{e.fn}}</span><span style="color: #5A5F6A">{{e.tag}}</span></div>
+</sc-for>
+<p style="margin: 20px 0 0; font-size: 16px; line-height: 1.6; color: #3A3E47; max-width: 620px">Each branch gets its own bucket and function; one immutable ECR repo holds per-branch tags. Infrastructure is Terraform, and a push only rebuilds the Lambda image when <span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px">lambda/</span> changed.</p>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D2451E","options":["#D2451E","#1F5FAD","#2F7D4F","#7A4FB5"]},"$preview":{"width":1440,"height":2240}}'>
+class Component extends DCLogic {
+renderVals() {
+return {
+accent: this.props.accent ?? '#D2451E',
+specs: [
+{ label: 'Loudness', value: '−14.0 LUFS', src: 'target_lufs' },
+{ label: 'Crossfade', value: '50 ms', src: 'fade_sec=0.05' },
+{ label: 'Silence trim', value: '40 dB', src: 'top_db' },
+{ label: 'URL lifetime', value: '300 s', src: 'presigned' }
+],
+stages: [
+{ n: '01', title: 'Upload', body: 'The browser PUTs straight to S3 with a presigned URL; the app never proxies audio.', where: 'uploads/' },
+{ n: '02', title: 'Trim', body: 'Leading and trailing silence below 40 dB is cut before analysis.', where: 'top_db 40' },
+{ n: '03', title: 'Find the beat', body: 'The loop point lands on a beat so the rhythm carries across the seam.', where: 'beat-aligned' },
+{ n: '04', title: 'Crossfade', body: 'Tail and head overlap under an equal-power curve.', where: '50 ms' },
+{ n: '05', title: 'Normalize', body: 'Output is brought to a streaming-standard loudness and written back.', where: 'outputs/' }
+],
+envs: [
+{ branch: 'main', fn: 'bgm-looper-processor', tag: 'main-<sha>' },
+{ branch: 'stage', fn: 'bgm-looper-processor-stage', tag: 'stage-<sha>' },
+{ branch: 'dev', fn: 'bgm-looper-processor-dev', tag: 'dev-<sha>' }
+]
+};
+}
+}
+</script>
+</body>
+</html>

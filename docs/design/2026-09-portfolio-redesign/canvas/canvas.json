@@ -1,0 +1,183 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "DesignSystem.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 2240,
+      "title": "Design system — Datasheet"
+    },
+    "Themes.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1480,
+      "title": "Theme explorations"
+    },
+    "Project.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 2240,
+      "title": "Project — BGM Looper"
+    },
+    "Main.dc.html": {
+      "x": 0,
+      "y": 2660,
+      "w": 1440,
+      "h": 2400,
+      "title": "Home — Paper"
+    },
+    "HomeMidnight.dc.html": {
+      "x": 1520,
+      "y": 2660,
+      "w": 1440,
+      "h": 2400,
+      "title": "Home — Midnight"
+    },
+    "HomeForest.dc.html": {
+      "x": 3040,
+      "y": 2660,
+      "w": 1440,
+      "h": 2400,
+      "title": "Home — Forest"
+    },
+    "HomeCobalt.dc.html": {
+      "x": 4560,
+      "y": 2660,
+      "w": 1440,
+      "h": 2400,
+      "title": "Home — Cobalt"
+    },
+    "HomeClay.dc.html": {
+      "x": 6080,
+      "y": 2660,
+      "w": 1440,
+      "h": 2400,
+      "title": "Home — Clay"
+    },
+    "Mobile.dc.html": {
+      "x": 0,
+      "y": 5480,
+      "w": 390,
+      "h": 2400,
+      "title": "Mobile — Paper"
+    },
+    "MobileMidnight.dc.html": {
+      "x": 470,
+      "y": 5480,
+      "w": 390,
+      "h": 2400,
+      "title": "Mobile — Midnight"
+    },
+    "MobileClay.dc.html": {
+      "x": 940,
+      "y": 5480,
+      "w": 390,
+      "h": 2400,
+      "title": "Mobile — Clay"
+    },
+    "HomeCobaltSerif.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 2400,
+      "title": "Home — Cobalt, serif",
+      "page": "serif"
+    },
+    "HomeMidnightSerif.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 2400,
+      "title": "Home — Midnight, serif",
+      "page": "serif"
+    },
+    "MobileCobaltSerif.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 390,
+      "h": 2400,
+      "title": "Mobile — Cobalt, serif",
+      "page": "serif"
+    },
+    "MobileMidnightSerif.dc.html": {
+      "x": 3510,
+      "y": 0,
+      "w": 390,
+      "h": 2400,
+      "title": "Mobile — Midnight, serif",
+      "page": "serif"
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-24T10:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "title": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Datasheet — system, themes and a project page",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "homes": {
+      "kind": "title1",
+      "maxW": 7520,
+      "text": "Home page in five themes",
+      "x": 0,
+      "y": 2360
+    },
+    "mobiles": {
+      "kind": "title1",
+      "maxW": 1330,
+      "text": "Mobile",
+      "x": 0,
+      "y": 5180
+    },
+    "serifTitle": {
+      "kind": "title1",
+      "maxW": 3900,
+      "text": "Cobalt and Midnight with Fraunces headings",
+      "x": 0,
+      "y": -300,
+      "page": "serif"
+    }
+  },
+  "order": [
+    "DesignSystem.dc.html",
+    "Themes.dc.html",
+    "Project.dc.html",
+    "Main.dc.html",
+    "HomeMidnight.dc.html",
+    "HomeForest.dc.html",
+    "HomeCobalt.dc.html",
+    "HomeClay.dc.html",
+    "Mobile.dc.html",
+    "MobileMidnight.dc.html",
+    "MobileClay.dc.html",
+    "HomeCobaltSerif.dc.html",
+    "HomeMidnightSerif.dc.html",
+    "MobileCobaltSerif.dc.html",
+    "MobileMidnightSerif.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "explorations",
+      "name": "Explorations"
+    },
+    {
+      "id": "serif",
+      "name": "Cobalt & Midnight — serif"
+    }
+  ],
+  "title": "Portfolio Redesign"
+}
