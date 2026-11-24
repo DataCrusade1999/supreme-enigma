@@ -38,6 +38,11 @@ variable "alert_email" {
   sensitive   = true
 }
 
+variable "zoho_dkim_key" {
+  description = "Zoho's DKIM TXT for selector zoho on <env>.<dns_domain>, copied from the Zoho console as one unbroken string."
+  type        = string
+}
+
 variable "google_client_id" {
   type = string
 }

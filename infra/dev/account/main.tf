@@ -28,4 +28,7 @@ module "account" {
   google_client_id     = var.google_client_id
   google_client_secret = var.google_client_secret
   webauthn_enabled     = var.webauthn_enabled
+
+  # Zoho DKIM for this subdomain, from the Zoho console (#542).
+  zoho_dkim_key = "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtlQ9uke3RUptq8fq4FiWm8SDC5BMNl5EHTCe6XVgri+cN4VlRsLiNLgOSkc+zF5MYmmcB/FZg5OUVQEUhCQEQHxfUsChIki3iaSPpLLqhuu/kQoxIHYLXb15EWvD6hKYrkbb3PIvCFwrDOcX8hQOp0l4yLpkyBpPxbAoCm8NOviRJSemXALw7X40P2LJam6GPv+iF+Xo7B1WTjyVfsvv5EWFsHRgc9dShFa0nwqfxzUoHm1cQARBSvprgT3NWoXWu74kW4B/NUJfEVuAte7Vh6TjfjTbnzcVQyuqVK8dVeHf12yaZb0FLFnCDALlGkX0p5ha05KEPyQYMXXc+umQiwIDAQAB"
 }
