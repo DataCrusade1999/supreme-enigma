@@ -7,6 +7,20 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Each GitHub Release carries a source archive and its Sigstore-signed build
+  provenance, verifiable with `gh attestation verify` (#576).
+- Zoho receives mail for `access@` and `no-reply@` on dev's and stage's
+  subdomains and can send as them, and both accounts' SES suppression list is
+  in Terraform (#542).
+
+### Changed
+
+- The SPF records for `ashutosh-pandey.com`, `dev.` and `stage.` list both of
+  Zoho's sending lists, `zohomail.in` and `zoho.in`, and reject other senders
+  (#581, #582).
+
 ## [1.13.0] - 2026-11-17
 
 ### Added
