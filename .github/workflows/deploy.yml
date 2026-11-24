@@ -861,9 +861,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
+          CHANGELOG_SHA: ${{ steps.changelog_commit.outputs.sha }}
         run: |
           set -euo pipefail
-          DRAFT=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo "none")
+          # Only a missing release counts as "none". Any other gh failure (an
+          # outage, rate limiting, a token problem) stops here rather than
+          # rebuilding a release that may already exist (#585).
+          if OUT=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>&1); then
+            DRAFT="$OUT"
+          elif [ "$OUT" = "release not found" ]; then
+            DRAFT=none
+          else
+            echo "::error::gh release view $TAG failed: $OUT"
+            exit 1
+          fi
           case "$DRAFT" in
             false)
               echo "$TAG is already released - nothing to do."
@@ -875,12 +886,25 @@ jobs:
               gh release delete "$TAG" --yes
               ;;
           esac
-          # main as it is now, after the changelog commit above: that commit was
-          # published through the API, so its SHA differs from the local HEAD.
+          # The tag goes on the changelog commit above. It was published through
+          # the API, so its SHA differs from the local HEAD; take it from that
+          # step. A re-run makes no changelog commit, so it falls back to main.
           git fetch --quiet origin main
-          SHA=$(git rev-parse origin/main)
+          SHA="${CHANGELOG_SHA:-$(git rev-parse origin/main)}"
+          # The tag must hold what the archive holds. If main moved on during
+          # this run, the fallback could pick up someone else's commit: refuse
+          # any tag whose tree differs from github.sha outside CHANGELOG.md.
+          OTHER=$(git diff --name-only "$GITHUB_SHA" "$SHA" -- . ':(exclude)CHANGELOG.md')
+          if [ -n "$OTHER" ]; then
+            echo "::error::$SHA differs from $GITHUB_SHA outside CHANGELOG.md, so the tag would not match the archive. main moved during this run; re-run on the new head instead. Files: $OTHER"
+            exit 1
+          fi
+          # The archive is the commit this run started from, github.sha, because
+          # that is the commit the attestation's provenance names (#586). It
+          # differs from the tagged tree only in CHANGELOG.md, where this
+          # version's entries are still under ## [Unreleased].
           ARCHIVE="$RUNNER_TEMP/supreme-enigma-$TAG.tar.gz"
-          git archive --format=tar.gz --prefix="supreme-enigma-$TAG/" -o "$ARCHIVE" "$SHA"
+          git archive --format=tar.gz --prefix="supreme-enigma-$TAG/" -o "$ARCHIVE" "$GITHUB_SHA"
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "path=$ARCHIVE" >> "$GITHUB_OUTPUT"
