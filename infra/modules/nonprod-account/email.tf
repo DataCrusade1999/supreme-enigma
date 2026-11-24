@@ -86,15 +86,15 @@ resource "vercel_dns_record" "zoho_mx" {
 }
 
 # SES never uses <env> as its envelope domain (that is mail.<env>), so Zoho is the
-# only entry. The value is exactly what Zoho's console shows for the subdomain;
-# tighten to -all once a reply from Zoho shows spf=pass. Keep exactly one v=spf1
-# TXT at this name.
+# only entry. Same value as production's apex_spf: both Zoho lists (#581). -all
+# since a reply from Zoho as access@dev showed spf=pass (#542, #582). Keep exactly
+# one v=spf1 TXT at this name.
 resource "vercel_dns_record" "zoho_spf" {
   team_id = var.vercel_team_id
   domain  = var.dns_domain
   name    = var.env
   type    = "TXT"
-  value   = "v=spf1 include:zohomail.in ~all"
+  value   = "v=spf1 include:zohomail.in include:zoho.in -all"
   ttl     = 1800
 }
 
