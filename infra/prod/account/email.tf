@@ -79,14 +79,17 @@ resource "vercel_dns_record" "mail_from_spf" {
 # Zoho sends with the bare domain as its envelope sender, so the apex SPF lists
 # Zoho. SES uses mail. above and needs no entry here. A new service that sends as
 # the bare domain goes into this include list: a second v=spf1 record at the apex
-# is a permerror. -all since Zoho's mail showed spf=pass (#403, #508). A change
-# here makes Vercel replace the record, so check afterwards for exactly one v=spf1.
+# is a permerror. -all since Zoho's mail showed spf=pass (#403, #508). Both Zoho
+# lists, since they overlap without either containing the other: zohomail.in is
+# what Zoho's console gives new domains, zoho.in what passed here (#581). Five of
+# SPF's ten DNS lookups. A change here makes Vercel replace the record, so check
+# afterwards for exactly one v=spf1.
 resource "vercel_dns_record" "apex_spf" {
   team_id = local.vercel_team_id
   domain  = vercel_project_domain.custom.domain
   name    = ""
   type    = "TXT"
-  value   = "v=spf1 include:zoho.in -all"
+  value   = "v=spf1 include:zohomail.in include:zoho.in -all"
   ttl     = 1800
 }
 

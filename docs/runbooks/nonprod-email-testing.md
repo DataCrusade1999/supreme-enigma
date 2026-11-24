@@ -23,7 +23,13 @@ production.
   owner's address (`aws_sesv2_email_identity.owner`), which Cognito's sign-in
   codes need. Don't delete it: the next apply recreates it and sends a new
   verification link.
-- Replies to `access@<env>` bounce: no mailbox receives them yet (#542).
+- Replies and SES bounce notices to `access@<env>` and `no-reply@<env>` land in
+  the owner's Zoho inbox. Both are Zoho aliases of the owner's mailbox (#542).
+- A test address that bounces or complains goes on the account's suppression
+  list and receives nothing more from that environment. Check it with
+  `aws sesv2 get-suppressed-destination --email-address "$ADDR" --profile "$RO" --region us-east-1`,
+  and remove it with
+  `aws sesv2 delete-suppressed-destination --email-address "$ADDR" --profile "$PROFILE" --region us-east-1`.
 
 ## Prerequisites
 
