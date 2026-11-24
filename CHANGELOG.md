@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-24
+
 ### Added
 
 - Each GitHub Release carries a source archive and its Sigstore-signed build
