@@ -26,3 +26,6 @@ graphify-out/
 # and Vitest reports the same way.
 trivy-results.json
 trivy-summary.md
+
+# The VPN CA key is made offline by infra/vpn/scripts/make-ca.sh; never commit it.
+infra/vpn/ca/
