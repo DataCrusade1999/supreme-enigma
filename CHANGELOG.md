@@ -11,6 +11,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 - A DynamoDB table per environment for the VPN dashboard's peers and the VM's
   status report (#596).
+- IAM Roles Anywhere trust anchor, profile and role for the VPN VM, with
+  scripts to make the CA (#596).
 
 ## [1.14.1] - 2026-11-28
 
