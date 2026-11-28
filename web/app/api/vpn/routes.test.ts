@@ -134,6 +134,18 @@ describe("/api/vpn", () => {
     expect(desired.settings).toEqual({ dns: ["9.9.9.9"], tunnel: "split", cidrs: ["10.0.0.0/8"] });
   });
 
+  it("PUT settings with full tunnel stores no cidrs", async () => {
+    const res = await PUT(
+      req("/api/vpn/settings", {
+        ...json({ dns: ["1.1.1.1"], tunnel: "full", cidrs: ["not a cidr\nPostUp = x"] }),
+        method: "PUT",
+      }),
+    );
+    expect(res.status).toBe(200);
+    const { desired } = await res.json();
+    expect(desired.settings).toEqual({ dns: ["1.1.1.1"], tunnel: "full", cidrs: [] });
+  });
+
   it("503 not_configured when no store", async () => {
     delete process.env.AUTHZ_MODE;
     delete process.env.VPN_TABLE_NAME;

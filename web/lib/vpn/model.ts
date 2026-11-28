@@ -172,7 +172,8 @@ export function updateSettings(d: Desired, s: Settings): Desired {
     ...d,
     version: d.version + 1,
     settingsVersion: d.settingsVersion + 1,
-    settings: { dns: [...s.dns], tunnel: s.tunnel, cidrs: [...s.cidrs] },
+    // A full tunnel ignores cidrs, so none are stored: the schema checks them only for split.
+    settings: { dns: [...s.dns], tunnel: s.tunnel, cidrs: s.tunnel === "split" ? [...s.cidrs] : [] },
   };
 }
 
