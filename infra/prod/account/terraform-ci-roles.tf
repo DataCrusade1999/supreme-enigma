@@ -123,7 +123,7 @@ data "aws_iam_policy_document" "tf_apply_prod" {
     ]
   }
   statement {
-    # The VPN's IAM Roles Anywhere trust anchors and profiles (#594), created by the VPN stack.
+    # The VPN VM's IAM Roles Anywhere trust anchor and profile, in vpn.tf (#594).
     sid     = "RolesAnywhere"
     actions = ["rolesanywhere:*"]
     resources = [
@@ -132,7 +132,7 @@ data "aws_iam_policy_document" "tf_apply_prod" {
     ]
   }
   statement {
-    # Creates have no ARN to scope to until the call returns (#594).
+    # Creating and tagging them takes no resource ARN until the call returns (#594).
     sid       = "RolesAnywhereCreates"
     actions   = ["rolesanywhere:CreateTrustAnchor", "rolesanywhere:CreateProfile", "rolesanywhere:TagResource"]
     resources = ["*"]
