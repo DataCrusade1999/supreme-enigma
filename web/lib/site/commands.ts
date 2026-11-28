@@ -91,6 +91,12 @@ export const COMMANDS: Command[] = [
     run: (ctx) => ctx.push("/keystatic"),
   },
   {
+    id: "open-vpn",
+    label: "open vpn",
+    hint: "Manage VPN devices",
+    run: (ctx) => ctx.push("/tools/vpn"),
+  },
+  {
     id: "open-access-admin",
     label: "open access-admin",
     hint: "Approve people and grant metered actions",

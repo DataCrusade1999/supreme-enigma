@@ -7,6 +7,12 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- Owner-only VPN dashboard at `/tools/vpn`: add, remove and re-issue WireGuard
+  peers, with keys made in the browser and shown once as a QR code or `.conf`
+  (#605).
+
 ## [1.15.0] - 2026-11-28
 
 ### Added

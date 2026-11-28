@@ -12,7 +12,7 @@ test("a friend with no grant opens no tool", async ({ page, baseURL }) => {
   await signIn(page, baseURL!, "friends");
   await page.goto("/tools");
   await expect(page).toHaveURL(/\/tools$/);
-  for (const name of ["BGM Looper", "Money Planner", "News Desk", "Resume admin", "Newsletter admin", "Content editor", "Access"]) {
+  for (const name of ["BGM Looper", "Money Planner", "News Desk", "Resume admin", "Newsletter admin", "Content editor", "VPN", "Access"]) {
     await expect(page.getByRole("link", { name: new RegExp(name) })).toHaveCount(0);
   }
   await page.goto("/tools/money-planner");
@@ -36,7 +36,7 @@ test("a friend without a grant can't ask the News Desk assistant", async ({ page
 test("the owner's hub lists every tool", async ({ page, baseURL }) => {
   await signIn(page, baseURL!);
   await page.goto("/tools");
-  for (const name of ["BGM Looper", "Resume admin", "Newsletter admin", "Money Planner", "News Desk", "Content editor", "Access"]) {
+  for (const name of ["BGM Looper", "Resume admin", "Newsletter admin", "Money Planner", "News Desk", "Content editor", "VPN", "Access"]) {
     await expect(page.getByRole("link", { name: new RegExp(name) })).toBeVisible();
   }
 });
