@@ -7,6 +7,11 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Added
+
+- A DynamoDB table per environment for the VPN dashboard's peers and the VM's
+  status report (#596).
+
 ## [1.14.1] - 2026-11-28
 
 ### Changed
