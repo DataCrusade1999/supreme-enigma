@@ -64,7 +64,7 @@ describe("visibleTools", () => {
     list.mockRejectedValue(new Error("throttled"));
     isAuthorized.mockResolvedValue("deny");
     expect(await visibleTools()).toEqual([]);
-    expect(isAuthorized).toHaveBeenCalledTimes(7);
+    expect(isAuthorized).toHaveBeenCalledTimes(8);
   });
 
   it("does not read grants for the owner", async () => {

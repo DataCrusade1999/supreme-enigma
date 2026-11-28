@@ -42,6 +42,8 @@ describe("isGatedPath", () => {
     ["/tools/news-desk", true],
     ["/api/access/users", true],
     ["/tools/access-admin", true],
+    ["/tools/vpn", true],
+    ["/api/vpn/peers", true],
     // Gated by the /tools prefix rather than an entry of its own — this case
     // is here to pin that, so moving the admin out of /tools fails loudly.
     ["/tools/newsletter-admin", true],
@@ -112,6 +114,7 @@ describe("TOOLS", () => {
       "/tools/money-planner",
       "/tools/news-desk",
       "/keystatic",
+      "/tools/vpn",
       "/tools/access-admin",
     ]);
   });
@@ -160,6 +163,8 @@ describe("actionFor", () => {
     ["GET", "/keystatic", "keystatic", "keystatic:use", false],
     ["GET", "/keystatic/blog/hello", "keystatic", "keystatic:use", false],
     ["POST", "/api/keystatic/github/oauth/callback", "keystatic", "keystatic:use", false],
+    ["GET", "/tools/vpn", "vpn", "vpn:manage", false],
+    ["DELETE", "/api/vpn/peers/abc", "vpn", "vpn:manage", false],
     ["GET", "/tools/access-admin", "access-admin", "access:manage", false],
     ["PUT", "/api/access/grants", "access-admin", "access:manage", false],
     ["DELETE", "/api/access/grants/u1/newsdesk%3Aask", "access-admin", "access:manage", false],

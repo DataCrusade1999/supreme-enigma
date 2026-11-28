@@ -42,6 +42,7 @@ const OWNER_ONLY: [string, string][] = [
   ["newsletter:send", "newsletter-admin"],
   ["keystatic:use", "keystatic"],
   ["access:manage", "access-admin"],
+  ["vpn:manage", "vpn"],
 ];
 const METERED: [string, string][] = [
   ["looper:process", "bgm-looper"],
@@ -103,7 +104,7 @@ describe("friends", () => {
     expect(decide(["friends"], "newsdesk:pin", "hub", undefined, LIVE_ACCESS)).toBe("deny");
   });
 
-  it.each(["resume-admin", "newsletter-admin", "keystatic", "access-admin"])("may not view %s", (tool) => {
+  it.each(["resume-admin", "newsletter-admin", "keystatic", "access-admin", "vpn"])("may not view %s", (tool) => {
     expect(decide(["friends"], "view", tool)).toBe("deny");
     expect(decide(["friends"], "view", tool, undefined, LIVE_ACCESS)).toBe("deny");
   });

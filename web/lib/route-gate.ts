@@ -6,6 +6,7 @@ export type ToolId =
   | "resume-admin"
   | "newsletter-admin"
   | "keystatic"
+  | "vpn"
   | "access-admin";
 
 // The actions Verified Permissions decides on. The Cedar schema in
@@ -22,6 +23,7 @@ export type ActionId =
   | "resume:publish"
   | "newsletter:send"
   | "keystatic:use"
+  | "vpn:manage"
   | "access:manage";
 
 // What an admin can grant. `newsdesk:read` and `moneyplanner:use` are grant
@@ -119,6 +121,14 @@ export const TOOLS: Tool[] = [
     pageAction: "keystatic:use",
   },
   {
+    id: "vpn",
+    href: "/tools/vpn",
+    name: "VPN",
+    kind: "Network",
+    blurb: "Add and remove WireGuard devices on the San Jose exit, and see when each last connected.",
+    pageAction: "vpn:manage",
+  },
+  {
     id: "access-admin",
     href: "/tools/access-admin",
     name: "Access",
@@ -171,6 +181,8 @@ const ROUTE_ACTIONS: Rule[] = [
   { methods: PAGE, path: /^\/tools\/newsletter-admin$/, tool: "newsletter-admin", action: "view" },
   { methods: ["POST"], path: /^\/api\/newsletter\/send$/, tool: "newsletter-admin", action: "newsletter:send" },
   { methods: "*", path: /^\/(api\/)?keystatic(\/.*)?$/, tool: "keystatic", action: "keystatic:use" },
+  { methods: PAGE, path: /^\/tools\/vpn$/, tool: "vpn", action: "vpn:manage" },
+  { methods: "*", path: /^\/api\/vpn(\/.*)?$/, tool: "vpn", action: "vpn:manage" },
   { methods: PAGE, path: /^\/tools\/access-admin$/, tool: "access-admin", action: "access:manage" },
   { methods: "*", path: /^\/api\/access(\/.*)?$/, tool: "access-admin", action: "access:manage" },
 ];
@@ -195,6 +207,7 @@ const GATED_PREFIXES = [
   "/api/newsletter",
   "/api/news-desk",
   "/api/access",
+  "/api/vpn",
   "/keystatic",
   "/api/keystatic",
 ];
