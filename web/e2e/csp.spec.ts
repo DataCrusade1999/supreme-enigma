@@ -11,6 +11,7 @@ const TOOL_PAGES = [
   "/tools/newsletter-admin",
   "/tools/money-planner",
   "/tools/news-desk",
+  "/tools/vpn",
   "/tools/access-admin",
 ];
 
