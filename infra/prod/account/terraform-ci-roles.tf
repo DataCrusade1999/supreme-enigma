@@ -119,7 +119,23 @@ data "aws_iam_policy_document" "tf_apply_prod" {
       "arn:aws:cloudwatch:${var.aws_region}:${local.account_id}:alarm:${var.project_name}-*",
       "arn:aws:budgets::${local.account_id}:budget/${var.project_name}-*",
       "arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/site-access-grants",
+      "arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/${var.project_name}-vpn",
     ]
+  }
+  statement {
+    # The VPN's IAM Roles Anywhere trust anchors and profiles (#594), created by the VPN stack.
+    sid     = "RolesAnywhere"
+    actions = ["rolesanywhere:*"]
+    resources = [
+      "arn:aws:rolesanywhere:${var.aws_region}:${local.account_id}:trust-anchor/*",
+      "arn:aws:rolesanywhere:${var.aws_region}:${local.account_id}:profile/*",
+    ]
+  }
+  statement {
+    # Creates have no ARN to scope to until the call returns (#594).
+    sid       = "RolesAnywhereCreates"
+    actions   = ["rolesanywhere:CreateTrustAnchor", "rolesanywhere:CreateProfile", "rolesanywhere:TagResource"]
+    resources = ["*"]
   }
   statement {
     sid     = "ProjectAccountResources"
