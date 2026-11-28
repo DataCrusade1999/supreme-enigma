@@ -152,7 +152,7 @@ export function VpnDashboard() {
             <h2 className="text-xs uppercase tracking-[0.14em] text-muted">Devices</h2>
             <ul className="mt-3 flex flex-col">
               {desired.peers.map((p) => {
-                const st = server?.peers[p.publicKey];
+                const st = server?.peers?.[p.publicKey];
                 const stale = p.settingsVersion < desired.settingsVersion;
                 return (
                   <li key={p.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-line py-4 text-sm">

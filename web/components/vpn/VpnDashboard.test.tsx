@@ -105,4 +105,14 @@ describe("VpnDashboard", () => {
     expect(screen.getByText(/2\.0 KB/)).toBeInTheDocument();
     expect(screen.getByText(/5\.0 MB/)).toBeInTheDocument();
   });
+
+  it("still renders the peers when the server report has no peers field", async () => {
+    const peers = [{ id: "p1", name: "Pixel", publicKey: KEY, address: "10.66.66.2", createdAt: 1, settingsVersion: 1 }];
+    const noPeers: Partial<ServerReport> = server();
+    delete noPeers.peers;
+    fetchMock.mockImplementation(() => json({ desired: desired({ peers }), server: noPeers }));
+    render(<VpnDashboard />);
+    expect(await screen.findByText("Pixel")).toBeInTheDocument();
+    expect(screen.getByText("never")).toBeInTheDocument();
+  });
 });
