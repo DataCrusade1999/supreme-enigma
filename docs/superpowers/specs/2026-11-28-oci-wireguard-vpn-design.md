@@ -64,7 +64,7 @@ Also rejected: a third-party tunnel such as Cloudflare Tunnel (a new vendor and 
 
 ```
  browser (/tools/vpn)                     Vercel (Next.js)                AWS 223376380711
- ─ generates peer keypair ──pubkey──▶  /api/vpn/*  ──(Vercel OIDC role)──▶ DynamoDB vpn-state
+ ─ generates peer keypair ──pubkey──▶  /api/vpn/*  ──(Vercel OIDC role)──▶ DynamoDB bgm-looper-vpn
  ─ shows QR / .conf once                                                     ▲   │
                                                                              │   │ poll 30 s
                                        Oracle us-sanjose-1, compartment vpn  │   ▼
@@ -74,7 +74,7 @@ Also rejected: a third-party tunnel such as Cloudflare Tunnel (a new vendor and 
 
 ### 1. AWS side
 
-**Table.** One table per environment, `vpn-state`, in `infra/modules/app`: provisioned mode, 2 RCU / 2 WCU, no autoscaling, hash key `pk` (string). Three tables use 6 RCU and 6 WCU of the 25 free. Following `.claude/rules/infra.md`, dev's table is applied first through `dev/app`. Only production's table has a VM reading it. On dev and stage, the dashboard runs against a table with no VM behind it, and it shows "server not seen yet". That is enough for e2e tests and previews to exercise add and remove.
+**Table.** One table per environment, `bgm-looper-vpn`, in `infra/modules/app`: provisioned mode, 2 RCU / 2 WCU, no autoscaling, hash key `pk` (string). Three tables use 6 RCU and 6 WCU of the 25 free. Following `.claude/rules/infra.md`, dev's table is applied first through `dev/app`. Only production's table has a VM reading it. On dev and stage, the dashboard runs against a table with no VM behind it, and it shows "server not seen yet". That is enough for e2e tests and previews to exercise add and remove.
 
 The table has two items:
 
@@ -93,13 +93,13 @@ Nothing in the table is secret. Peer and server public keys are public by design
 **The VM's credential (production only),** in a new `infra/prod/account/vpn.tf`:
 
 - `aws_rolesanywhere_trust_anchor` with a `CERTIFICATE_BUNDLE` source. Its value is the owner's CA certificate, committed as `infra/prod/account/vpn-ca.pem`. A CA certificate is public, and committing it lets CI apply `prod/account` with no new secret.
-- `aws_iam_role` `vpn-agent`. Its trust policy lets `rolesanywhere.amazonaws.com` call `sts:AssumeRole`, `sts:TagSession` and `sts:SetSourceIdentity`, on two conditions:
+- `aws_iam_role` `bgm-looper-vpn-agent`. Its trust policy lets `rolesanywhere.amazonaws.com` call `sts:AssumeRole`, `sts:TagSession` and `sts:SetSourceIdentity`, on two conditions:
   - `aws:SourceArn` equals the trust anchor;
   - `aws:PrincipalTag/x509Subject/CN` equals `vpn-vm`.
 - The role's policy:
   - `dynamodb:GetItem` with `LeadingKeys = ["desired"]`;
   - `dynamodb:PutItem` and `dynamodb:UpdateItem` with `LeadingKeys = ["server"]`;
-  - all on production's `vpn-state` only, looked up by its fixed name.
+  - all on production's `bgm-looper-vpn` only, looked up by its fixed name.
 - `aws_rolesanywhere_profile` for that role, with a 1-hour session duration.
 - Outputs: the trust anchor, profile and role ARNs, which the Oracle stack reads.
 
@@ -140,7 +140,9 @@ Nothing in the table is secret. Peer and server public keys are public by design
 
 - A cloud-init file built with `templatefile`. It carries the agent code and the Roles Anywhere ARNs, but no secret.
 - It must stay under OCI's user_data limit, so check that.
-- `lifecycle { ignore_changes = [metadata["user_data"]] }`, because a change to it replaces the instance, which also changes the server key.
+- `lifecycle { ignore_changes = [metadata["user_data"], source_details[0].source_id] }`. A change to either one replaces the instance, and a replacement destroys the server key, so every device would need Re-issue and the VM's certificate would need signing again.
+  - The image data source picks the latest Oracle Linux 9 aarch64 image, and that changes whenever Oracle publishes a new one. Ignoring `source_id` means the first build's image stays until the owner deliberately replaces the instance (`terraform apply -replace`).
+  - Security updates come from `dnf-automatic`, not from new images.
 - Later agent updates go over SSH with `infra/vpn/scripts/deploy-agent.sh`.
 
 **CI.**
@@ -251,7 +253,7 @@ After that, SSH works over the tunnel at `10.66.66.1`. Bastion stays as the fall
 
 ### 5. Environments
 
-The page and API ship to every branch as normal, each against its own account's `vpn-state`. The VM exists only for production. Dev and stage show "server not seen yet" and are where the UI is tested.
+The page and API ship to every branch as normal, each against its own account's `bgm-looper-vpn`. The VM exists only for production. Dev and stage show "server not seen yet" and are where the UI is tested.
 
 ## Cost
 
@@ -264,15 +266,22 @@ The page and API ship to every branch as normal, each against its own account's 
 
 ### 6. CI Terraform roles
 
-The CI apply roles are scoped by resource name. In `infra/prod/account/terraform-ci-roles.tf`, `ProjectNamedResources` names only `table/site-access-grants` for DynamoDB, and nothing covers Roles Anywhere. `infra/modules/nonprod-account` has the same kind of roles for dev and stage. Each policy is in the stack it gates.
+Production's CI apply role (`tf_apply_prod` in `infra/prod/account/terraform-ci-roles.tf`, used for both `prod/account` and `prod/app`) is scoped by resource name. The dev and stage apply roles in `infra/modules/nonprod-account` have `AdministratorAccess` and need no change.
 
-Phase 1 is therefore split into two PRs:
+On the production role:
 
-- **1a** widens the roles:
-  - `table/vpn-state` on the prod, dev and stage apply roles;
-  - on the prod apply role only, `rolesanywhere:*` on this account's trust anchors and profiles, plus IAM on `role/vpn-agent`.
-  - Check whether the plan roles (`ReadOnlyAccess`) can read Roles Anywhere, and add the missing read actions if not.
-- **1b** adds the resources once 1a has applied on each branch.
+- **Already covered:** `ProjectNamedResources` grants `iam:*` on `role/bgm-looper-*`, which includes the role `bgm-looper-vpn-agent`.
+- **Not covered:** its DynamoDB entry names only `table/site-access-grants`, and nothing grants Roles Anywhere.
+
+That role's policy lives in the stack it gates, and an IAM change takes time to propagate. So Phase 1 is split into two PRs:
+
+- **1a** widens `tf_apply_prod`:
+  - adds `arn:aws:dynamodb:<region>:<account>:table/bgm-looper-vpn` to `ProjectNamedResources`;
+  - adds a statement for `rolesanywhere:*` on `arn:aws:rolesanywhere:<region>:<account>:trust-anchor/*` and `…:profile/*`;
+  - adds `rolesanywhere:CreateTrustAnchor` and `rolesanywhere:CreateProfile` on `*`, since those creates take no resource ARN.
+
+  The task also checks whether `ReadOnlyAccess`, which the plan roles use, can read Roles Anywhere (`Get*`, `List*`, `ListTagsForResource`), and adds the missing reads to the plan role if not.
+- **1b** adds the resources once 1a has applied on `main`.
 
 This avoids a break-glass local apply.
 
@@ -280,13 +289,13 @@ The Oracle stack reads `prod/account`'s outputs, so Phase 3's apply waits until 
 
 ### 7. Tests without AWS
 
-CI's Playwright run and local `npm run dev` have no AWS credentials. A `VPN_STORE=memory` switch, like `AUTHZ_MODE=local`, swaps the DynamoDB store for an in-process one that holds `desired` and a fake `server` item. The fake `server` item has a fixed test public key and endpoint, so adding a peer can be exercised end to end. Unit tests cover the DynamoDB store with a mocked client. Dev and stage deployments use their real tables.
+CI's Playwright run and local `npm run dev` have no AWS credentials. The store uses the switch the grants store already uses (`getGrantStore` in `web/lib/authz/grants.ts`): with `AUTHZ_MODE=local` and no `VERCEL`, it swaps the DynamoDB store for an in-process one that holds `desired` and a fake `server` item. The fake `server` item has a fixed test public key and endpoint, so adding a peer can be exercised end to end. Unit tests cover the DynamoDB store with a mocked client. Dev and stage deployments use their real tables.
 
 ## Phases
 
 Each phase is its own issue under epic #591, with its own PR into `dev`:
 
-1. **AWS control plane:** 1a widens the CI roles (§6), and 1b adds the `vpn-state` table and Vercel grant in `infra/modules/app`, Roles Anywhere in `prod/account`, the CA scripts, and the Cedar action and route gate.
+1. **AWS control plane:** 1a widens the CI roles (§6), and 1b adds the `bgm-looper-vpn` table and Vercel grant in `infra/modules/app`, Roles Anywhere in `prod/account`, the CA scripts, and the Cedar action and route gate.
 2. **Dashboard:** the page and API, with unit and e2e tests against the in-memory store (§7), then a manual check on dev's deployment.
 3. **Oracle stack, VM and agent:** `infra/vpn/`, cloud-init, the agent and its tests, the CI path exclusion, Dependabot, and the bootstrap runbook. Applied locally, with the plan pasted into the PR.
 4. **End-to-end check and docs:**
@@ -303,10 +312,11 @@ Each phase is its own issue under epic #591, with its own PR into `dev`:
 - A1 sized at 1 OCPU / 6 GB with a 50 GB boot volume.
 - An ephemeral public IP. A rebuild reissues every client anyway.
 - Bastion port forwarding, not managed SSH.
-- A provisioned `vpn-state` table per environment. The VM exists only for production.
+- A provisioned `bgm-looper-vpn` table per environment. The VM exists only for production.
 - The CA certificate is committed, and the CA key is kept in the owner's password manager.
 - The agent is Python 3.12 with boto3, polling every 30 seconds and reporting every 60 seconds.
-- The agent ships in `user_data`, with `ignore_changes` on it, and is updated over SSH after that.
+- The agent ships in `user_data`, and is updated over SSH after that. `ignore_changes` covers both `user_data` and the image, so neither can rebuild the VM by accident.
+- AWS names: the table is `bgm-looper-vpn` and the role is `bgm-looper-vpn-agent`, so they fall under the CI roles' existing `bgm-looper-*` scopes.
 - No WireGuard preshared key. It would be a secret stored in the table.
 - Client-to-client traffic is dropped on the VM.
 - `infra/vpn/**` is excluded from the `Terraform` workflow's triggers.
