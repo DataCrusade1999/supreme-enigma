@@ -43,7 +43,7 @@ Tasks 1–3 can be built on `dev` before either is merged.
   - No public port 22.
 - **Instance:**
   - `VM.Standard.A1.Flex`, `ocpus = 1`, `memory_in_gbs = 6`, `boot_volume_size_in_gbs = 50`, `assign_public_ip = true` (ephemeral).
-  - The latest Oracle Linux 9 aarch64 image at creation, with `lifecycle { ignore_changes = [metadata["user_data"], source_details[0].source_id] }`.
+  - The latest Oracle Linux 9 aarch64 image at creation, with `lifecycle { prevent_destroy = true, ignore_changes = [metadata, source_details[0].source_id] }`. Changing `metadata` (`user_data`, `ssh_authorized_keys`) or the image forces replacement, and a replacement kills the server key.
 - **Bastion:** `bastion_type = "STANDARD"`, `max_session_ttl_in_seconds = 10800`, `client_cidr_block_allow_list = [var.bastion_client_cidr]`.
 - **State:** bucket `bgm-looper-tf-state-223376380711`, key `vpn/terraform.tfstate`, region `us-east-1`, `use_lockfile = true`.
 - **Running it:** needs `AWS_PROFILE=personal` and a live `personal-oci` session.
@@ -251,7 +251,7 @@ Tasks 1–3 can be built on `dev` before either is merged.
   - A `needs-restart.timer` and `needs-restart.service` pair: weekly, running `needs-restarting -r || systemctl reboot`.
 
   **`runcmd`, in order:**
-  1. `dnf install -y wireguard-tools python3.12 dnf-automatic openssl`.
+  1. `dnf install -y wireguard-tools python3.12 dnf-automatic dnf-utils openssl`. `dnf-utils` provides `needs-restarting`.
   2. Download the signing helper to `/usr/local/bin/aws_signing_helper`, check it with `sha256sum -c`, then `chmod 755`. Stop on a mismatch.
   3. `useradd --system --home /var/lib/vpn-agent --shell /sbin/nologin vpn-agent`.
   4. `umask 077 && wg genkey > /etc/wireguard/server.key`. Never echo it.
@@ -310,7 +310,7 @@ Tasks 1–3 can be built on `dev` before either is merged.
 
   Pass `metadata = { ssh_authorized_keys = var.ssh_public_key, user_data = base64encode(local.user_data) }`.
 
-  Add a `check "user_data_size"` block asserting `length(base64encode(local.user_data)) <= 32000`.
+  Add a `lifecycle { precondition { condition = length(base64encode(local.user_data)) <= 32000, error_message = "user_data exceeds OCI's 32,000-byte metadata limit" } }` to the instance. Use a precondition, not a `check` block, which only warns.
 
 - [ ] **Step 2: Format and lint**
 
@@ -345,7 +345,7 @@ Tasks 1–3 can be built on `dev` before either is merged.
   - 7 to add: the VCN, subnet, internet gateway, route table, security list, instance and Bastion;
   - 0 to change and 0 to destroy;
   - every `compartment_id` equal to `vpn`'s OCID;
-  - the `user_data_size` check passing.
+  - the `user_data` size precondition passing.
 
   Paste the plan text into the PR. It holds no secret: `user_data` shows as base64 of public data.
 
@@ -407,6 +407,7 @@ Tasks 1–3 can be built on `dev` before either is merged.
 
   Write plain steps with exact commands for:
   - signing in to both clouds;
+  - the first check after any build: `cloud-init status --wait --long` returns `status: done`. If not, read `/var/log/cloud-init-output.log`. A cloud-init fix only reaches the VM through a deliberate rebuild, because `metadata` is ignored;
   - opening a Bastion port-forwarding session:
 
     ```
@@ -421,13 +422,13 @@ Tasks 1–3 can be built on `dev` before either is merged.
   - SSH over the tunnel afterwards (`ssh opc@10.66.66.1`);
   - yearly certificate rotation, from a new CSR made on the VM;
   - updating the agent with `deploy-agent.sh`;
-  - a deliberate rebuild (`terraform apply -replace=oci_core_instance.vpn`), and that it means re-issuing every device and re-signing the certificate;
+  - a deliberate rebuild: temporarily delete `prevent_destroy` in a local edit, run `terraform apply -replace=oci_core_instance.vpn`, then restore it. It means re-issuing every device and re-signing the certificate;
   - revoking: disable the trust anchor in `prod/account`;
   - what to do with a reclamation email.
 
 - [ ] **Step 6: Bootstrap**
 
-  This is an owner action, following the runbook. Done when:
+  This is an owner action, following the runbook. The first check is `cloud-init status --wait --long`. Done when:
   - `journalctl -u vpn-agent` shows a report written;
   - production's `/tools/vpn` shows the server online, with endpoint `<public_ip>:51820`.
 

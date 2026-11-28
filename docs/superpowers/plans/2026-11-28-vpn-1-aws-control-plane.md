@@ -64,7 +64,13 @@ PR A must reach `main` in an earlier promotion than PR B. Otherwise production's
     --body "Phase 1a of #591 (spec docs/superpowers/specs/2026-11-28-oci-wireguard-vpn-design.md §6). tf_apply_prod names only table/site-access-grants for DynamoDB and has nothing for Roles Anywhere."
   ```
 
-  Then add it as a sub-issue of #591 with `gh api repos/DataCrusade1999/supreme-enigma/issues/591/sub_issues -f sub_issue_id=<new issue's id>`.
+  Write the body using the sections of `.github/ISSUE_TEMPLATE/chore.yml`.
+
+  Then add it as a sub-issue of #591. The API takes the issue's numeric database id, not its number:
+
+  ```bash
+  gh api repos/DataCrusade1999/supreme-enigma/issues/591/sub_issues -F sub_issue_id=$(gh api repos/DataCrusade1999/supreme-enigma/issues/<N> --jq .id)
+  ```
 
 - [ ] **Step 2: Branch from `dev`**
 
@@ -137,7 +143,7 @@ PR A must reach `main` in an earlier promotion than PR B. Otherwise production's
 - [ ] **Step 2: Write `infra/modules/app/vpn.tf`**
 
   It holds:
-  - `aws_dynamodb_table.vpn`, with the name `"${var.project_name}-vpn"` and the Global Constraints values. Add `point_in_time_recovery { enabled = false }` and `deletion_protection_enabled = true`.
+  - `aws_dynamodb_table.vpn`, with the name `"${var.project_name}-vpn"` and the Global Constraints values. Leave out `deletion_protection_enabled`, as `infra/modules/auth` does: the app stacks must stay destroyable by the kill switch (`docs/runbooks/infra-apply-teardown.md`).
   - `vercel_project_environment_variable.vpn_table_name`, keyed `VPN_TABLE_NAME`, with value `aws_dynamodb_table.vpn.name`, `target = var.vercel_target`, `git_branch = var.vercel_git_branch` and `sensitive = false`.
   - A header comment pointing at the spec, saying that provisioned 2/2 keeps it in the always-free allowance and that only production's table has a VM behind it.
 
@@ -173,6 +179,8 @@ PR A must reach `main` in an earlier promotion than PR B. Otherwise production's
   Expected: `Success! The configuration is valid.`, and no lint output.
 
 - [ ] **Step 5: Add the CHANGELOG entry, commit, push and open the PR**
+
+  **Don't merge PR B into `dev` until the `dev → stage` promotion carrying PR A has merged.** A promotion carries everything on `dev`, so merging earlier would ship both PRs in the same production apply.
 
   CHANGELOG `### Added`: "A DynamoDB table per environment for the VPN dashboard's peers and the VM's status report (#N)."
 

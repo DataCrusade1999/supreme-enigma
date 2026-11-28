@@ -80,10 +80,11 @@ The table has two items:
 
 - `pk = "desired"`: written only by the dashboard.
   - `version` (number): every write is conditional on the version it read.
-  - `peers`: a list of `{id, name, publicKey, address, createdAt}`.
+  - `settingsVersion` (number): goes up on every settings change.
+  - `peers`: a list of `{id, name, publicKey, address, createdAt, settingsVersion}`.
   - `settings`: `{dns: [ip...], tunnel: "full" | "split", cidrs: [cidr...]}`.
 - `pk = "server"`: written only by the VM.
-  - `publicKey`, `endpoint` (`ip:port`), `appliedVersion`, `lastSeen` and `certNotAfter`.
+  - `publicKey`, `endpoint` (`ip:port`), `appliedVersion`, `lastSeen`, `certNotAfter` and `error` (the last refusal, or null).
   - `peers`: a map from public key to `{latestHandshake, rxBytes, txBytes}`.
 
 Nothing in the table is secret. Peer and server public keys are public by design.
@@ -140,8 +141,8 @@ Nothing in the table is secret. Peer and server public keys are public by design
 
 - A cloud-init file built with `templatefile`. It carries the agent code and the Roles Anywhere ARNs, but no secret.
 - It must stay under OCI's user_data limit, so check that.
-- `lifecycle { ignore_changes = [metadata["user_data"], source_details[0].source_id] }`. A change to either one replaces the instance, and a replacement destroys the server key, so every device would need Re-issue and the VM's certificate would need signing again.
-  - The image data source picks the latest Oracle Linux 9 aarch64 image, and that changes whenever Oracle publishes a new one. Ignoring `source_id` means the first build's image stays until the owner deliberately replaces the instance (`terraform apply -replace`).
+- `lifecycle { prevent_destroy = true, ignore_changes = [metadata, source_details[0].source_id] }`. A change to `metadata` (`user_data` or `ssh_authorized_keys`) or to the image replaces the instance, and a replacement destroys the server key, so every device would need Re-issue and the VM's certificate would need signing again.
+  - The image data source picks the latest Oracle Linux 9 aarch64 image, and that changes whenever Oracle publishes a new one. Ignoring `source_id` means the first build's image stays. A deliberate rebuild means lifting `prevent_destroy`, then `terraform apply -replace`.
   - Security updates come from `dnf-automatic`, not from new images.
 - Later agent updates go over SSH with `infra/vpn/scripts/deploy-agent.sh`.
 
@@ -295,8 +296,8 @@ CI's Playwright run and local `npm run dev` have no AWS credentials. The store u
 
 Each phase is its own issue under epic #591, with its own PR into `dev`:
 
-1. **AWS control plane:** 1a widens the CI roles (§6), and 1b adds the `bgm-looper-vpn` table and Vercel grant in `infra/modules/app`, Roles Anywhere in `prod/account`, the CA scripts, and the Cedar action and route gate.
-2. **Dashboard:** the page and API, with unit and e2e tests against the in-memory store (§7), then a manual check on dev's deployment.
+1. **AWS control plane:** 1a widens the CI roles (§6), and 1b adds the `bgm-looper-vpn` table and Vercel grant in `infra/modules/app`, Roles Anywhere in `prod/account`, and the CA scripts.
+2. **Dashboard:** the Cedar action and route gate, the page and API, with unit and e2e tests against the in-memory store (§7), then a manual check on dev's deployment.
 3. **Oracle stack, VM and agent:** `infra/vpn/`, cloud-init, the agent and its tests, the CI path exclusion, Dependabot, and the bootstrap runbook. Applied locally, with the plan pasted into the PR.
 4. **End-to-end check and docs:**
    - a phone and a laptop connect;
@@ -315,7 +316,7 @@ Each phase is its own issue under epic #591, with its own PR into `dev`:
 - A provisioned `bgm-looper-vpn` table per environment. The VM exists only for production.
 - The CA certificate is committed, and the CA key is kept in the owner's password manager.
 - The agent is Python 3.12 with boto3, polling every 30 seconds and reporting every 60 seconds.
-- The agent ships in `user_data`, and is updated over SSH after that. `ignore_changes` covers both `user_data` and the image, so neither can rebuild the VM by accident.
+- The agent ships in `user_data`, and is updated over SSH after that. `ignore_changes` covers `metadata` and the image, and `prevent_destroy` is set, so no edit can rebuild the VM by accident.
 - AWS names: the table is `bgm-looper-vpn` and the role is `bgm-looper-vpn-agent`, so they fall under the CI roles' existing `bgm-looper-*` scopes.
 - No WireGuard preshared key. It would be a secret stored in the table.
 - Client-to-client traffic is dropped on the VM.

@@ -161,7 +161,7 @@
 
 - [ ] **Step 3: Implement `model.ts`**
 
-  Validate IPv4 by parsing four octets from 0 to 255, and the prefix from 0 to 32. Don't add a library. `isPublicKey` checks `/^[A-Za-z0-9+/]{43}=$/` and that `Buffer.from(s, "base64").length === 32`.
+  Validate IPv4 by parsing four octets from 0 to 255, and the prefix from 0 to 32. Don't add a library. `isPublicKey` checks `/^[A-Za-z0-9+/]{43}=$/` and that `atob(s).length === 32`. `model.ts` is imported by a client component, so it must not use `Buffer`.
 
 - [ ] **Step 4: Run the tests again and check that they pass**
 
@@ -365,5 +365,10 @@
   `### Added`: "Owner-only VPN dashboard at `/tools/vpn`: add, remove and re-issue WireGuard peers, with keys made in the browser and shown once as a QR code or `.conf` (#N)."
 
 - [ ] **Step 4: Push, open the PR into `dev`, then check dev's preview by hand**
+
+  This is an infra PR too: Task 1 edits the Cedar schema under `infra/modules/auth`.
+  - The `Terraform` comment must show only the policy store's schema update, in each account stack it plans.
+  - Until `dev/account` applies the schema after merge, the page is denied on dev.
+  - `VPN_TABLE_NAME` reaches only a build made after Phase 1's apply. A `503 not_configured` means redeploy with "Use project's Ignore Build Step" unticked.
 
   Open the preview's `/tools/vpn` with the Playwright MCP. With Phase 1 applied on dev, it loads and shows "The VPN server hasn't reported yet", and Add peer is disabled. Merge through the `merging-a-pr` skill.
