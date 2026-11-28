@@ -40,10 +40,14 @@ afterEach(() => {
 
 describe("VpnDashboard", () => {
   it("disables Add peer until the server has reported", async () => {
-    fetchMock.mockImplementation(() => json({ desired: desired(), server: null }));
+    const peers = [{ id: "p1", name: "Pixel", publicKey: KEY, address: "10.66.66.2", createdAt: 1, settingsVersion: 1 }];
+    fetchMock.mockImplementation(() => json({ desired: desired({ peers }), server: null }));
     render(<VpnDashboard />);
     expect(await screen.findByText(/The VPN server hasn't reported yet/)).toBeInTheDocument();
+    // A name is typed so the empty-name rule can't be what disables the button.
+    await userEvent.type(screen.getByLabelText("Name"), "Laptop");
     expect(screen.getByRole("button", { name: "Add peer" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Re-issue Pixel" })).toBeDisabled();
   });
 
   it("after adding, shows the QR and .conf once and never posts the private key", async () => {
