@@ -34,3 +34,15 @@ output "avp_policy_store_id" {
 output "resume_bucket_name" {
   value = local.data_bucket_names["main"]
 }
+
+output "vpn_trust_anchor_arn" {
+  value = aws_rolesanywhere_trust_anchor.vpn.arn
+}
+
+output "vpn_profile_arn" {
+  value = aws_rolesanywhere_profile.vpn.arn
+}
+
+output "vpn_role_arn" {
+  value = aws_iam_role.vpn_agent.arn
+}
