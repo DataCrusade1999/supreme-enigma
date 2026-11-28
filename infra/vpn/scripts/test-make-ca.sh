@@ -26,9 +26,12 @@ grep -q "CA:TRUE" <<<"$text" || fail "ca.pem has CA:TRUE"
 grep -q "Certificate Sign" <<<"$text" || fail "ca.pem key usage has Certificate Sign"
 grep -q "ASN1 OID: prime256v1" <<<"$text" || fail "ca.pem uses prime256v1"
 
-end="$(openssl x509 -in "$out/ca.pem" -noout -enddate | cut -d= -f2)"
-days=$(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
-{ [ "$days" -ge 3640 ] && [ "$days" -le 3660 ]; } || fail "enddate is about 3650 days away (got $days)"
+# -checkend exits 0 when the certificate is still valid that many seconds from now.
+# It avoids parsing the date, which GNU and BSD date do differently.
+openssl x509 -in "$out/ca.pem" -noout -checkend $((3640 * 86400)) >/dev/null \
+  || fail "ca.pem is valid for at least 3640 days"
+openssl x509 -in "$out/ca.pem" -noout -checkend $((3660 * 86400)) >/dev/null \
+  && fail "ca.pem expires within 3660 days"
 
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*)
@@ -36,14 +39,20 @@ case "$(uname -s)" in
     aces="$(grep -c ':(' <<<"$acl")"
     [ "$aces" = "1" ] || fail "ca.key has exactly one ACE (got $aces)"
     grep ':(' <<<"$acl" | grep -qE "[ \\\\]${USERNAME}:[(]F[)]" || fail "the one ACE is ${USERNAME}:(F)"
+
+    env -u USERNAME bash "$script" "$dir/nouser" >/dev/null 2>&1 && fail "a run without USERNAME exits non-zero"
+    [ -e "$dir/nouser/ca.key" ] && fail "a run without USERNAME writes no ca.key"
     ;;
   *)
-    [ "$(stat -c %a "$out/ca.key")" = "600" ] || fail "ca.key mode is 600"
+    # GNU stat takes -c; BSD (macOS) stat takes -f.
+    mode="$(stat -c %a "$out/ca.key" 2>/dev/null || stat -f %Lp "$out/ca.key")"
+    [ "$mode" = "600" ] || fail "ca.key mode is 600 (got $mode)"
     ;;
 esac
 
-before="$(sha256sum "$out/ca.key" | cut -d' ' -f1)"
+sha() { openssl dgst -sha256 -r "$1" | cut -d' ' -f1; }
+before="$(sha "$out/ca.key")"
 bash "$script" "$out" >/dev/null 2>&1 && fail "second run exits 1"
-[ "$(sha256sum "$out/ca.key" | cut -d' ' -f1)" = "$before" ] || fail "ca.key unchanged after second run"
+[ "$(sha "$out/ca.key")" = "$before" ] || fail "ca.key unchanged after second run"
 
 echo ok

@@ -134,6 +134,11 @@ describe("updateSettings", () => {
     expect(out.peers[0].settingsVersion).toBeLessThan(out.settingsVersion);
     expect(d.settings).toEqual(DEFAULT_DESIRED.settings);
   });
+
+  it("updateSettings drops cidrs for a full tunnel", () => {
+    const out = updateSettings(withPeers([]), { dns: ["1.1.1.1"], tunnel: "full", cidrs: ["10.1.0.0/16"] });
+    expect(out.settings.cidrs).toEqual([]);
+  });
 });
 
 describe("isPublicKey", () => {
