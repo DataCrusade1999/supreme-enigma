@@ -7,6 +7,8 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-11-28
+
 ### Changed
 
 - Production's Terraform role can manage the VPN's DynamoDB table and IAM
