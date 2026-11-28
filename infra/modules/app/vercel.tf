@@ -78,6 +78,20 @@ resource "aws_iam_role_policy" "vercel" {
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
         Resource = [aws_lambda_function.this.arn]
+      },
+      {
+        Sid      = "VpnRead"
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem"]
+        Resource = [aws_dynamodb_table.vpn.arn]
+      },
+      {
+        # The dashboard writes only the desired state; the VM writes pk = "server".
+        Sid       = "VpnWriteDesired"
+        Effect    = "Allow"
+        Action    = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
+        Resource  = [aws_dynamodb_table.vpn.arn]
+        Condition = { "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["desired"] } }
       }
     ]
   })
