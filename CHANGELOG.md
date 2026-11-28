@@ -7,6 +7,13 @@ git tags / GitHub Releases cut automatically by the `release` job in
 
 ## [Unreleased]
 
+### Changed
+
+- Production's Terraform role can manage the VPN's DynamoDB table and IAM
+  Roles Anywhere, including Roles Anywhere's service-linked role (#594).
+
+## [1.14.0] - 2026-11-24
+
 ### Added
 
 - Each GitHub Release carries a source archive and its Sigstore-signed build
