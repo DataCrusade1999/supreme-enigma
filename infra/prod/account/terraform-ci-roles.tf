@@ -138,6 +138,17 @@ data "aws_iam_policy_document" "tf_apply_prod" {
     resources = ["*"]
   }
   statement {
+    # The first trust anchor creates Roles Anywhere's service-linked role (#594).
+    sid       = "RolesAnywhereServiceLinkedRole"
+    actions   = ["iam:CreateServiceLinkedRole"]
+    resources = ["arn:aws:iam::${local.account_id}:role/aws-service-role/rolesanywhere.amazonaws.com/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:AWSServiceName"
+      values   = ["rolesanywhere.amazonaws.com"]
+    }
+  }
+  statement {
     sid     = "ProjectAccountResources"
     actions = ["cognito-idp:*", "acm:*", "ses:*", "verifiedpermissions:*"]
     resources = [
