@@ -3,9 +3,8 @@
 # Usage: make-ca.sh <outdir>
 set -euo pipefail
 umask 077
-# Git Bash on Windows rewrites a /CN=... argument into a file path, and with
-# MSYS_NO_PATHCONV=1 it would also leave /tmp-style paths unconverted for openssl.
-# So the script works in the output directory with relative file names.
+# Stops Git Bash on Windows rewriting "/CN=..." into a Windows path. With it set,
+# openssl gets relative file names, because the script works in the output directory.
 export MSYS_NO_PATHCONV=1
 
 if [ $# -ne 1 ]; then
@@ -23,6 +22,12 @@ mkdir -p "$outdir"
 (
   cd "$outdir"
   openssl ecparam -name prime256v1 -genkey -noout > ca.key
+  case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*)
+      # Git Bash's chmod and umask do not set NTFS permissions; drop inherited ACEs.
+      icacls ca.key /inheritance:r /grant:r "${USERNAME}:F" > /dev/null
+      ;;
+  esac
   openssl req -x509 -new -key ca.key -sha256 -days 3650 \
     -subj "/CN=bgm-looper vpn CA" \
     -addext "basicConstraints=critical,CA:TRUE" \
