@@ -68,6 +68,10 @@ jobs:
         with:
           tflint_version: v0.64.0
       - name: Lint
+        env:
+          # tflint --init downloads its plugins through the GitHub API; without a
+          # token it shares the runner IP's 60-requests-per-hour limit (#609).
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$TF_PLUGIN_CACHE_DIR"
           terraform fmt -check -recursive infra/
