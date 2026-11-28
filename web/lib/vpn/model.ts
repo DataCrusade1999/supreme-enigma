@@ -43,7 +43,7 @@ export type ServerReport = {
 };
 
 export class VpnError extends Error {
-  code: "full" | "not_found" | "bad_request";
+  code: "full" | "not_found" | "bad_request" | "conflict";
   constructor(code: VpnError["code"], message: string = code) {
     super(message);
     this.name = "VpnError";
