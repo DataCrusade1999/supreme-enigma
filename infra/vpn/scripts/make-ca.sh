@@ -18,6 +18,14 @@ if [ -e "$outdir/ca.key" ]; then
   exit 1
 fi
 
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*)
+    # Checked before the key exists: failing after it would leave ca.key with
+    # inherited ACEs, and the overwrite guard above would then refuse a rerun.
+    : "${USERNAME:?USERNAME must be set to lock ca.key to the current user}"
+    ;;
+esac
+
 mkdir -p "$outdir"
 (
   cd "$outdir"
